@@ -172,7 +172,7 @@ export function ShareLinkClient({
                         <div>{h.nights as number} nights</div>
                         <div>Room: {(h.room_type as string) || 'N/A'}</div>
                         <div>Meal Plan: {(h.meal_plan as string) || 'N/A'}</div>
-                        <div>Rate/Night: {Number(h.sp_per_night || 0).toLocaleString('en-IN')}</div>
+                        <div>Rate/Night: ₹{Number(h.sp_per_night || 0).toLocaleString('en-IN')}</div>
                       </div>
                       {!!h.description && <p className="mt-2 text-sm text-muted-foreground">{String(h.description)}</p>}
                     </div>
@@ -201,7 +201,7 @@ export function ShareLinkClient({
                           <TableCell className="font-medium">{f.flight_number as string} {f.airline ? `(${f.airline})` : ''}</TableCell>
                           <TableCell>{f.origin_city as string} → {f.destination_city as string}</TableCell>
                           <TableCell className="text-sm">{f.departure_at ? new Date(f.departure_at as string).toLocaleString() : 'N/A'}</TableCell>
-                          <TableCell>{Number(f.sp_total || 0).toLocaleString('en-IN')}</TableCell>
+                          <TableCell>₹{Number(f.sp_total || 0).toLocaleString('en-IN')}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -244,14 +244,14 @@ export function ShareLinkClient({
                           <input type="radio" name={`dual-${a.id}`} checked={dualChoices[a.id as string] === 'pvt'} onChange={() => setDualChoices({ ...dualChoices, [a.id as string]: 'pvt' })} />
                           <div>
                             <p className="font-medium">Private</p>
-                            <p className="text-sm">{Number(a.pvt_sp || 0).toLocaleString('en-IN')}</p>
+                            <p className="text-sm">₹{Number(a.pvt_sp || 0).toLocaleString('en-IN')}</p>
                           </div>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-md flex-1 hover:bg-muted/50">
                           <input type="radio" name={`dual-${a.id}`} checked={dualChoices[a.id as string] === 'sic'} onChange={() => setDualChoices({ ...dualChoices, [a.id as string]: 'sic' })} />
                           <div>
                             <p className="font-medium">Shared (SIC)</p>
-                            <p className="text-sm">{Number(a.sic_sp || 0).toLocaleString('en-IN')}</p>
+                            <p className="text-sm">₹{Number(a.sic_sp || 0).toLocaleString('en-IN')}</p>
                           </div>
                         </label>
                       </div>
@@ -279,7 +279,7 @@ export function ShareLinkClient({
                       <div className="flex-1">
                         <p className="font-medium">{a.type as string}: {(a.details as Record<string, unknown>)?.title as string || a.location as string || ''}</p>
                       </div>
-                      <span className="font-medium">{Number(a.pvt_sp || a.sic_sp || 0).toLocaleString('en-IN')}</span>
+                      <span className="font-medium">₹{Number(a.pvt_sp || a.sic_sp || 0).toLocaleString('en-IN')}</span>
                     </label>
                   ))}
                 </CardContent>
@@ -291,14 +291,14 @@ export function ShareLinkClient({
               <CardHeader><CardTitle>Pricing</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <div className="flex justify-between"><span>Subtotal</span><span>{totals.subtotal.toLocaleString('en-IN')}</span></div>
-                  {totals.discount > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-{totals.discount.toLocaleString('en-IN')}</span></div>}
-                  {(proposal.gst_enabled as boolean) && <div className="flex justify-between"><span>GST ({String(proposal.gst_rate)}%)</span><span>{totals.gstAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>}
-                  {(proposal.tcs_enabled as boolean) && <div className="flex justify-between"><span>TCS (5%)</span><span>{totals.tcsAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>}
+                  <div className="flex justify-between"><span>Subtotal</span><span>₹{totals.subtotal.toLocaleString('en-IN')}</span></div>
+                  {totals.discount > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-₹{totals.discount.toLocaleString('en-IN')}</span></div>}
+                  {(proposal.gst_enabled as boolean) && <div className="flex justify-between"><span>GST ({String(proposal.gst_rate)}%)</span><span>₹{totals.gstAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>}
+                  {(proposal.tcs_enabled as boolean) && <div className="flex justify-between"><span>TCS ({String(proposal.tcs_rate || 5)}%)</span><span>₹{totals.tcsAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>}
                   <Separator />
                   <div className="flex justify-between text-xl font-bold">
                     <span>Grand Total</span>
-                    <span>{proposal.currency as string} {totals.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                    <span>₹{totals.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                   </div>
                 </div>
               </CardContent>

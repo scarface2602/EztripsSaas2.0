@@ -66,7 +66,7 @@ export default function PaymentPage() {
         <CardContent className="space-y-6">
           <div className="text-center">
             <p className="text-muted-foreground">Confirmed Total</p>
-            <p className="text-3xl font-bold">{total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+            <p className="text-3xl font-bold">₹{total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
           </div>
 
           <Separator />
@@ -81,11 +81,11 @@ export default function PaymentPage() {
               </div>
             </div>
             <div className="text-sm space-y-1 pl-9">
-              <div className="flex justify-between"><span>Base amount</span><span>{total.toLocaleString('en-IN')}</span></div>
-              <div className="flex justify-between text-muted-foreground"><span>Payment gateway fee (2%)</span><span>+{razorpaySurcharge.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
-              <div className="flex justify-between text-muted-foreground"><span>GST on fee (18%)</span><span>+{razorpayGST.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+              <div className="flex justify-between"><span>Base amount</span><span>₹{total.toLocaleString('en-IN')}</span></div>
+              <div className="flex justify-between text-muted-foreground"><span>Payment gateway fee (2%)</span><span>+₹{razorpaySurcharge.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+              <div className="flex justify-between text-muted-foreground"><span>GST on fee (18%)</span><span>+₹{razorpayGST.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
               <Separator />
-              <div className="flex justify-between font-medium"><span>Online total</span><span>{onlineTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
+              <div className="flex justify-between font-medium"><span>Online total</span><span>₹{onlineTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>
             </div>
             <Button className="w-full" onClick={() => handleConfirm('online')} disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CreditCard className="h-4 w-4 mr-2" />}

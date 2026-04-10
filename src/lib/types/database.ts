@@ -206,6 +206,13 @@ export interface CancellationSlab {
   charge_pct: number;
 }
 
+export interface FlightLayover {
+  city: string;
+  airport_code: string;
+  duration_hours: number;
+  duration_minutes: number;
+}
+
 export interface Flight {
   id: string;
   proposal_id: string;
@@ -228,6 +235,8 @@ export interface Flight {
   refundable_status: 'refundable' | 'non_refundable' | 'partially_refundable';
   cancellation_policy_text: string | null;
 
+  layovers: FlightLayover[] | null;
+
   cp_total: number | null;
   sp_total: number | null;
 
@@ -236,6 +245,8 @@ export interface Flight {
   sort_order: number;
   created_at: string;
 }
+
+export type DayType = 'arrival' | 'tour' | 'transfer' | 'departure' | 'flight';
 
 export interface ItineraryDay {
   id: string;
@@ -247,6 +258,7 @@ export interface ItineraryDay {
   description: string | null;
   raw_description: string | null;
   overnight_city: string | null;
+  day_type: DayType | null;
   created_at: string;
 }
 
@@ -488,7 +500,10 @@ export interface ParsedFlight {
 
 export interface ParsedItineraryDay {
   day_number: number;
+  heading: string | null;
   description: string;
+  city?: string | null;
+  date?: string | null;
   activities: { type: string; description: string }[];
 }
 

@@ -38,6 +38,8 @@ Return this exact shape:
   }],
   "itinerary_days": [{
     "day_number": number,
+    "date": "YYYY-MM-DD" | null,
+    "city": string | null,
     "heading": string,
     "description": string,
     "activities": [{"type": "transfer"|"sightseeing"|"activity"|"other", "description": string}]
@@ -59,7 +61,7 @@ Return this exact shape:
 }
 
 IMPORTANT extraction rules:
-- itinerary_days: Extract the VERBATIM day-wise itinerary text from the DMC quote. Each day should have a heading (e.g. "Arrival in Bali") and the full description paragraph exactly as written by the DMC. Extract all activities mentioned for that day.
+- itinerary_days: Extract the VERBATIM day-wise itinerary text from the DMC quote. Each day MUST have: day_number (integer), city (city name for that day, e.g. "Dubai"), date (if a specific date is mentioned), heading (short title e.g. "Arrival in Bali"), and the full description paragraph exactly as written by the DMC. Extract all activities mentioned for that day.
 - cancellation_policy: Extract the general/land cancellation policy as an array of slabs with days_before, charge_pct, and notes.
 - hotels[].cancellation_policy: If the quote mentions per-hotel cancellation terms, extract them as text.
 - flights[].refundable_status: Extract whether each flight is refundable, non_refundable, or partially_refundable.

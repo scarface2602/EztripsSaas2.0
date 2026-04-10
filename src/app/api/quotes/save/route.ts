@@ -73,23 +73,45 @@ export async function POST(request: NextRequest) {
     day_number: number;
     heading?: string;
     description?: string;
+    city?: string | null;
+    date?: string | null;
     activities?: Array<{ type: string; description: string }>;
   }> | undefined;
+
+  // Helper: auto-assign day_type based on position and city transitions
+  function inferDayType(
+    dayNum: number,
+    totalDays: number,
+    prevCity: string | null | undefined,
+    thisCity: string | null | undefined,
+  ): string {
+    if (dayNum === 1) return 'arrival';
+    if (dayNum === totalDays) return 'departure';
+    if (prevCity && thisCity && prevCity.toLowerCase() !== thisCity.toLowerCase()) {
+      return 'transfer'; // Flight detection skipped on server (no flight lookup at save time)
+    }
+    return 'tour';
+  }
 
   if (parsedDays?.length) {
     // Use parsed itinerary days with verbatim DMC descriptions
     const startDate = body.travel_start || parsed?.travel_start;
-    const days = parsedDays.map((d) => {
-      const date = startDate
+    const total = parsedDays.length;
+    const days = parsedDays.map((d, i) => {
+      const date = d.date || (startDate
         ? new Date(new Date(startDate).getTime() + (d.day_number - 1) * 86400000).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0];
+        : new Date().toISOString().split('T')[0]);
+      const prevParsedDay = i > 0 ? parsedDays[i - 1] : null;
+      const dayType = inferDayType(d.day_number, total, prevParsedDay?.city, d.city);
       return {
         proposal_id: proposal.id,
         day_number: d.day_number,
         date,
+        city: d.city || null,
         heading: d.heading || null,
         description: d.description || null,
         raw_description: d.description || null,
+        day_type: dayType,
       };
     });
     const { data: insertedDays } = await supabase.from('itinerary_days').insert(days).select();
@@ -129,19 +151,26 @@ export async function POST(request: NextRequest) {
       }
       return tripCities[tripCities.length - 1].city;
     };
-    const days = [];
+    type DayRow = { proposal_id: string; day_number: number; date: string; city: string };
+    const allDays: DayRow[] = [];
     let dayNum = 1;
     const current = new Date(start);
     while (current <= end) {
-      days.push({
+      allDays.push({
         proposal_id: proposal.id,
         day_number: dayNum,
         date: current.toISOString().split('T')[0],
-        city: cityForDayNum(dayNum) || undefined,
+        city: cityForDayNum(dayNum),
       });
       dayNum++;
       current.setDate(current.getDate() + 1);
     }
+    const total = allDays.length;
+    const days = allDays.map((d, i) => {
+      const prevCity = i > 0 ? allDays[i - 1].city : null;
+      const dayType = inferDayType(d.day_number, total, prevCity, d.city);
+      return { ...d, city: d.city || undefined, day_type: dayType };
+    });
     if (days.length > 0) {
       await supabase.from('itinerary_days').insert(days);
     }

@@ -12,11 +12,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   const supabase = createServiceClient();
 
-  // Get proposal
+  // Get proposal — id may be a UUID (agent flow) or a share_token (client flow)
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
   const { data: proposal, error: proposalErr } = await supabase
     .from('proposals')
     .select('*')
-    .eq('id', id)
+    .eq(isUUID ? 'id' : 'share_token', id)
     .single();
 
   if (proposalErr || !proposal) {
@@ -32,11 +33,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
   const userAgent = request.headers.get('user-agent') || 'unknown';
 
+  // Use the resolved proposal UUID for all subsequent queries
+  const proposalId = proposal.id;
+
   // Validate dual-option choices
   const { data: dualActivities } = await supabase
     .from('itinerary_activities')
     .select('id')
-    .eq('proposal_id', id)
+    .eq('proposal_id', proposalId)
     .eq('option_mode', 'dual');
 
   if (dualActivities && dualActivities.length > 0) {
@@ -85,7 +89,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       confirmed_at: now,
       confirmed_by: confirmedBy,
     })
-    .eq('id', id);
+    .eq('id', proposalId);
 
   // Auto-generate receivables from payment_terms
   const paymentTerms = proposal.payment_terms as { deposit_pct?: number; balance_days_before?: number; notes?: string } | null;
@@ -99,10 +103,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     { data: activities },
     { data: lineItems },
   ] = await Promise.all([
-    supabase.from('hotels').select('sp_per_night, nights').eq('proposal_id', id),
-    supabase.from('flights').select('sp_total').eq('proposal_id', id),
-    supabase.from('itinerary_activities').select('confirmed_sp, pvt_sp, sic_sp, is_optional, option_mode').eq('proposal_id', id),
-    supabase.from('line_items').select('sp, is_optional, is_included').eq('proposal_id', id),
+    supabase.from('hotels').select('sp_per_night, nights').eq('proposal_id', proposalId),
+    supabase.from('flights').select('sp_total').eq('proposal_id', proposalId),
+    supabase.from('itinerary_activities').select('confirmed_sp, pvt_sp, sic_sp, is_optional, option_mode').eq('proposal_id', proposalId),
+    supabase.from('line_items').select('sp, is_optional, is_included').eq('proposal_id', proposalId),
   ]);
 
   let subtotal = 0;
@@ -138,7 +142,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const receivables = [
     {
-      proposal_id: id,
+      proposal_id: proposalId,
       client_id: proposal.client_id,
       description: `${depositPct}% deposit`,
       amount: depositAmount,
@@ -149,7 +153,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   if (balanceAmount > 0) {
     receivables.push({
-      proposal_id: id,
+      proposal_id: proposalId,
       client_id: proposal.client_id,
       description: `${100 - depositPct}% balance`,
       amount: balanceAmount,
@@ -167,10 +171,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     { data: activitiesFull },
     { data: lineItemsFull },
   ] = await Promise.all([
-    supabase.from('hotels').select('supplier_id, cp_per_night, nights, name').eq('proposal_id', id),
-    supabase.from('flights').select('supplier_id, cp_total, flight_number').eq('proposal_id', id),
-    supabase.from('itinerary_activities').select('supplier_id, confirmed_cp, pvt_cp, sic_cp, is_optional, option_mode, type, location').eq('proposal_id', id),
-    supabase.from('line_items').select('supplier_id, cp, is_optional, is_included, description').eq('proposal_id', id),
+    supabase.from('hotels').select('supplier_id, cp_per_night, nights, name').eq('proposal_id', proposalId),
+    supabase.from('flights').select('supplier_id, cp_total, flight_number').eq('proposal_id', proposalId),
+    supabase.from('itinerary_activities').select('supplier_id, confirmed_cp, pvt_cp, sic_cp, is_optional, option_mode, type, location').eq('proposal_id', proposalId),
+    supabase.from('line_items').select('supplier_id, cp, is_optional, is_included, description').eq('proposal_id', proposalId),
   ]);
 
   // Group by supplier
@@ -216,7 +220,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + (supplierTerms[supplierId] || 30));
     return {
-      proposal_id: id,
+      proposal_id: proposalId,
       supplier_id: supplierId,
       description: supplierTotals[supplierId].descriptions.join(', '),
       amount: Math.round(supplierTotals[supplierId].amount * 100) / 100,
@@ -231,7 +235,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Log to proposal_acceptance_log
   await supabase.from('proposal_acceptance_log').insert({
-    proposal_id: id,
+    proposal_id: proposalId,
     version: proposal.version || 1,
     event_type: 'confirmed',
     ip_address: ip,
@@ -247,7 +251,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   return NextResponse.json({
     success: true,
-    proposal_id: id,
+    proposal_id: proposalId,
     grand_total: grandTotal,
     receivables_count: receivables.length,
     payables_count: payables.length,

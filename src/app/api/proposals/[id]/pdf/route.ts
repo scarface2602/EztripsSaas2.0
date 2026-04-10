@@ -167,21 +167,40 @@ ${headerHtml}
 ${(flights || []).length > 0 ? `
 <div class="section">
   <h2>Flights</h2>
-  <table>
-    <thead><tr><th>Flight</th><th>Airline</th><th>Route</th><th>Departure</th><th>Arrival</th><th>Amount</th></tr></thead>
-    <tbody>
-    ${(flights || []).map((f: Record<string, unknown>) => `
-      <tr>
-        <td>${f.flight_number}</td>
-        <td>${f.airline || 'N/A'}</td>
-        <td>${f.origin_city || ''} → ${f.destination_city || ''}</td>
-        <td>${f.departure_at ? new Date(f.departure_at as string).toLocaleString() : 'N/A'}</td>
-        <td>${f.arrival_at ? new Date(f.arrival_at as string).toLocaleString() : 'N/A'}</td>
-        <td>${currencySymbol}${Number(f.sp_total || 0).toLocaleString('en-IN')}</td>
-      </tr>
-    `).join('')}
-    </tbody>
-  </table>
+  ${(flights || []).map((f: Record<string, unknown>) => {
+    const fLayovers = (f.layovers as Array<{ city: string; airport_code: string; duration_hours: number; duration_minutes: number }>) || [];
+    const baggageText = f.baggage_allowance ? String(f.baggage_allowance) : '';
+    const cabinText = f.cabin_class ? String(f.cabin_class) : '';
+    return `
+    <div class="hotel-card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">${f.flight_number}${f.airline ? ` — ${f.airline}` : ''}</h3>
+      <table>
+        <tr>
+          <td><strong>Route</strong></td>
+          <td>${f.origin_city || ''}${f.origin_iata ? ` (${f.origin_iata})` : ''} → ${f.destination_city || ''}${f.destination_iata ? ` (${f.destination_iata})` : ''}</td>
+          <td><strong>Departure</strong></td>
+          <td>${f.departure_at ? new Date(f.departure_at as string).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'N/A'}</td>
+        </tr>
+        <tr>
+          <td><strong>Arrival</strong></td>
+          <td>${f.arrival_at ? new Date(f.arrival_at as string).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'N/A'}</td>
+          ${cabinText ? `<td><strong>Cabin</strong></td><td>${cabinText}</td>` : '<td></td><td></td>'}
+        </tr>
+        ${baggageText ? `<tr><td><strong>Baggage</strong></td><td colspan="3">${baggageText}</td></tr>` : ''}
+        ${f.sp_total ? `<tr><td><strong>Amount</strong></td><td colspan="3">${currencySymbol}${Number(f.sp_total).toLocaleString('en-IN')}</td></tr>` : ''}
+      </table>
+      ${fLayovers.length > 0 ? `
+      <div style="margin-top:8px;">
+        ${fLayovers.map(l => `
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:#f8f9fa;border-radius:4px;margin:4px 0;font-size:0.85rem;">
+            <span style="color:#666;">⏱</span>
+            <strong>Layover:</strong> ${l.city}${l.airport_code ? ` (${l.airport_code})` : ''} — ${l.duration_hours}h${l.duration_minutes > 0 ? ` ${l.duration_minutes}m` : ''}
+          </div>
+        `).join('')}
+      </div>
+      ` : ''}
+    </div>`;
+  }).join('')}
 </div>
 ` : ''}
 
@@ -264,11 +283,12 @@ ${(flights || []).length > 0 ? `
   ${(flights || []).length > 0 ? `
   <h3>Flights</h3>
   <table>
-    <thead><tr><th>Flight</th><th>Status</th><th>Policy</th></tr></thead>
+    <thead><tr><th>Flight</th><th>Baggage</th><th>Status</th><th>Policy</th></tr></thead>
     <tbody>
     ${(flights || []).map((f: Record<string, unknown>) => `
       <tr>
         <td>${f.flight_number} ${f.airline ? `(${f.airline})` : ''}</td>
+        <td>${f.baggage_allowance ? cleanText(f.baggage_allowance as string) : 'N/A'}</td>
         <td>${f.is_non_refundable ? 'Non-refundable' : (f.refundable_status === 'partially_refundable' ? 'Partially Refundable' : 'Refundable')}</td>
         <td>${f.cancellation_policy_text ? cleanText(f.cancellation_policy_text as string) : (f.is_non_refundable ? 'Non-refundable from date of ticketing' : 'Standard airline policy applies')}</td>
       </tr>

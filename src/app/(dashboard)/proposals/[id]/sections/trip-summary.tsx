@@ -137,7 +137,7 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
             </div>
             <div className="space-y-2">
               <Label>Currency</Label>
-              <Input value={proposal.currency} onChange={(e) => updateProposal({ currency: e.target.value })} />
+              <Input value="INR (₹)" disabled />
             </div>
             <div className="space-y-2">
               <Label>Travel Start</Label>

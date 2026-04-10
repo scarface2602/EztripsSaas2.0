@@ -54,7 +54,7 @@ export default function SettingsPage() {
   const [agencyName, setAgencyName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
-  const [defaultCurrency, setDefaultCurrency] = useState('INR');
+  const defaultCurrency = 'INR';
   const [depositPct, setDepositPct] = useState(25);
   const [balanceDaysBefore, setBalanceDaysBefore] = useState(30);
   const [paymentNotes, setPaymentNotes] = useState('');
@@ -71,7 +71,7 @@ export default function SettingsPage() {
         setAgencyName(data.agency_name || '');
         setLogoUrl(data.logo_url || '');
         setWhatsappNumber(data.whatsapp_number || '');
-        setDefaultCurrency(data.default_currency || 'INR');
+        // currency is locked to INR
         setDepositPct(data.default_payment_terms?.deposit_pct ?? 25);
         setBalanceDaysBefore(data.default_payment_terms?.balance_days_before ?? 30);
         setPaymentNotes(data.default_payment_terms?.notes || '');
@@ -276,20 +276,8 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-2">
               <Label>Default Currency</Label>
-              <Select value={defaultCurrency} onValueChange={(v) => setDefaultCurrency(v ?? 'INR')}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="INR">INR - Indian Rupee</SelectItem>
-                  <SelectItem value="USD">USD - US Dollar</SelectItem>
-                  <SelectItem value="EUR">EUR - Euro</SelectItem>
-                  <SelectItem value="GBP">GBP - British Pound</SelectItem>
-                  <SelectItem value="AED">AED - UAE Dirham</SelectItem>
-                  <SelectItem value="SGD">SGD - Singapore Dollar</SelectItem>
-                  <SelectItem value="THB">THB - Thai Baht</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input value="INR — Indian Rupee (₹)" disabled />
+              <p className="text-xs text-muted-foreground">This app operates in INR only.</p>
             </div>
           </CardContent>
         </Card>

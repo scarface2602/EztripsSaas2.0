@@ -58,6 +58,7 @@ export function ProposalEditor({
   const [comments, setComments] = useState(initialComments);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [itineraryDirty, setItineraryDirty] = useState(false);
   const [activeTab, setActiveTab] = useState('cover');
   const [summaryValidationError, setSummaryValidationError] = useState<string | null>(null);
 
@@ -265,13 +266,16 @@ export function ProposalEditor({
             <button
               key={key}
               onClick={() => handleTabChange(key)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
+              className={`px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors flex items-center gap-1 ${
                 activeTab === key
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {label}
+              {key === 'itinerary' && itineraryDirty && (
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" title="Unsaved itinerary changes" />
+              )}
             </button>
           ))}
         </div>
@@ -327,8 +331,10 @@ export function ProposalEditor({
               activities={activities}
               setActivities={setActivities}
               hotels={hotels}
+              flights={flights}
               suppliers={suppliers}
               setHasUnsavedChanges={setHasUnsavedChanges}
+              onDirtyChange={setItineraryDirty}
             />
           )}
           {activeTab === 'inclusions' && (
