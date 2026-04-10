@@ -11,7 +11,23 @@
       "Bash(cp /tmp/eztrips-saas/.eslintrc.json /Users/sudeepsharma/Desktop/EztripsSaas/)",
       "Bash(cp /tmp/eztrips-saas/.gitignore /Users/sudeepsharma/Desktop/EztripsSaas/)",
       "Bash(npm install:*)",
-      "Bash(npx shadcn@latest init -d)"
+      "Bash(npx shadcn@latest init -d)",
+      "Bash(npx shadcn@latest add card input label textarea select badge table tabs dialog dropdown-menu separator sheet avatar toast tooltip checkbox switch popover command calendar -y)",
+      "Bash(npx shadcn@latest add card input label textarea select badge table tabs dialog dropdown-menu separator sheet avatar tooltip checkbox switch popover command calendar -y)",
+      "Bash(npx shadcn@latest add sonner scroll-area -y)",
+      "Bash(mkdir -p \"src/app/\\(dashboard\\)/clients/[id]\")",
+      "Bash(mkdir -p \"src/app/\\(dashboard\\)/suppliers/[id]\")",
+      "Bash(mkdir -p \"src/app/\\(dashboard\\)/proposals/[id]/sections\")",
+      "Bash(mkdir -p \"src/app/p/[share_token]/payment\")",
+      "Bash(mkdir -p \"src/app/api/clients/[id]\")",
+      "Bash(npx tsc:*)",
+      "Bash(node node_modules/typescript/lib/tsc.js --noEmit)",
+      "Bash(node:*)",
+      "Bash(npx next:*)",
+      "Bash(ls node_modules/next/dist/server/require-hook*)",
+      "Bash(npm run:*)",
+      "Bash(lsof -ti:3000)",
+      "Bash(npm ls:*)"
     ]
   }
 }

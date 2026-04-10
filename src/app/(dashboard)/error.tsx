@@ -1,0 +1,22 @@
+'use client';
+
+export default function DashboardError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 gap-4">
+      <h2 className="text-xl font-semibold">Something went wrong</h2>
+      <p className="text-muted-foreground text-sm">{error.message || 'An unexpected error occurred.'}</p>
+      <button
+        onClick={reset}
+        className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
