@@ -59,8 +59,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
   }
 
-  // Build new published_data from draft_data or current state
-  const publishedData = proposal.draft_data || snapshot;
+  // Build new published_data from the fresh DB snapshot.
+  // Never use draft_data here — it uses camelCase keys and may be incomplete.
+  const publishedData = snapshot;
 
   // Generate new share_token
   const shareToken = crypto.randomBytes(16).toString('hex');

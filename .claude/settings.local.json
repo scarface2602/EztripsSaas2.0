@@ -29,7 +29,8 @@
       "Bash(lsof -ti:3000)",
       "Bash(npm ls:*)",
       "Bash(ls /Users/sudeepsharma/Desktop/EztripsSaas/next.config*)",
-      "Bash(cat /Users/sudeepsharma/Desktop/EztripsSaas/next.config*)"
+      "Bash(cat /Users/sudeepsharma/Desktop/EztripsSaas/next.config*)",
+      "Bash(grep -n \"CREATE TABLE\" /Users/sudeepsharma/Desktop/EztripsSaas/supabase/migrations/*.sql)"
     ]
   }
 }

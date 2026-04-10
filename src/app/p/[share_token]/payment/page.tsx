@@ -33,7 +33,7 @@ export default function PaymentPage() {
         share_token: shareToken,
         payment_method: paymentMethod,
         addon_ids: addons ? addons.split(',') : [],
-        dual_choices: JSON.parse(choices),
+        choices: JSON.parse(choices),
       }),
     });
 
