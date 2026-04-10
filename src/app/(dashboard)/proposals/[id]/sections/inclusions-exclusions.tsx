@@ -22,18 +22,70 @@ export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItem
   const inclusions = lineItems.filter(li => li.is_included);
   const exclusions = lineItems.filter(li => !li.is_included);
 
-  async function addItem(isIncluded: boolean) {
+  async function addItem(isIncluded: boolean, description = '') {
     const { data } = await supabase.from('line_items').insert({
       proposal_id: proposalId,
       type: 'other',
-      description: '',
+      description,
       is_included: isIncluded,
       sort_order: lineItems.length,
     }).select().single();
     if (data) {
       setLineItems([...lineItems, data as LineItem]);
       setHasUnsavedChanges(true);
+      return data as LineItem;
     }
+    return null;
+  }
+
+  // Parse pasted text into individual bullet items
+  function parsePastedBullets(text: string): string[] {
+    // Split on newlines first
+    const lines = text.split(/\r?\n/);
+    const items: string[] = [];
+    for (const line of lines) {
+      // Strip leading bullet/dash/number prefix (•, -, *, –, 1., 2., etc.)
+      const cleaned = line.replace(/^\s*(?:[•\-*–]|\d+[.):])\s*/, '').trim();
+      if (cleaned) items.push(cleaned);
+    }
+    return items;
+  }
+
+  async function handlePaste(
+    e: React.ClipboardEvent<HTMLInputElement>,
+    currentItem: LineItem,
+    isIncluded: boolean,
+  ) {
+    const text = e.clipboardData.getData('text');
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+
+    // Only intercept if there are multiple non-empty lines
+    if (lines.length < 2) return;
+
+    e.preventDefault();
+    const items = parsePastedBullets(text);
+    if (items.length === 0) return;
+
+    // Update current item with first line
+    const updatedCurrent = { ...currentItem, description: items[0] };
+    const updatedLineItems = lineItems.map(li => li.id === currentItem.id ? updatedCurrent : li);
+
+    // Batch insert remaining items
+    const toInsert = items.slice(1).map((desc, i) => ({
+      proposal_id: proposalId,
+      type: 'other' as const,
+      description: desc,
+      is_included: isIncluded,
+      sort_order: lineItems.length + i,
+    }));
+
+    const { data: inserted } = await supabase
+      .from('line_items')
+      .insert(toInsert)
+      .select();
+
+    setLineItems([...updatedLineItems, ...((inserted as LineItem[]) || [])]);
+    setHasUnsavedChanges(true);
   }
 
   function updateItem(id: string, updates: Partial<LineItem>) {
@@ -117,7 +169,8 @@ export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItem
             <Input
               value={item.description}
               onChange={(e) => updateItem(item.id, { description: e.target.value })}
-              placeholder="Item description..."
+              onPaste={(e) => handlePaste(e, item, isIncluded)}
+              placeholder="Item description… (paste multiple lines to create multiple bullets)"
             />
             <Button size="sm" variant="ghost" onClick={() => deleteItem(item.id)}>
               <Trash2 className="h-3 w-3 text-red-500" />

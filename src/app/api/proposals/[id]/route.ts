@@ -12,7 +12,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // Whitelist of allowed fields for PATCH
   const allowedFields = [
     'title', 'destination', 'travel_start', 'travel_end',
-    'pax_adults', 'pax_children', 'special_notes', 'dietary_notes',
+    'pax_adults', 'pax_children', 'children_ages', 'special_notes', 'dietary_notes',
     'cover_image_url', 'cover_image_source', 'cover_image_approved_at',
     'gst_enabled', 'gst_rate', 'tcs_enabled', 'tcs_rate',
     'rounding_unit', 'discount_amount', 'discount_note',

@@ -86,6 +86,8 @@ export function ProposalEditor({
         travel_end: proposal.travel_end,
         pax_adults: proposal.pax_adults,
         pax_children: proposal.pax_children,
+        children_ages: proposal.children_ages,
+        currency: proposal.currency,
         special_notes: proposal.special_notes,
         dietary_notes: proposal.dietary_notes,
         gst_enabled: proposal.gst_enabled,

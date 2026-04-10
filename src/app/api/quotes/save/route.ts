@@ -22,7 +22,9 @@ export async function POST(request: NextRequest) {
     travel_end: body.travel_end || parsed?.travel_end,
     pax_adults: body.pax_adults || parsed?.pax_adults || 1,
     pax_children: body.pax_children || parsed?.pax_children || 0,
-    currency: parsed?.currency || 'INR',
+    children_ages: body.children_ages || null,
+    // Always default to INR — agent can change via currency selector after import
+    currency: body.currency || 'INR',
     status: 'draft',
     trip_cities: body.trip_cities || null,
   }).select().single();

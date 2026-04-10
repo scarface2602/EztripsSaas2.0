@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import type { Proposal } from '@/lib/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,22 +23,24 @@ export function CoverPageSection({ proposal, updateProposal }: CoverPageSectionP
   async function handleFileUpload(file: File) {
     setUploading(true);
     try {
-      const supabase = createClient();
-      const ext = file.name.split('.').pop() || 'jpg';
-      const path = `${proposal.id}/${Date.now()}.${ext}`;
+      // Upload via server-side API using service role (avoids RLS issues on Vercel)
+      const formData = new FormData();
+      formData.append('file', file);
 
-      const { error: uploadError } = await supabase.storage
-        .from('proposal-images')
-        .upload(path, file, { upsert: true, contentType: file.type });
+      const uploadRes = await fetch(`/api/proposals/${proposal.id}/upload-cover`, {
+        method: 'POST',
+        body: formData,
+      });
 
-      if (uploadError) {
-        console.error('Cover image upload error:', uploadError.message);
-        toast.error(`Upload failed: ${uploadError.message}`);
+      const uploadData = await uploadRes.json();
+
+      if (!uploadRes.ok || !uploadData.url) {
+        console.error('Cover image upload error:', uploadData.error);
+        toast.error(`Upload failed: ${uploadData.error || 'Unknown error'}`);
         return;
       }
 
-      const { data: urlData } = supabase.storage.from('proposal-images').getPublicUrl(path);
-      const publicUrl = urlData.publicUrl;
+      const publicUrl = uploadData.url;
 
       // Persist immediately via PATCH
       const patchRes = await fetch(`/api/proposals/${proposal.id}`, {

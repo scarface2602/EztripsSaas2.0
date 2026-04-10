@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { AlertTriangle, Loader2, Plus, Trash2 } from 'lucide-react';
+import { CURRENCY_OPTIONS } from '@/lib/utils/pricing';
 
 interface TripSummarySectionProps {
   proposal: Proposal;
@@ -137,7 +138,15 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
             </div>
             <div className="space-y-2">
               <Label>Currency</Label>
-              <Input value="INR (₹)" disabled />
+              <select
+                className="w-full h-10 rounded-md border px-3 text-sm"
+                value={proposal.currency || 'INR'}
+                onChange={(e) => updateProposal({ currency: e.target.value })}
+              >
+                {CURRENCY_OPTIONS.map(opt => (
+                  <option key={opt.code} value={opt.code}>{opt.label}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label>Travel Start</Label>
@@ -167,14 +176,26 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
 
           {proposal.pax_children > 0 && (
             <div className="space-y-2">
-              <Label>Children Ages (comma-separated)</Label>
-              <Input
-                value={(proposal.children_ages || []).join(', ')}
-                onChange={(e) => updateProposal({
-                  children_ages: e.target.value.split(',').map(a => parseInt(a.trim())).filter(a => !isNaN(a))
-                })}
-                placeholder="e.g., 5, 8, 12"
-              />
+              <Label>Children Ages</Label>
+              <div className="grid grid-cols-4 gap-2">
+                {Array.from({ length: proposal.pax_children }, (_, i) => (
+                  <div key={i} className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Child {i + 1}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={17}
+                      placeholder="Age"
+                      value={(proposal.children_ages || [])[i] ?? ''}
+                      onChange={(e) => {
+                        const ages = [...(proposal.children_ages || Array(proposal.pax_children).fill(0))];
+                        ages[i] = e.target.value ? parseInt(e.target.value) : 0;
+                        updateProposal({ children_ages: ages });
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
               <p className="text-xs text-muted-foreground">Per child CWB/CNB designation is set in the Hotels section</p>
             </div>
           )}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { cleanText } from '@/lib/utils/text-sanitise';
+import { getCurrencySymbol } from '@/lib/utils/pricing';
 
 export const runtime = 'nodejs';
 export const maxDuration = 10; // seconds — Vercel Hobby plan
@@ -37,8 +38,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   if (!proposal) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Currency symbol — always use ₹ for INR (default), could extend for others
-  const currencySymbol = (proposal.currency || 'INR') === 'INR' ? '₹' : proposal.currency;
+  // Currency symbol — mapped from proposal currency code
+  const currencySymbol = getCurrencySymbol(proposal.currency as string);
 
   // Fetch org details via user.org_id
   const agentUser = user as Record<string, unknown> | null;
@@ -62,6 +63,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   // Calculate totals — CP NEVER appears in PDF
   // Pricing is computed inline in the PDF pricing section from proposal fields
+
+  function toTitleCase(str: string): string {
+    const minor = new Set(['a','an','and','as','at','but','by','for','in','of','on','or','the','to','up','via','with']);
+    return str.replace(/\S+/g, (word, offset) => {
+      const clean = word.replace(/[^a-zA-Z]/g, '');
+      if (offset > 0 && minor.has(clean.toLowerCase())) return word.toLowerCase();
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    });
+  }
 
   const optionalAddons = (activities || []).filter((a: Record<string, unknown>) => a.is_optional);
 
@@ -212,7 +222,7 @@ ${(flights || []).length > 0 ? `
   <h2>Day-wise Itinerary</h2>
   ${(itineraryDays || []).map((day: Record<string, unknown>) => {
     const dayActs = (activities || []).filter((a: Record<string, unknown>) => a.itinerary_day_id === day.id && !a.is_optional);
-    const heading = cleanText(day.heading as string) || `Day ${day.day_number}`;
+    const heading = (day.heading ? toTitleCase(cleanText(day.heading as string)) : null) || `Day ${day.day_number}`;
     const desc = cleanText(day.description as string) || 'Itinerary to be updated.';
     return `
       <div class="day-card">

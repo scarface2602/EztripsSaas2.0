@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { FileText, Upload, Wand2, Loader2, AlertTriangle, Info, ArrowRight, Package, List, Plus, Trash2 } from 'lucide-react';
 import type { TripCity } from '@/lib/types/database';
+import { CURRENCY_OPTIONS } from '@/lib/utils/pricing';
 
 type Step = 'quote-type' | 'choose' | 'import-setup' | 'parsing' | 'review' | 'manual' | 'trip-structure';
 
@@ -41,6 +42,8 @@ export default function NewProposalPage() {
   const [travelEnd, setTravelEnd] = useState('');
   const [paxAdults, setPaxAdults] = useState(2);
   const [paxChildren, setPaxChildren] = useState(0);
+  const [childrenAges, setChildrenAges] = useState<number[]>([]);
+  const [currency, setCurrency] = useState('INR');
   const [tripCities, setTripCities] = useState<TripCity[]>([]);
   const [prevStep, setPrevStep] = useState<'manual' | 'review'>('manual');
 
@@ -127,6 +130,8 @@ export default function NewProposalPage() {
           travel_end: travelEnd || null,
           pax_adults: paxAdults,
           pax_children: paxChildren,
+          children_ages: paxChildren > 0 && childrenAges.length > 0 ? childrenAges : null,
+          currency,
           quote_type: quoteType,
           parsed_data: parsedData,
           trip_cities: tripCities.length > 0 ? tripCities : null,
@@ -155,6 +160,8 @@ export default function NewProposalPage() {
       travel_end: travelEnd || null,
       pax_adults: paxAdults,
       pax_children: paxChildren,
+      children_ages: paxChildren > 0 && childrenAges.length > 0 ? childrenAges : null,
+      currency,
       status: 'draft',
       trip_cities: tripCities.length > 0 ? tripCities : null,
     }).select().single();
@@ -385,10 +392,38 @@ export default function NewProposalPage() {
               </div>
               <div className="space-y-2">
                 <Label>Children</Label>
-                <Input type="number" min={0} value={paxChildren} onChange={(e) => setPaxChildren(Number(e.target.value))} />
+                <Input type="number" min={0} value={paxChildren} onChange={(e) => { setPaxChildren(Number(e.target.value)); setChildrenAges([]); }} />
+              </div>
+              <div className="space-y-2">
+                <Label>Currency</Label>
+                <select className="w-full h-10 rounded-md border px-3 text-sm" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                  {CURRENCY_OPTIONS.map(opt => <option key={opt.code} value={opt.code}>{opt.label}</option>)}
+                </select>
               </div>
             </CardContent>
           </Card>
+
+          {paxChildren > 0 && (
+            <Card>
+              <CardHeader><CardTitle>Children Ages</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-4 gap-3">
+                {Array.from({ length: paxChildren }, (_, i) => (
+                  <div key={i} className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Child {i + 1}</Label>
+                    <Input
+                      type="number" min={0} max={17} placeholder="Age"
+                      value={childrenAges[i] ?? ''}
+                      onChange={(e) => {
+                        const ages = [...childrenAges];
+                        ages[i] = e.target.value ? parseInt(e.target.value) : 0;
+                        setChildrenAges(ages);
+                      }}
+                    />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {parsedData.hotels.length > 0 && (
             <Card>
@@ -541,8 +576,35 @@ export default function NewProposalPage() {
               <div className="space-y-2"><Label>Travel Start</Label><Input type="date" value={travelStart} onChange={(e) => setTravelStart(e.target.value)} /></div>
               <div className="space-y-2"><Label>Travel End</Label><Input type="date" value={travelEnd} onChange={(e) => setTravelEnd(e.target.value)} /></div>
               <div className="space-y-2"><Label>Adults</Label><Input type="number" min={1} value={paxAdults} onChange={(e) => setPaxAdults(Number(e.target.value))} /></div>
-              <div className="space-y-2"><Label>Children</Label><Input type="number" min={0} value={paxChildren} onChange={(e) => setPaxChildren(Number(e.target.value))} /></div>
+              <div className="space-y-2"><Label>Children</Label><Input type="number" min={0} value={paxChildren} onChange={(e) => { setPaxChildren(Number(e.target.value)); setChildrenAges([]); }} /></div>
+              <div className="col-span-2 space-y-2">
+                <Label>Currency</Label>
+                <select className="w-full h-10 rounded-md border px-3 text-sm" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                  {CURRENCY_OPTIONS.map(opt => <option key={opt.code} value={opt.code}>{opt.label}</option>)}
+                </select>
+              </div>
             </div>
+            {paxChildren > 0 && (
+              <div className="space-y-2">
+                <Label>Children Ages</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {Array.from({ length: paxChildren }, (_, i) => (
+                    <div key={i} className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Child {i + 1}</Label>
+                      <Input
+                        type="number" min={0} max={17} placeholder="Age"
+                        value={childrenAges[i] ?? ''}
+                        onChange={(e) => {
+                          const ages = [...childrenAges];
+                          ages[i] = e.target.value ? parseInt(e.target.value) : 0;
+                          setChildrenAges(ages);
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex justify-between pt-4">
               <Button variant="outline" onClick={() => setStep('choose')}>Back</Button>
               <Button onClick={() => { setPrevStep('manual'); setStep('trip-structure'); }}>

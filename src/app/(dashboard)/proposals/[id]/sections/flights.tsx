@@ -19,7 +19,7 @@ interface FlightsSectionProps {
   setHasUnsavedChanges: (v: boolean) => void;
 }
 
-export function FlightsSection({ proposal, flights, setFlights, suppliers, setHasUnsavedChanges }: FlightsSectionProps) {
+export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedChanges }: FlightsSectionProps) {
   const supabase = createClient();
   const [lookingUp, setLookingUp] = useState<string | null>(null);
   const [sectionNA, setSectionNA] = useState(false);
@@ -193,18 +193,20 @@ export function FlightsSection({ proposal, flights, setFlights, suppliers, setHa
                 </div>
                 <div className="space-y-2">
                   <Label>Cabin Class</Label>
-                  <Input value={flight.cabin_class || ''} onChange={(e) => updateFlight(index, { cabin_class: e.target.value })} />
+                  <select
+                    className="w-full h-10 rounded-md border px-3 text-sm"
+                    value={flight.cabin_class || 'Economy'}
+                    onChange={(e) => updateFlight(index, { cabin_class: e.target.value })}
+                  >
+                    <option value="Economy">Economy</option>
+                    <option value="Premium Economy">Premium Economy</option>
+                    <option value="Business">Business</option>
+                    <option value="First Class">First Class</option>
+                  </select>
                 </div>
                 <div className="space-y-2">
                   <Label>Baggage Allowance</Label>
                   <Input value={flight.baggage_allowance || ''} onChange={(e) => updateFlight(index, { baggage_allowance: e.target.value })} placeholder="e.g. 30kg checked + 7kg cabin" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Supplier (Airline)</Label>
-                  <select className="w-full h-10 rounded-md border px-3 text-sm" value={flight.supplier_id || ''} onChange={(e) => updateFlight(index, { supplier_id: e.target.value || null })}>
-                    <option value="">Select airline</option>
-                    {suppliers.filter(s => s.type === 'airline').map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs">CP Total (internal)</Label>

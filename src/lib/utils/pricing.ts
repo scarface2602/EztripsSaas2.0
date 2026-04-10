@@ -63,10 +63,32 @@ export function applyRounding(amount: number, roundingUnit: number): number {
 
 /** Get currency symbol from currency code. Defaults to ₹ (INR). */
 export function getCurrencySymbol(currency?: string | null): string {
+  const symbols: Record<string, string> = {
+    INR: '₹',
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+    SGD: 'S$',
+    AED: 'AED ',
+    THB: '฿',
+    AUD: 'A$',
+    JPY: '¥',
+  };
   const code = currency || 'INR';
-  if (code === 'INR') return '₹';
-  return code;
+  return symbols[code] ?? code;
 }
+
+export const CURRENCY_OPTIONS: { code: string; label: string }[] = [
+  { code: 'INR', label: '₹ INR' },
+  { code: 'USD', label: '$ USD' },
+  { code: 'EUR', label: '€ EUR' },
+  { code: 'GBP', label: '£ GBP' },
+  { code: 'SGD', label: 'S$ SGD' },
+  { code: 'AED', label: 'AED' },
+  { code: 'THB', label: '฿ THB' },
+  { code: 'AUD', label: 'A$ AUD' },
+  { code: 'JPY', label: '¥ JPY' },
+];
 
 /** Format amount with currency symbol in en-IN locale */
 export function formatCurrency(amount: number, currency?: string | null): string {

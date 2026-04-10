@@ -299,8 +299,9 @@ export function ItinerarySection({
         hotel: hotels.find(h => h.check_in <= day.date && h.check_out > day.date)?.name,
         activities: dayActivities.map(a => a.details),
         raw_description: day.raw_description || null,
+        day_type: day.day_type || null,
       };
-      // Feature 3: if heading already exists, use it as seed; don't overwrite
+      // If heading already exists, pass it as seed for the AI
       if (day.heading && !day.raw_description) {
         body.existing_heading = day.heading;
       }
@@ -310,8 +311,15 @@ export function ItinerarySection({
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (day.heading && !day.raw_description) {
-        // Only update description — preserve the existing heading
+      const isTourWithHeading = day.day_type === 'tour' && day.heading && !day.raw_description;
+      if (isTourWithHeading) {
+        // Tour day: update both description and the corrected/formatted heading
+        updateDay(index, {
+          heading: data.heading || day.heading,
+          description: data.description,
+        });
+      } else if (day.heading && !day.raw_description) {
+        // Non-tour days with heading — only update description, preserve heading
         updateDay(index, { description: data.description });
       } else {
         updateDay(index, { heading: data.heading, description: data.description });

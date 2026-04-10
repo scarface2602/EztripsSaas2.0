@@ -21,15 +21,17 @@ export function PricingSummarySection({
 }: PricingSummarySectionProps) {
   const cur = proposal.currency;
 
-  // ── INTERNAL: Hotel rows ──────────────────────────────────────────────────
-  const hotelRows = hotels.map(h => ({
-    id: h.id,
-    name: h.name,
-    city: h.city,
-    nights: h.nights || 0,
-    cpTotal: (h.cp_per_night || 0) * (h.nights || 0),
-    spTotal: (h.sp_per_night || 0) * (h.nights || 0),
-  }));
+  // ── INTERNAL: Hotel rows — only show hotels that have a rate entered ──────
+  const hotelRows = hotels
+    .filter(h => (h.cp_per_night && h.cp_per_night > 0) || (h.sp_per_night && h.sp_per_night > 0))
+    .map(h => ({
+      id: h.id,
+      name: h.name,
+      city: h.city,
+      nights: h.nights || 0,
+      cpTotal: (h.cp_per_night || 0) * (h.nights || 0),
+      spTotal: (h.sp_per_night || 0) * (h.nights || 0),
+    }));
   const totalHotelCP = hotelRows.reduce((s, h) => s + h.cpTotal, 0);
   const totalHotelSP = hotelRows.reduce((s, h) => s + h.spTotal, 0);
 
@@ -362,10 +364,12 @@ export function PricingSummarySection({
               value={proposal.rounding_unit || 0}
               onChange={(e) => updateProposal({ rounding_unit: Number(e.target.value) })}
             >
-              <option value={0}>Off</option>
-              <option value={100}>100</option>
-              <option value={500}>500</option>
-              <option value={1000}>1000</option>
+              <option value={0}>None</option>
+              <option value={1}>₹1</option>
+              <option value={10}>₹10</option>
+              <option value={100}>₹100</option>
+              <option value={500}>₹500</option>
+              <option value={1000}>₹1000</option>
             </select>
           </div>
 
