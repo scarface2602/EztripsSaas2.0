@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { cleanText } from '@/lib/utils/text-sanitise';
 
+export const runtime = 'nodejs';
+export const maxDuration = 10; // seconds — Vercel Hobby plan
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -360,10 +363,23 @@ ${footerHtml}
 
 </body></html>`;
 
-  // Use Puppeteer for PDF
+  // Launch browser — @sparticuz/chromium on Vercel, full puppeteer locally
+  let browser;
   try {
-    const puppeteer = await import('puppeteer');
-    const browser = await puppeteer.default.launch({ headless: true, args: ['--no-sandbox'] });
+    if (process.env.VERCEL) {
+      const chromium = (await import('@sparticuz/chromium')).default;
+      const puppeteer = (await import('puppeteer-core')).default;
+      chromium.setGraphicsMode = false;
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(),
+        headless: true,
+      });
+    } else {
+      const puppeteer = (await import('puppeteer')).default;
+      browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    }
+
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
     const pdf = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '0', bottom: '0', left: '0', right: '0' } });
@@ -375,8 +391,10 @@ ${footerHtml}
         'Content-Disposition': `inline; filename="proposal-${proposal.title || id}.pdf"`,
       },
     });
-  } catch {
-    // Fallback: return HTML
+  } catch (err) {
+    if (browser) await browser.close().catch(() => {});
+    console.error('PDF generation error:', err);
+    // Fallback: return HTML so the user gets something
     return new NextResponse(html, {
       headers: { 'Content-Type': 'text/html' },
     });

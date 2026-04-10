@@ -27,7 +27,9 @@
       "Bash(ls node_modules/next/dist/server/require-hook*)",
       "Bash(npm run:*)",
       "Bash(lsof -ti:3000)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(ls /Users/sudeepsharma/Desktop/EztripsSaas/next.config*)",
+      "Bash(cat /Users/sudeepsharma/Desktop/EztripsSaas/next.config*)"
     ]
   }
 }

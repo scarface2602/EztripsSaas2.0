@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "src/app/api/proposals/[id]/pdf/route.ts": {
+      "maxDuration": 10
+    }
+  }
+}
