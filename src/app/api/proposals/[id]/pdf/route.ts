@@ -138,9 +138,45 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ? `background: url('${coverImageDataUri}') center/cover no-repeat;`
     : 'background: linear-gradient(135deg, #1e3a5f, #2d5f8a);';
 
-  // Pricing — proposal.total_sp is the authoritative grand total (computed + written
-  // by saveDraft). Read it directly so PDF matches the share link exactly.
-  const pricingRows = `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>&#8377;${Math.round(Number(proposal.total_sp) || 0).toLocaleString('en-IN')}</strong></td></tr>`;
+  // ── Pricing breakdown ─────────────────────────────────────────────────────
+  const hotelSPTotal = (hotels || [])
+    .filter(h => (Number(h.sp_per_night) || 0) > 0)
+    .reduce((s, h) => s + (Number(h.sp_per_night) || 0) * (Number(h.nights) || 1), 0);
+  const flightSPTotal = (flights || [])
+    .reduce((s, f) => s + (Number(f.sp_total) || 0), 0);
+  const effectiveLandSP = hotelSPTotal > 0 ? hotelSPTotal : Number(proposal.land_sp) || 0;
+
+  // Per-type totals
+  const pricingLandSP   = pdfType === 'flight_only' ? 0 : effectiveLandSP;
+  const pricingFlightSP = pdfType === 'hotel_only'  ? 0 : flightSPTotal;
+
+  const discount       = Number(proposal.discount_amount) || 0;
+  const subtotal       = pricingLandSP + pricingFlightSP;
+  const afterDiscount  = subtotal - discount;
+  const gstAmt         = proposal.gst_enabled ? afterDiscount * (Number(proposal.gst_rate) || 5) / 100 : 0;
+  const tcsAmt         = proposal.tcs_enabled ? (afterDiscount + gstAmt) * (Number(proposal.tcs_rate) || 5) / 100 : 0;
+  const grandTotal     = afterDiscount + gstAmt + tcsAmt;
+
+  const R = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+  const hasBreakdown = (pricingLandSP > 0 && pricingFlightSP > 0) || discount > 0
+    || !!proposal.gst_enabled || !!proposal.tcs_enabled;
+
+  let pricingRows = '';
+  if (hasBreakdown) {
+    if (pricingLandSP > 0) {
+      const label = hotelSPTotal > 0 ? 'Hotels' : 'Land Package';
+      pricingRows += `<tr><td>${label}</td><td style="text-align:right;">${R(pricingLandSP)}</td></tr>`;
+    }
+    if (pricingFlightSP > 0)
+      pricingRows += `<tr><td>Flights</td><td style="text-align:right;">${R(pricingFlightSP)}</td></tr>`;
+    if (discount > 0)
+      pricingRows += `<tr><td>Discount${proposal.discount_note ? ` (${cleanText(String(proposal.discount_note))})` : ''}</td><td style="text-align:right;color:#dc2626;">-${R(discount)}</td></tr>`;
+    if (proposal.gst_enabled)
+      pricingRows += `<tr><td>GST (${proposal.gst_rate}%)</td><td style="text-align:right;">${R(gstAmt)}</td></tr>`;
+    if (proposal.tcs_enabled)
+      pricingRows += `<tr><td>TCS (${proposal.tcs_rate || 5}%)</td><td style="text-align:right;">${R(tcsAmt)}</td></tr>`;
+  }
+  pricingRows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${R(grandTotal)}</strong></td></tr>`;
 
   // ── FIX 2: Flights — redesigned layout ───────────────────────────────────
   // FIX 1: IATA codes UPPERCASE, airline name Title Case, flight number UPPERCASE
@@ -266,6 +302,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const html = `<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Noto Sans', Arial, sans-serif; color: #1a1a1a; line-height: 1.6; background: #fff; }
