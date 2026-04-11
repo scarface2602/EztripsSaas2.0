@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { MessageCircle, Clock, Star, Check, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
-import { calculateProposalTotal, getCurrencySymbol } from '@/lib/utils/pricing';
+import { getCurrencySymbol } from '@/lib/utils/pricing';
 import { differenceInSeconds, format, parseISO } from 'date-fns';
 
 interface ShareLinkClientProps {
@@ -76,35 +76,15 @@ export function ShareLinkClient({
     return `${h}h ${m}m ${s}s`;
   }
 
-  const allItems = [
-    ...hotels.map(h => ({ sp: (Number(h.sp_per_night) || 0) * (Number(h.nights) || 0), cp: 0 })),
-    ...flights.map(f => ({ sp: Number(f.sp_total) || 0, cp: 0 })),
-    ...activities.filter(a => !a.is_optional && a.option_mode !== 'dual').map(a => ({
-      sp: Number(a.pvt_sp) || Number(a.sic_sp) || 0, cp: 0,
-    })),
-    ...activities.filter(a => a.option_mode === 'dual').map(a => ({
-      sp: dualChoices[a.id as string] === 'sic' ? Number(a.sic_sp) || 0 : Number(a.pvt_sp) || 0,
-      cp: 0,
-    })),
-    ...Array.from(selectedAddons).map(id => {
-      const act = activities.find(a => a.id === id);
-      return { sp: Number(act?.pvt_sp) || Number(act?.sic_sp) || 0, cp: 0 };
-    }),
-    ...lineItems.filter(li => li.is_included && !li.is_optional).map(li => ({
-      sp: Number(li.sp) || 0, cp: 0,
-    })),
-  ];
-
-  const totals = calculateProposalTotal({
-    lineItems: allItems,
-    discountAmount: Number(proposal.discount_amount) || 0,
-    discountOnLandOnly: true,
-    gstEnabled: proposal.gst_enabled as boolean,
-    gstRate: Number(proposal.gst_rate) || 5,
-    tcsEnabled: proposal.tcs_enabled as boolean,
-    tcsRate: Number(proposal.tcs_rate) || 5,
-    roundingUnit: Number(proposal.rounding_unit) || 0,
-  });
+  // proposal.total_sp is the authoritative grand total computed by the agent's
+  // pricing tab on every save. We read it directly so PDF and share link always
+  // show the same number.
+  const baseTotal = Number(proposal.total_sp) || 0;
+  const addOnTotal = Array.from(selectedAddons).reduce((sum, id) => {
+    const act = activities.find(a => a.id === id);
+    return sum + (Number(act?.pvt_sp) || Number(act?.sic_sp) || 0);
+  }, 0);
+  const grandTotal = baseTotal + addOnTotal;
 
   const cur = getCurrencySymbol(proposal.currency as string);
 
@@ -120,7 +100,7 @@ export function ShareLinkClient({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event_type: 'tc_accepted' }),
     }).catch(() => {});
-    router.push(`/p/${shareToken}/payment?total=${totals.grandTotal}&addons=${Array.from(selectedAddons).join(',')}&choices=${JSON.stringify(dualChoices)}`);
+    router.push(`/p/${shareToken}/payment?total=${grandTotal}&addons=${Array.from(selectedAddons).join(',')}&choices=${JSON.stringify(dualChoices)}`);
   }
 
   return (
@@ -341,14 +321,20 @@ export function ShareLinkClient({
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-lg">Pricing</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between"><span>Subtotal</span><span>{cur}{totals.subtotal.toLocaleString('en-IN')}</span></div>
-            {totals.discount > 0 && <div className="flex justify-between text-red-600"><span>Discount</span><span>-{cur}{totals.discount.toLocaleString('en-IN')}</span></div>}
-            {(proposal.gst_enabled as boolean) && <div className="flex justify-between"><span>GST ({String(proposal.gst_rate)}%)</span><span>{cur}{totals.gstAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>}
-            {(proposal.tcs_enabled as boolean) && <div className="flex justify-between"><span>TCS ({String(proposal.tcs_rate || 5)}%)</span><span>{cur}{totals.tcsAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span></div>}
+            <div className="flex justify-between">
+              <span>Package Total</span>
+              <span>{cur}{baseTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+            </div>
+            {addOnTotal > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span>Add-ons</span>
+                <span>+{cur}{addOnTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              </div>
+            )}
             <Separator />
             <div className="flex justify-between text-lg font-bold pt-1">
               <span>Grand Total</span>
-              <span>{cur}{totals.grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              <span>{cur}{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
             </div>
           </CardContent>
         </Card>

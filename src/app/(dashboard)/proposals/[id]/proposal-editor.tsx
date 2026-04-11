@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Save, Upload, Undo2, Eye, ArrowLeft, AlertTriangle } from 'lucide-react';
 
+import { applyRounding } from '@/lib/utils/pricing';
 import { CoverPageSection } from './sections/cover-page';
 import { TripSummarySection } from './sections/trip-summary';
 import { HotelsSection } from './sections/hotels';
@@ -115,14 +116,33 @@ export function ProposalEditor({
         land_cp: proposal.land_cp,
         land_sp: proposal.land_sp,
         pricing_display_mode: proposal.pricing_display_mode,
-        total_sp: proposal.total_sp,
+        total_sp: (() => {
+          // In per_person mode: compute grand total from per-person rates + taxes so
+          // total_sp always equals the final price the client sees (PDF and share link
+          // both read this field directly).
+          if ((proposal.pricing_display_mode || 'per_person') === 'per_person') {
+            const adultSP = Number(proposal.package_sp_per_person) || 0;
+            const cwbSP = Number(proposal.package_cwb_sp) || 0;
+            const baseSP = (proposal.pax_adults * adultSP) + (proposal.pax_children * cwbSP);
+            const discount = Number(proposal.discount_amount) || 0;
+            const afterDiscount = baseSP - discount;
+            const landSP = Number(proposal.land_sp) || 0;
+            const gstBase = Math.min(landSP, afterDiscount);
+            const gstAmt = proposal.gst_enabled ? gstBase * ((Number(proposal.gst_rate) || 5) / 100) : 0;
+            const tcsAmt = proposal.tcs_enabled ? (afterDiscount + gstAmt) * ((Number(proposal.tcs_rate) || 5) / 100) : 0;
+            const raw = afterDiscount + gstAmt + tcsAmt;
+            return applyRounding(raw, Number(proposal.rounding_unit) || Number(currentUser.rounding_unit) || 0);
+          }
+          // In total / both mode: agent enters the final price directly — save as-is.
+          return proposal.total_sp;
+        })(),
         trip_cities: proposal.trip_cities,
       } : {}),
     }).eq('id', proposal.id);
 
     setHasUnsavedChanges(false);
     setSaving(false);
-  }, [proposal, hotels, flights, itineraryDays, activities, lineItems, supabase]);
+  }, [proposal, hotels, flights, itineraryDays, activities, lineItems, supabase, currentUser]);
 
   // Keep ref in sync so the interval always calls the latest version
   saveDraftRef.current = saveDraft;

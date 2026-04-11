@@ -138,35 +138,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ? `background: url('${coverImageDataUri}') center/cover no-repeat;`
     : 'background: linear-gradient(135deg, #1e3a5f, #2d5f8a);';
 
-  // ── FIX 5: Pricing — only Grand Total when no GST/TCS ────────────────────
-  const pricingRows = (() => {
-    const totalPax     = (proposal.pax_adults as number || 0) + (proposal.pax_children as number || 0);
-    const totalGroupSP = Number(proposal.total_sp) || 0;
-    const discount     = Number(proposal.discount_amount) || 0;
-    const landSP       = Number(proposal.land_sp) || 0;
-    const gstAmount    = proposal.gst_enabled ? landSP * (Number(proposal.gst_rate) || 5) / 100 : 0;
-    const afterDiscount = totalGroupSP - discount;
-    const tcsAmount    = proposal.tcs_enabled ? (afterDiscount + gstAmount) * (Number(proposal.tcs_rate) || 5) / 100 : 0;
-    const grandTotal   = afterDiscount + gstAmount + tcsAmount;
-    const hasGstOrTcs  = !!(proposal.gst_enabled || proposal.tcs_enabled);
-
-    let rows = '';
-    if (!hasGstOrTcs) {
-      // Simple: grand total only
-      rows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${cur}${Math.round(grandTotal).toLocaleString('en-IN')}</strong></td></tr>`;
-    } else {
-      if (totalGroupSP > 0)
-        rows += `<tr><td>Total Package Price (${totalPax} pax)</td><td style="text-align:right;">${cur}${totalGroupSP.toLocaleString('en-IN')}</td></tr>`;
-      if (discount > 0)
-        rows += `<tr><td>Discount${proposal.discount_note ? ` (${cleanText(proposal.discount_note as string)})` : ''}</td><td style="text-align:right;color:#dc2626;">-${cur}${discount.toLocaleString('en-IN')}</td></tr>`;
-      if (proposal.gst_enabled)
-        rows += `<tr><td>GST (${proposal.gst_rate}%)</td><td style="text-align:right;">${cur}${Math.round(gstAmount).toLocaleString('en-IN')}</td></tr>`;
-      if (proposal.tcs_enabled)
-        rows += `<tr><td>TCS (${proposal.tcs_rate || 5}%)</td><td style="text-align:right;">${cur}${Math.round(tcsAmount).toLocaleString('en-IN')}</td></tr>`;
-      rows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${cur}${Math.round(grandTotal).toLocaleString('en-IN')}</strong></td></tr>`;
-    }
-    return rows;
-  })();
+  // Pricing — proposal.total_sp is the authoritative grand total (computed + written
+  // by saveDraft). Read it directly so PDF matches the share link exactly.
+  const pricingRows = `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>&#8377;${Math.round(Number(proposal.total_sp) || 0).toLocaleString('en-IN')}</strong></td></tr>`;
 
   // ── FIX 2: Flights — redesigned layout ───────────────────────────────────
   // FIX 1: IATA codes UPPERCASE, airline name Title Case, flight number UPPERCASE
@@ -323,7 +297,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   .card          { border: 1px solid #e5e5e5; border-radius: 8px; padding: 18px; margin-bottom: 14px; }
   .day-card      { margin-bottom: 22px; }
   .day-number    { display: inline-flex; align-items: center; justify-content: center; background: #1e3a5f; color: white; border-radius: 50%; width: 30px; height: 30px; font-weight: bold; margin-right: 8px; font-size: 0.85rem; }
-  .grand-total-row td { font-size: 1.1rem; background: #f5f7fa; border-top: 2px solid #1e3a5f; }
+  .grand-total-row td { font-size: 1.1rem; background: #f5f7fa; }
   .addons        { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 18px; margin-top: 16px; }
   .badge         { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
   .badge-nr      { background: #fee2e2; color: #991b1b; }
@@ -402,9 +376,9 @@ ${showInclExcl ? `
 </div>
 ` : ''}
 
-<!-- Pricing Summary -->
+<!-- Total Cost -->
 <div class="section">
-  <h2>Pricing Summary</h2>
+  <h2>Total Cost</h2>
   <table>${pricingRows}</table>
 </div>
 
