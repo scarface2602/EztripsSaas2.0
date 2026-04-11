@@ -63,6 +63,12 @@ export function ProposalEditor({
   const [summaryValidationError, setSummaryValidationError] = useState<string | null>(null);
 
   const hasDraft = proposal.draft_differs_from_published;
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (proposal.share_token) {
+      setShareUrl(`${window.location.origin}/p/${proposal.share_token}`);
+    }
+  }, [proposal.share_token]);
 
   const saveDraft = useCallback(async () => {
     setSaving(true);
@@ -191,10 +197,6 @@ export function ProposalEditor({
   async function handleGeneratePdf() {
     window.open(`/api/proposals/${proposal.id}/pdf`, '_blank');
   }
-
-  const shareUrl = proposal.share_token
-    ? `${window.location.origin}/p/${proposal.share_token}`
-    : null;
 
   return (
     <div className="space-y-4 w-full max-w-none">
