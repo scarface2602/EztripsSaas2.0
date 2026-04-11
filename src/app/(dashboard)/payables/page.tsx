@@ -36,7 +36,7 @@ export default function PayablesPage() {
     supabase.from('suppliers').select('id, name').order('name').then(({ data }) => {
       setSuppliers((data || []) as { id: string; name: string }[]);
     });
-  }, []);
+  }, [supabase]);
 
   const fetchPayables = useCallback(async () => {
     setLoading(true);

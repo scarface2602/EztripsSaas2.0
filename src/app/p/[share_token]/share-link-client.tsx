@@ -44,7 +44,7 @@ function fmtDT(dateStr: string | null | undefined): string {
 }
 
 export function ShareLinkClient({
-  proposal, hotels, flights, itineraryDays, activities, lineItems, versions, client, agent,
+  proposal, hotels, flights, itineraryDays, activities, versions, client, agent,
 }: ShareLinkClientProps) {
   const router = useRouter();
   const [tcAccepted, setTcAccepted] = useState(false);
