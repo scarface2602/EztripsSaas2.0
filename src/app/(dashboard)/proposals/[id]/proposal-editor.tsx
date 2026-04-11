@@ -194,8 +194,9 @@ export function ProposalEditor({
     router.refresh();
   }
 
-  async function handleGeneratePdf() {
-    window.open(`/api/proposals/${proposal.id}/pdf`, '_blank');
+  async function handleGeneratePdf(type?: string) {
+    const url = `/api/proposals/${proposal.id}/pdf${type ? `?type=${type}` : ''}`;
+    window.open(url, '_blank');
   }
 
   return (
@@ -225,7 +226,9 @@ export function ProposalEditor({
               <Eye className="h-4 w-4 mr-1" /> Copy Link
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handleGeneratePdf}>PDF</Button>
+          <Button variant="outline" size="sm" onClick={() => handleGeneratePdf()}>PDF</Button>
+          <Button variant="outline" size="sm" onClick={() => handleGeneratePdf('hotel_only')}>PDF (Hotels Only)</Button>
+          <Button variant="outline" size="sm" onClick={() => handleGeneratePdf('flight_only')}>PDF (Flights Only)</Button>
           <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
             <Save className="h-4 w-4 mr-1" /> Save Draft
           </Button>
