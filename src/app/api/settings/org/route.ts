@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
+  const authClient = await createClient();
+  const { data: { user: authUser } } = await authClient.auth.getUser();
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const supabase = createServiceClient();
   const { data: userData } = await supabase
     .from('users')
     .select('org_id, role')
@@ -26,10 +27,11 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
+  const authClient = await createClient();
+  const { data: { user: authUser } } = await authClient.auth.getUser();
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const supabase = createServiceClient();
   const { data: userData } = await supabase
     .from('users')
     .select('org_id, role')

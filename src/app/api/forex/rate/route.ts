@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchLiveRate } from '@/lib/utils/forex';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const supabase = createServiceClient();
   const { from_currency, proposal_id } = await request.json();
 
   try {

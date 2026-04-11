@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { cleanText } from '@/lib/utils/text-sanitise';
 import { getCurrencySymbol } from '@/lib/utils/pricing';
 
@@ -8,7 +8,7 @@ export const maxDuration = 10; // seconds — Vercel Hobby plan
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
+  const supabase = createServiceClient();
 
   const [
     { data: proposal },

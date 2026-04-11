@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
+  const authClient = await createClient();
 
-  const { data: { user: authUser } } = await supabase.auth.getUser();
+  const { data: { user: authUser } } = await authClient.auth.getUser();
   if (!authUser) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const supabase = createServiceClient();
   const body = await request.json();
 
   const updates: Record<string, unknown> = {};

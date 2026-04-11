@@ -1,13 +1,13 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import type { User } from '@/lib/types/database';
 
 export async function requireAuth(): Promise<{ user: User; authUser: { id: string; email: string } }> {
-  const supabase = await createClient();
+  const authClient = await createClient();
 
   let authUser;
   try {
-    const { data } = await supabase.auth.getUser();
+    const { data } = await authClient.auth.getUser();
     authUser = data.user;
   } catch (e) {
     console.error('requireAuth: auth check failed', e);
@@ -17,6 +17,7 @@ export async function requireAuth(): Promise<{ user: User; authUser: { id: strin
     redirect('/login');
   }
 
+  const supabase = createServiceClient();
   const { data: user } = await supabase
     .from('users')
     .select('*')

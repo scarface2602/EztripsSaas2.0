@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
-
-  const { data: { user: authUser } } = await supabase.auth.getUser();
+  const authClient = await createClient();
+  const { data: { user: authUser } } = await authClient.auth.getUser();
   if (!authUser) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const supabase = createServiceClient();
 
   // Get current proposal
   const { data: proposal, error: proposalErr } = await supabase
