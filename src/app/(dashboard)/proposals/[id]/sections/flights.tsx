@@ -205,8 +205,8 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Baggage Allowance</Label>
-                  <Input value={flight.baggage_allowance || ''} onChange={(e) => updateFlight(index, { baggage_allowance: e.target.value })} placeholder="e.g. 30kg checked + 7kg cabin" />
+                  <Label>Baggage Allowance (kg)</Label>
+                  <Input value={flight.baggage_allowance || ''} onChange={(e) => updateFlight(index, { baggage_allowance: e.target.value })} placeholder="e.g. 20 or 30kg checked + 7kg cabin" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs">CP Total (internal)</Label>

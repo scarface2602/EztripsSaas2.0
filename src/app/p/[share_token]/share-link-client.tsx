@@ -253,7 +253,9 @@ export function ShareLinkClient({
                     </div>
                   </div>
                   {!!f.baggage_allowance && (
-                    <p className="text-sm mt-1 text-muted-foreground">Baggage: {String(f.baggage_allowance)}</p>
+                    <p className="text-sm mt-1 text-muted-foreground">
+                      Baggage: {/^\d+(\.\d+)?$/.test(String(f.baggage_allowance).trim()) ? `${String(f.baggage_allowance).trim()} kg` : String(f.baggage_allowance)}
+                    </p>
                   )}
                 </div>
               ))}

@@ -50,6 +50,7 @@ export async function PATCH(request: NextRequest) {
     address: body.address || null,
     email: body.email || null,
     website: body.website || null,
+    terms_and_conditions: body.terms_and_conditions || null,
   };
 
   if (userData.org_id) {

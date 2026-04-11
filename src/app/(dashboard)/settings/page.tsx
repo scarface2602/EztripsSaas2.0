@@ -22,6 +22,7 @@ interface OrgData {
   address: string | null;
   email: string | null;
   website: string | null;
+  terms_and_conditions: string | null;
 }
 
 interface SettingsData {
@@ -45,7 +46,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [userRole, setUserRole] = useState('agent');
-  const [org, setOrg] = useState<OrgData>({ name: '', logo_url: null, phone: null, address: null, email: null, website: null });
+  const [org, setOrg] = useState<OrgData>({ name: '', logo_url: null, phone: null, address: null, email: null, website: null, terms_and_conditions: null });
   const [savingOrg, setSavingOrg] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
@@ -229,6 +230,15 @@ export default function SettingsPage() {
                 <div className="space-y-2 col-span-2">
                   <Label>Address</Label>
                   <Input value={org.address || ''} onChange={(e) => setOrg({ ...org, address: e.target.value })} />
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label>Terms &amp; Conditions (shown in PDF)</Label>
+                  <Textarea
+                    value={org.terms_and_conditions || ''}
+                    onChange={(e) => setOrg({ ...org, terms_and_conditions: e.target.value || null })}
+                    placeholder="Enter your company's terms and conditions to be printed in proposal PDFs..."
+                    rows={8}
+                  />
                 </div>
               </>
             ) : (

@@ -50,10 +50,12 @@ function fmtTime(dt: string): string {
   } catch { return ''; }
 }
 
-/** Convert currency symbol to a safe HTML representation. ₹ → &#8377; */
-function htmlSym(symbol: string): string {
-  if (symbol === '₹') return '&#8377;';
-  return symbol;
+/** Format baggage allowance — append " kg" if value is a bare number. */
+function formatBaggage(val: unknown): string {
+  if (!val) return '';
+  const s = String(val).trim();
+  if (/^\d+(\.\d+)?$/.test(s)) return `${s} kg`;
+  return s;
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -91,9 +93,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   if (!proposal) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // FIX 3: Use HTML entity for ₹ to guarantee it renders in Puppeteer
-  const rawSym = getCurrencySymbol(proposal.currency as string);
-  const cur = htmlSym(rawSym);
+  // FIX 1: Use literal currency symbol — UTF-8 + Noto Sans font handles ₹ correctly
+  const cur = getCurrencySymbol(proposal.currency as string);
 
   const agentUser = user as Record<string, unknown> | null;
   let org: Record<string, unknown> | null = null;
@@ -103,6 +104,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     org = orgData;
   }
 
+  const orgTerms    = (org?.terms_and_conditions || agentUser?.tc_content || '') as string;
   const orgName     = (org?.name || agentUser?.agency_name || '') as string;
   const orgLogoUrl  = (org?.logo_url || agentUser?.logo_url || '') as string;
   const orgPhone    = (org?.phone || '') as string;
@@ -136,7 +138,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ? `background: url('${coverImageDataUri}') center/cover no-repeat;`
     : 'background: linear-gradient(135deg, #1e3a5f, #2d5f8a);';
 
-  // ── FIX 4: Pricing — Grand Total only ────────────────────────────────────
+  // ── FIX 5: Pricing — only Grand Total when no GST/TCS ────────────────────
   const pricingRows = (() => {
     const totalPax     = (proposal.pax_adults as number || 0) + (proposal.pax_children as number || 0);
     const totalGroupSP = Number(proposal.total_sp) || 0;
@@ -146,17 +148,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const afterDiscount = totalGroupSP - discount;
     const tcsAmount    = proposal.tcs_enabled ? (afterDiscount + gstAmount) * (Number(proposal.tcs_rate) || 5) / 100 : 0;
     const grandTotal   = afterDiscount + gstAmount + tcsAmount;
+    const hasGstOrTcs  = !!(proposal.gst_enabled || proposal.tcs_enabled);
 
     let rows = '';
-    if (totalGroupSP > 0)
-      rows += `<tr><td>Total Package Price (${totalPax} pax)</td><td style="text-align:right;">${cur}${totalGroupSP.toLocaleString('en-IN')}</td></tr>`;
-    if (discount > 0)
-      rows += `<tr><td>Discount${proposal.discount_note ? ` (${cleanText(proposal.discount_note as string)})` : ''}</td><td style="text-align:right;color:#dc2626;">-${cur}${discount.toLocaleString('en-IN')}</td></tr>`;
-    if (proposal.gst_enabled)
-      rows += `<tr><td>GST (${proposal.gst_rate}%)</td><td style="text-align:right;">${cur}${Math.round(gstAmount).toLocaleString('en-IN')}</td></tr>`;
-    if (proposal.tcs_enabled)
-      rows += `<tr><td>TCS (${proposal.tcs_rate || 5}%)</td><td style="text-align:right;">${cur}${Math.round(tcsAmount).toLocaleString('en-IN')}</td></tr>`;
-    rows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${cur}${Math.round(grandTotal).toLocaleString('en-IN')}</strong></td></tr>`;
+    if (!hasGstOrTcs) {
+      // Simple: grand total only
+      rows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${cur}${Math.round(grandTotal).toLocaleString('en-IN')}</strong></td></tr>`;
+    } else {
+      if (totalGroupSP > 0)
+        rows += `<tr><td>Total Package Price (${totalPax} pax)</td><td style="text-align:right;">${cur}${totalGroupSP.toLocaleString('en-IN')}</td></tr>`;
+      if (discount > 0)
+        rows += `<tr><td>Discount${proposal.discount_note ? ` (${cleanText(proposal.discount_note as string)})` : ''}</td><td style="text-align:right;color:#dc2626;">-${cur}${discount.toLocaleString('en-IN')}</td></tr>`;
+      if (proposal.gst_enabled)
+        rows += `<tr><td>GST (${proposal.gst_rate}%)</td><td style="text-align:right;">${cur}${Math.round(gstAmount).toLocaleString('en-IN')}</td></tr>`;
+      if (proposal.tcs_enabled)
+        rows += `<tr><td>TCS (${proposal.tcs_rate || 5}%)</td><td style="text-align:right;">${cur}${Math.round(tcsAmount).toLocaleString('en-IN')}</td></tr>`;
+      rows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${cur}${Math.round(grandTotal).toLocaleString('en-IN')}</strong></td></tr>`;
+    }
     return rows;
   })();
 
@@ -224,7 +232,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               <span style="font-size:0.9rem;font-weight:600;">${fmtTime(f.arrival_at as string)}</span>
             </td>
             <td style="vertical-align:middle;">${durationText || '—'}</td>
-            ${f.baggage_allowance ? `<td style="vertical-align:middle;">${cleanText(String(f.baggage_allowance))}</td>` : ''}
+            ${f.baggage_allowance ? `<td style="vertical-align:middle;">${formatBaggage(f.baggage_allowance)}</td>` : ''}
           </tr>
         </tbody>
       </table>
@@ -286,7 +294,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 <meta charset="utf-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.6; background: #fff; }
+  body { font-family: 'Noto Sans', Arial, sans-serif; color: #1a1a1a; line-height: 1.6; background: #fff; }
 
   @page { size: A4; margin: 0 0 44px 0; }
 
@@ -412,7 +420,7 @@ ${showCancellation ? `
     ${(flights || []).map((f: Record<string, unknown>) => `
       <tr>
         <td>${String(f.flight_number || '').toUpperCase()}${f.airline ? ` (${toTitleCase(String(f.airline))})` : ''}</td>
-        <td>${f.baggage_allowance ? cleanText(String(f.baggage_allowance)) : 'N/A'}</td>
+        <td>${f.baggage_allowance ? formatBaggage(f.baggage_allowance) : 'N/A'}</td>
         <td>${f.is_non_refundable ? 'Non-Refundable' : (f.refundable_status === 'partially_refundable' ? 'Partially Refundable' : 'Refundable')}</td>
         <td>${f.cancellation_policy_text ? cleanText(String(f.cancellation_policy_text)) : (f.is_non_refundable ? 'Non-refundable from date of ticketing' : 'Standard airline policy applies')}</td>
       </tr>
@@ -429,7 +437,10 @@ ${showCancellation ? `
       const slabs = (h.hotel_cancellation_slabs as Array<{ days_before: number; charge_pct: number }>) || [];
       return `
       <tr>
-        <td>${toTitleCase(String(h.name || ''))}</td>
+        <td>
+          ${toTitleCase(String(h.name || ''))}
+          ${h.city ? `<br/><span style="font-size:0.78rem;color:#666;">${toTitleCase(String(h.city))}</span>` : ''}
+        </td>
         <td>${h.is_non_refundable ? 'Non-Refundable' : 'Refundable'}</td>
         <td>${h.is_non_refundable ? '100% from booking' : (slabs.length ? slabs.map((s) => `${s.days_before}+ days: ${s.charge_pct}%`).join(' | ') : 'Policy not specified')}</td>
       </tr>`;
@@ -459,7 +470,18 @@ ${showCancellation ? `
   <p>${(proposal.payment_terms as Record<string, unknown>)?.deposit_pct || 25}% deposit upon booking confirmation</p>
   <p>Balance due ${(proposal.payment_terms as Record<string, unknown>)?.balance_days_before || 30} days before departure</p>
   ${(proposal.payment_terms as Record<string, unknown>)?.notes ? `<p style="margin-top:6px;">${cleanText(String((proposal.payment_terms as Record<string, unknown>).notes))}</p>` : ''}
+  ${orgTerms ? `<div style="margin-top:14px;padding:12px 14px;background:#f8fafc;border-left:3px solid #1e3a5f;font-size:0.82rem;white-space:pre-wrap;line-height:1.55;">${orgTerms}</div>` : ''}
 </div>
+
+${proposal.share_token ? `
+<!-- Confirm Button -->
+<div style="text-align:center;padding:24px 48px 32px;">
+  <a href="https://eztrips-saas.vercel.app/p/${proposal.share_token}"
+     style="display:inline-block;background:#1e3a5f;color:#ffffff;padding:14px 36px;border-radius:8px;text-decoration:none;font-size:1rem;font-weight:700;letter-spacing:0.03em;font-family:'Noto Sans',Arial,sans-serif;">
+    Click Here To Confirm Your Booking
+  </a>
+</div>
+` : ''}
 
 ${showAncillaries && optionalAddons.length > 0 ? `
 <!-- Optional Add-ons -->
