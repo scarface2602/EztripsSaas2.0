@@ -1,6 +1,5 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.RESEND_FROM_EMAIL || 'EzTrips <proposals@eztrips.in>';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://eztrips-saas.vercel.app';
 
@@ -22,6 +21,7 @@ export async function sendShareLinkEmail({
   shareUrl: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
+  const resend = new Resend(process.env.RESEND_API_KEY);
   const fullUrl = shareUrl.startsWith('http') ? shareUrl : `${APP_URL}${shareUrl}`;
   await resend.emails.send({
     from: FROM,
@@ -81,6 +81,7 @@ export async function sendConfirmationToAgent({
   proposalId: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
+  const resend = new Resend(process.env.RESEND_API_KEY);
   const dashboardUrl = `${APP_URL}/proposals/${proposalId}`;
   const cur = currency === 'INR' ? '₹' : currency;
   await resend.emails.send({
