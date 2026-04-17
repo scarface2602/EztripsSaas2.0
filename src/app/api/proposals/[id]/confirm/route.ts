@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { sendConfirmationToAgent } from '@/lib/email/resend';
 
 interface ConfirmBody {
   choices?: Record<string, 'pvt' | 'sic'>; // activity_id -> choice
@@ -248,6 +249,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       grand_total: grandTotal,
     },
   });
+
+  // Send confirmation email to agent (fire-and-forget)
+  try {
+    const [{ data: agentUser }, { data: clientData }] = await Promise.all([
+      proposal.created_by
+        ? supabase.from('users').select('full_name, email').eq('id', proposal.created_by).single()
+        : Promise.resolve({ data: null }),
+      proposal.client_id
+        ? supabase.from('clients').select('full_name').eq('id', proposal.client_id).single()
+        : Promise.resolve({ data: null }),
+    ]);
+    if (agentUser?.email) {
+      await sendConfirmationToAgent({
+        to: agentUser.email,
+        agentName: agentUser.full_name || 'Agent',
+        clientName: clientData?.full_name || 'Client',
+        proposalTitle: proposal.title || 'Travel Proposal',
+        destination: proposal.destination || '',
+        grandTotal,
+        currency: proposal.currency || 'INR',
+        proposalId,
+      });
+    }
+  } catch {
+    // Email failure should not block the confirm response
+  }
 
   return NextResponse.json({
     success: true,

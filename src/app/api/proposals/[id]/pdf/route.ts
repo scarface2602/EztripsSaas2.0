@@ -534,7 +534,9 @@ ${showAncillaries && optionalAddons.length > 0 ? `
     }
 
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    page.setDefaultNavigationTimeout(55000);
+    // Static HTML with inline base64 images — domcontentloaded is reliable and faster
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
 
     // FIX 4: Single footer — Puppeteer footerTemplate only (no footer div in body HTML)
     const pdf = await page.pdf({

@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { Proposal, Hotel, Flight, ItineraryDay, ItineraryActivity, LineItem, Supplier, User } from '@/lib/types/database';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Save, Upload, Undo2, Eye, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { Save, Upload, Undo2, Eye, ArrowLeft, AlertTriangle, History } from 'lucide-react';
 
 import { applyRounding } from '@/lib/utils/pricing';
 import { CoverPageSection } from './sections/cover-page';
@@ -43,6 +43,7 @@ export function ProposalEditor({
   lineItems: initialLineItems,
   suppliers,
   comments: initialComments,
+  versions,
   currentUser,
 }: ProposalEditorProps) {
   const router = useRouter();
@@ -65,6 +66,20 @@ export function ProposalEditor({
 
   const hasDraft = proposal.draft_differs_from_published;
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const versionDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close version history dropdown when clicking outside
+  useEffect(() => {
+    if (!showVersionHistory) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (versionDropdownRef.current && !versionDropdownRef.current.contains(e.target as Node)) {
+        setShowVersionHistory(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showVersionHistory]);
   useEffect(() => {
     if (proposal.share_token) {
       setShareUrl(`${window.location.origin}/p/${proposal.share_token}`);
@@ -235,7 +250,49 @@ export function ProposalEditor({
           }>
             {proposal.status}
           </Badge>
-          <Badge variant="outline">V{proposal.version}</Badge>
+          <div className="relative" ref={versionDropdownRef}>
+            <button
+              onClick={() => setShowVersionHistory(v => !v)}
+              className="flex items-center gap-1 px-2 py-0.5 border rounded text-xs font-medium hover:bg-muted transition-colors"
+              title="Version history"
+            >
+              <History className="h-3 w-3" />
+              V{proposal.version}
+              {versions.length > 0 && <span className="text-muted-foreground">({versions.length} prev)</span>}
+            </button>
+            {showVersionHistory && (
+              <div className="absolute top-full left-0 mt-1 z-50 bg-background border rounded-lg shadow-lg w-64 py-1">
+                <div className="px-3 py-1.5 border-b">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Version History</p>
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                  {/* Current version */}
+                  <div className="px-3 py-2 flex items-center justify-between bg-blue-50">
+                    <div>
+                      <span className="text-sm font-medium">V{proposal.version}</span>
+                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Current</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {proposal.updated_at ? new Date(proposal.updated_at as string).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                    </span>
+                  </div>
+                  {/* Previous versions */}
+                  {versions.length === 0 ? (
+                    <p className="px-3 py-3 text-xs text-muted-foreground">No previous versions</p>
+                  ) : (
+                    versions.map((v) => (
+                      <div key={v.id as string} className="px-3 py-2 flex items-center justify-between hover:bg-muted/50 border-t">
+                        <span className="text-sm font-medium">V{v.version as number}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {v.published_at ? new Date(v.published_at as string).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
         </div>
         <div className="flex items-center gap-2">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import crypto from 'crypto';
+import { sendShareLinkEmail } from '@/lib/email/resend';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -91,6 +92,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   if (updateErr) {
     return NextResponse.json({ error: 'Failed to publish', details: updateErr.message }, { status: 500 });
+  }
+
+  // Send share link email to client (fire-and-forget — don't block the response)
+  try {
+    const [{ data: clientData }, { data: agentData }] = await Promise.all([
+      proposal.client_id
+        ? supabase.from('clients').select('full_name, email').eq('id', proposal.client_id).single()
+        : Promise.resolve({ data: null }),
+      supabase.from('users').select('full_name, agency_name').eq('id', authUser.id).single(),
+    ]);
+    if (clientData?.email) {
+      await sendShareLinkEmail({
+        to: clientData.email,
+        clientName: clientData.full_name || 'Valued Client',
+        agentName: agentData?.full_name || '',
+        agencyName: agentData?.agency_name || '',
+        proposalTitle: proposal.title || 'Travel Proposal',
+        destination: proposal.destination || '',
+        shareUrl: `/p/${shareToken}`,
+      });
+    }
+  } catch {
+    // Email failure should not block the publish response
   }
 
   return NextResponse.json({
