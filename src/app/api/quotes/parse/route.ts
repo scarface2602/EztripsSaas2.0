@@ -104,8 +104,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
   }
 
-  console.log('PARSED ITINERARY DAYS:', JSON.stringify(parsed.itinerary_days, null, 2));
-
   // Run sanitisation check on description fields
   const descriptionFields: Record<string, string> = {};
   if (parsed.hotels) {
