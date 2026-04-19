@@ -98,6 +98,14 @@ export async function POST(request: NextRequest) {
     return 'tour';
   }
 
+  // Helper: given a date string, find which hotel's stay covers it and return that hotel's city
+  function inferCityFromHotels(dateStr: string): string {
+    for (const h of hotelsToInsert) {
+      if (h.check_in <= dateStr && h.check_out > dateStr) return h.city;
+    }
+    return '';
+  }
+
   if (parsedDays?.length) {
     // Use parsed itinerary days with verbatim DMC descriptions
     const startDate = body.travel_start || parsed?.travel_start;
@@ -106,18 +114,28 @@ export async function POST(request: NextRequest) {
       const date = d.date || (startDate
         ? new Date(new Date(startDate).getTime() + (d.day_number - 1) * 86400000).toISOString().split('T')[0]
         : new Date().toISOString().split('T')[0]);
+      // City: always prefer hotel-based inference over AI-extracted city (avoids day-trip misclassification)
+      const cityFromHotel = inferCityFromHotels(date);
+      const city = cityFromHotel || null;
       const prevParsedDay = i > 0 ? parsedDays[i - 1] : null;
+      const prevCity = prevParsedDay
+        ? (inferCityFromHotels(
+            parsedDays[i - 1].date || (startDate
+              ? new Date(new Date(startDate).getTime() + (parsedDays[i - 1].day_number - 1) * 86400000).toISOString().split('T')[0]
+              : '')
+          ) || prevParsedDay.city)
+        : null;
       const validDayTypes = ['arrival', 'departure', 'tour', 'transfer', 'flight'];
       const dayType = (d.day_type && validDayTypes.includes(d.day_type))
         ? d.day_type
-        : inferDayType(d.day_number, total, prevParsedDay?.city, d.city);
+        : inferDayType(d.day_number, total, prevCity, city);
       return {
         proposal_id: proposal.id,
         day_number: d.day_number,
         date,
-        city: d.city || null,
-        heading: d.heading || null,
-        description: d.description || null,
+        city,
+        heading: d.heading || '',
+        description: d.description || '',
         raw_description: d.description || null,
         day_type: dayType,
       };
@@ -184,38 +202,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Auto-generate trip_cities if not already provided
-  if (!body.trip_cities) {
-    let autoTripCities: Array<{ city: string; nights: number; order: number }> | null = null;
-
-    if (parsedDays?.length) {
-      // Build trip_cities from itinerary_days — group consecutive days by city
-      const groups: Array<{ city: string; nights: number; order: number }> = [];
-      for (const d of parsedDays) {
-        const city = d.city || '';
-        if (!city) continue;
-        const last = groups[groups.length - 1];
-        if (last && last.city.toLowerCase() === city.toLowerCase()) {
-          last.nights++;
-        } else {
-          groups.push({ city, nights: 1, order: groups.length });
-        }
-      }
-      if (groups.length) autoTripCities = groups;
-    }
-
-    if (!autoTripCities && hotelsToInsert.length) {
-      // Fallback: build from hotels
-      autoTripCities = hotelsToInsert.map((h, index) => ({
-        city: h.city,
-        nights: Math.round(
-          (new Date(h.check_out).getTime() - new Date(h.check_in).getTime()) / (1000 * 60 * 60 * 24)
-        ),
-        order: index,
-      }));
-    }
-
-    if (autoTripCities?.length) {
+  // Auto-generate trip_cities from hotels (always — hotels are the source of truth for stays)
+  if (!body.trip_cities && hotelsToInsert.length) {
+    const autoTripCities = hotelsToInsert.map((h, index) => ({
+      city: h.city,
+      nights: Math.round(
+        (new Date(h.check_out).getTime() - new Date(h.check_in).getTime()) / (1000 * 60 * 60 * 24)
+      ),
+      order: index,
+    }));
+    if (autoTripCities.length) {
       await supabase.from('proposals').update({ trip_cities: autoTripCities }).eq('id', proposal.id);
     }
   }
