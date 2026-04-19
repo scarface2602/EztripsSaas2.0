@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { FileText, Upload, Wand2, Loader2, AlertTriangle, Info, ArrowRight, Package, List, Plus, Trash2 } from 'lucide-react';
 import type { TripCity } from '@/lib/types/database';
 import { CURRENCY_OPTIONS } from '@/lib/utils/pricing';
+import { SupplierSelect, ClientSelect } from '@/components/ui/inline-add-select';
 
 type Step = 'quote-type' | 'choose' | 'import-setup' | 'parsing' | 'review' | 'manual' | 'trip-structure';
 
@@ -58,6 +59,14 @@ export default function NewProposalPage() {
     }
     fetch();
   }, [supabase]);
+
+  function handleSupplierAdded(s: { id: string; name: string }) {
+    setSuppliers(prev => [...prev, { id: s.id, name: s.name, created_by: null, type: null, country: null, contact_name: null, contact_email: null, contact_phone: null, payment_terms_days: null, notes: null, created_at: new Date().toISOString() } as Supplier]);
+  }
+
+  function handleClientAdded(c: { id: string; full_name: string }) {
+    setClients(prev => [...prev, { id: c.id, full_name: c.full_name, created_by: null, phone: '', email: null, nationality: null, notes: null, created_at: new Date().toISOString() } as Client]);
+  }
 
   async function handleParse() {
     setLoading(true);
@@ -270,17 +279,21 @@ export default function NewProposalPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Supplier</Label>
-                <select className="w-full h-10 rounded-md border px-3 text-sm" value={selectedSupplier} onChange={(e) => setSelectedSupplier(e.target.value)}>
-                  <option value="">Select supplier</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <SupplierSelect
+                  suppliers={suppliers}
+                  value={selectedSupplier}
+                  onChange={setSelectedSupplier}
+                  onSupplierAdded={handleSupplierAdded}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Client</Label>
-                <select className="w-full h-10 rounded-md border px-3 text-sm" value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)}>
-                  <option value="">Select client</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                </select>
+                <ClientSelect
+                  clients={clients}
+                  value={selectedClient}
+                  onChange={setSelectedClient}
+                  onClientAdded={handleClientAdded}
+                />
               </div>
             </div>
 
@@ -560,10 +573,12 @@ export default function NewProposalPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Client</Label>
-                <select className="w-full h-10 rounded-md border px-3 text-sm" value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)}>
-                  <option value="">Select client</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                </select>
+                <ClientSelect
+                  clients={clients}
+                  value={selectedClient}
+                  onChange={setSelectedClient}
+                  onClientAdded={handleClientAdded}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Pricing Mode</Label>

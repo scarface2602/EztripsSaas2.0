@@ -1,0 +1,261 @@
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { Plus, Loader2, X, ChevronDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+// ─── Supplier inline form ────────────────────────────────────────────────────
+
+interface AddSupplierFormProps {
+  onSaved: (supplier: { id: string; name: string }) => void;
+  onCancel: () => void;
+}
+
+function AddSupplierForm({ onSaved, onCancel }: AddSupplierFormProps) {
+  const [name, setName] = useState('');
+  const [contactName, setContactName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { nameRef.current?.focus(); }, []);
+
+  async function save() {
+    if (!name.trim()) { setError('Name is required'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/suppliers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          contact_name: contactName.trim() || null,
+          contact_email: email.trim() || null,
+          contact_phone: phone.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Failed to create supplier'); return; }
+      onSaved(data);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 p-4 border border-blue-200 rounded-md bg-blue-50 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-blue-800">New Supplier</p>
+        <button onClick={onCancel} className="text-blue-400 hover:text-blue-600">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="col-span-2 space-y-1">
+          <Label className="text-xs">Name <span className="text-red-500">*</span></Label>
+          <Input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="Supplier name" className="h-8 text-sm" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Contact Person</Label>
+          <Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Contact name" className="h-8 text-sm" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Phone</Label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." className="h-8 text-sm" />
+        </div>
+        <div className="col-span-2 space-y-1">
+          <Label className="text-xs">Email</Label>
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="supplier@example.com" className="h-8 text-sm" />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={save} disabled={saving} className="h-7 text-xs">
+          {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+          Save Supplier
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} className="h-7 text-xs">Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Client inline form ──────────────────────────────────────────────────────
+
+interface AddClientFormProps {
+  onSaved: (client: { id: string; full_name: string }) => void;
+  onCancel: () => void;
+}
+
+function AddClientForm({ onSaved, onCancel }: AddClientFormProps) {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { nameRef.current?.focus(); }, []);
+
+  async function save() {
+    if (!fullName.trim()) { setError('Name is required'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: fullName.trim(),
+          email: email.trim() || null,
+          phone: phone.trim() || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Failed to create client'); return; }
+      onSaved(data);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 p-4 border border-blue-200 rounded-md bg-blue-50 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-blue-800">New Client</p>
+        <button onClick={onCancel} className="text-blue-400 hover:text-blue-600">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="col-span-2 space-y-1">
+          <Label className="text-xs">Name <span className="text-red-500">*</span></Label>
+          <Input ref={nameRef} value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Client full name" className="h-8 text-sm" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Phone</Label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." className="h-8 text-sm" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Email</Label>
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@example.com" className="h-8 text-sm" />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={save} disabled={saving} className="h-7 text-xs">
+          {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+          Save Client
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} className="h-7 text-xs">Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Supplier select with inline add ────────────────────────────────────────
+
+interface SupplierSelectProps {
+  suppliers: Array<{ id: string; name: string }>;
+  value: string;
+  onChange: (id: string) => void;
+  onSupplierAdded: (supplier: { id: string; name: string }) => void;
+  className?: string;
+}
+
+export function SupplierSelect({ suppliers, value, onChange, onSupplierAdded, className }: SupplierSelectProps) {
+  const [showForm, setShowForm] = useState(false);
+
+  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    if (e.target.value === '__add_new__') {
+      setShowForm(true);
+    } else {
+      onChange(e.target.value);
+    }
+  }
+
+  function handleSaved(supplier: { id: string; name: string }) {
+    onSupplierAdded(supplier);
+    onChange(supplier.id);
+    setShowForm(false);
+  }
+
+  return (
+    <div>
+      <div className="relative">
+        <select
+          className={`w-full h-10 rounded-md border px-3 text-sm appearance-none pr-8 ${className || ''}`}
+          value={showForm ? '__add_new__' : value}
+          onChange={handleChange}
+        >
+          <option value="">Select supplier</option>
+          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          <option value="__add_new__" className="text-blue-600 font-medium">＋ Add New Supplier</option>
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-2 top-3 h-4 w-4 text-muted-foreground" />
+      </div>
+      {showForm && (
+        <AddSupplierForm
+          onSaved={handleSaved}
+          onCancel={() => { setShowForm(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Client select with inline add ──────────────────────────────────────────
+
+interface ClientSelectProps {
+  clients: Array<{ id: string; full_name: string }>;
+  value: string;
+  onChange: (id: string) => void;
+  onClientAdded: (client: { id: string; full_name: string }) => void;
+  className?: string;
+}
+
+export function ClientSelect({ clients, value, onChange, onClientAdded, className }: ClientSelectProps) {
+  const [showForm, setShowForm] = useState(false);
+
+  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    if (e.target.value === '__add_new__') {
+      setShowForm(true);
+    } else {
+      onChange(e.target.value);
+    }
+  }
+
+  function handleSaved(client: { id: string; full_name: string }) {
+    onClientAdded(client);
+    onChange(client.id);
+    setShowForm(false);
+  }
+
+  return (
+    <div>
+      <div className="relative">
+        <select
+          className={`w-full h-10 rounded-md border px-3 text-sm appearance-none pr-8 ${className || ''}`}
+          value={showForm ? '__add_new__' : value}
+          onChange={handleChange}
+        >
+          <option value="">Select client</option>
+          {clients.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+          <option value="__add_new__" className="text-blue-600 font-medium">＋ Add New Client</option>
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-2 top-3 h-4 w-4 text-muted-foreground" />
+      </div>
+      {showForm && (
+        <AddClientForm
+          onSaved={handleSaved}
+          onCancel={() => { setShowForm(false); }}
+        />
+      )}
+    </div>
+  );
+}
