@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { sendConfirmationToAgent } from '@/lib/email/resend';
+import { sendConfirmationToAgent } from '@/lib/email/mailer';
 
 interface ConfirmBody {
   choices?: Record<string, 'pvt' | 'sic'>; // activity_id -> choice

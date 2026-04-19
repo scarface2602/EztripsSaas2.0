@@ -1,7 +1,18 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const FROM = process.env.RESEND_FROM_EMAIL || 'EzTrips <proposals@eztrips.in>';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://eztrips-saas.vercel.app';
+
+function createTransport() {
+  return nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+}
 
 export async function sendShareLinkEmail({
   to,
@@ -20,13 +31,13 @@ export async function sendShareLinkEmail({
   destination: string;
   shareUrl: string;
 }) {
-  if (!process.env.RESEND_API_KEY) return;
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  if (!process.env.GMAIL_USER) return;
+  const transporter = createTransport();
   const fullUrl = shareUrl.startsWith('http') ? shareUrl : `${APP_URL}${shareUrl}`;
-  await resend.emails.send({
-    from: FROM,
+  await transporter.sendMail({
+    from: `EzTrips <${process.env.GMAIL_USER}>`,
     to,
-    subject: `Your Travel Proposal: ${proposalTitle}`,
+    subject: `Your travel proposal is ready — ${proposalTitle}`,
     html: `
 <!DOCTYPE html>
 <html>
@@ -80,14 +91,14 @@ export async function sendConfirmationToAgent({
   currency: string;
   proposalId: string;
 }) {
-  if (!process.env.RESEND_API_KEY) return;
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  if (!process.env.GMAIL_USER) return;
+  const transporter = createTransport();
   const dashboardUrl = `${APP_URL}/proposals/${proposalId}`;
   const cur = currency === 'INR' ? '₹' : currency;
-  await resend.emails.send({
-    from: FROM,
+  await transporter.sendMail({
+    from: `EzTrips <${process.env.GMAIL_USER}>`,
     to,
-    subject: `Booking Confirmed — ${clientName}: ${proposalTitle}`,
+    subject: `Proposal confirmed — ${clientName} | ${proposalTitle}`,
     html: `
 <!DOCTYPE html>
 <html>

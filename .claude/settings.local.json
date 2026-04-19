@@ -33,7 +33,9 @@
       "Bash(grep -n \"CREATE TABLE\" /Users/sudeepsharma/Desktop/EztripsSaas/supabase/migrations/*.sql)",
       "Bash(grep -l \"createClient\\\\|supabase\" /Users/sudeepsharma/Desktop/EztripsSaas/src/app/api/**/*.ts)",
       "Bash(grep:*)",
-      "Bash(find /Users/sudeepsharma/Desktop/EztripsSaas/supabase/migrations -name \"*.sql\" -exec wc -l {} \\\\;)"
+      "Bash(find /Users/sudeepsharma/Desktop/EztripsSaas/supabase/migrations -name \"*.sql\" -exec wc -l {} \\\\;)",
+      "Bash(npm uninstall:*)",
+      "Skill(update-config)"
     ]
   }
 }
