@@ -42,6 +42,7 @@ Return this exact shape:
     "city": string | null,
     "heading": string,
     "description": string,
+    "day_type": "arrival"|"departure"|"tour",
     "activities": [{"type": "transfer"|"sightseeing"|"activity"|"other", "description": string}]
   }],
   "cancellation_policy": [{
@@ -61,7 +62,15 @@ Return this exact shape:
 }
 
 IMPORTANT extraction rules:
-- itinerary_days: Extract the VERBATIM day-wise itinerary text from the DMC quote. Each day MUST have: day_number (integer), city (city name for that day, e.g. "Dubai"), date (if a specific date is mentioned), heading (short title e.g. "Arrival in Bali"), and the full description paragraph exactly as written by the DMC. Extract all activities mentioned for that day.
+- itinerary_days: Extract the COMPLETE day-wise itinerary from the DMC quote. You MUST extract every single day if itinerary text is present. Each day MUST have:
+  * day_number (integer, starting from 1)
+  * date (YYYY-MM-DD if a specific date is mentioned, otherwise null)
+  * city (the city or location for that day — infer from hotel/location context if not explicit)
+  * heading (concise tour/activity name for that day, e.g. "Water Sports & Sunset at Uluwatu Temple" — keep it short and evocative)
+  * description (the FULL cleaned-up description including pickup times, activity details, notes, meal info — preserve all meaningful content)
+  * day_type: "arrival" if the day mentions airport pickup / arrival / check-in on day 1; "departure" if it mentions airport drop / checkout / departure; "tour" for all other days
+  * activities: array of typed activities extracted from that day's text
+  If a day-wise itinerary is clearly present in the quote, this array MUST NOT be empty.
 - cancellation_policy: Extract the general/land cancellation policy as an array of slabs with days_before, charge_pct, and notes.
 - hotels[].cancellation_policy: If the quote mentions per-hotel cancellation terms, extract them as text.
 - flights[].refundable_status: Extract whether each flight is refundable, non_refundable, or partially_refundable.

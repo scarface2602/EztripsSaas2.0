@@ -36,21 +36,21 @@ export async function POST(request: NextRequest) {
   }
 
   // Insert hotels
-  if (parsed?.hotels?.length) {
-    const hotels = parsed.hotels.map((h, i) => ({
-      proposal_id: proposal.id,
-      supplier_id: body.supplier_id || null,
-      name: h.name,
-      city: h.city,
-      check_in: h.check_in || body.travel_start || new Date().toISOString().split('T')[0],
-      check_out: h.check_out || body.travel_end || new Date().toISOString().split('T')[0],
-      room_type: h.room_type,
-      meal_plan: h.meal_plan,
-      cp_per_night: h.cp_per_night,
-      description: h.description,
-      sort_order: i,
-    }));
-    await supabase.from('hotels').insert(hotels);
+  const hotelsToInsert = parsed?.hotels?.length ? parsed.hotels.map((h, i) => ({
+    proposal_id: proposal.id,
+    supplier_id: body.supplier_id || null,
+    name: h.name,
+    city: h.city,
+    check_in: h.check_in || body.travel_start || new Date().toISOString().split('T')[0],
+    check_out: h.check_out || body.travel_end || new Date().toISOString().split('T')[0],
+    room_type: h.room_type,
+    meal_plan: h.meal_plan,
+    cp_per_night: h.cp_per_night,
+    description: h.description,
+    sort_order: i,
+  })) : [];
+  if (hotelsToInsert.length) {
+    await supabase.from('hotels').insert(hotelsToInsert);
   }
 
   // Insert flights with refundable status
@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
     description?: string;
     city?: string | null;
     date?: string | null;
+    day_type?: string | null;
     activities?: Array<{ type: string; description: string }>;
   }> | undefined;
 
@@ -106,7 +107,10 @@ export async function POST(request: NextRequest) {
         ? new Date(new Date(startDate).getTime() + (d.day_number - 1) * 86400000).toISOString().split('T')[0]
         : new Date().toISOString().split('T')[0]);
       const prevParsedDay = i > 0 ? parsedDays[i - 1] : null;
-      const dayType = inferDayType(d.day_number, total, prevParsedDay?.city, d.city);
+      const validDayTypes = ['arrival', 'departure', 'tour', 'transfer', 'flight'];
+      const dayType = (d.day_type && validDayTypes.includes(d.day_type))
+        ? d.day_type
+        : inferDayType(d.day_number, total, prevParsedDay?.city, d.city);
       return {
         proposal_id: proposal.id,
         day_number: d.day_number,
@@ -177,6 +181,42 @@ export async function POST(request: NextRequest) {
     });
     if (days.length > 0) {
       await supabase.from('itinerary_days').insert(days);
+    }
+  }
+
+  // Auto-generate trip_cities if not already provided
+  if (!body.trip_cities) {
+    let autoTripCities: Array<{ city: string; nights: number; order: number }> | null = null;
+
+    if (parsedDays?.length) {
+      // Build trip_cities from itinerary_days — group consecutive days by city
+      const groups: Array<{ city: string; nights: number; order: number }> = [];
+      for (const d of parsedDays) {
+        const city = d.city || '';
+        if (!city) continue;
+        const last = groups[groups.length - 1];
+        if (last && last.city.toLowerCase() === city.toLowerCase()) {
+          last.nights++;
+        } else {
+          groups.push({ city, nights: 1, order: groups.length });
+        }
+      }
+      if (groups.length) autoTripCities = groups;
+    }
+
+    if (!autoTripCities && hotelsToInsert.length) {
+      // Fallback: build from hotels
+      autoTripCities = hotelsToInsert.map((h, index) => ({
+        city: h.city,
+        nights: Math.round(
+          (new Date(h.check_out).getTime() - new Date(h.check_in).getTime()) / (1000 * 60 * 60 * 24)
+        ),
+        order: index,
+      }));
+    }
+
+    if (autoTripCities?.length) {
+      await supabase.from('proposals').update({ trip_cities: autoTripCities }).eq('id', proposal.id);
     }
   }
 
