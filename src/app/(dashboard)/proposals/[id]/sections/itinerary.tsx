@@ -160,6 +160,7 @@ export function ItinerarySection({
 
   // Run auto-assign on days that have null day_type (e.g. days imported before this feature)
   useEffect(() => {
+    console.log('LOADED DAYS FROM DB:', itineraryDays);
     const needsAssignment = itineraryDays.some(d => !d.day_type);
     if (!needsAssignment || itineraryDays.length === 0) return;
     const updated = itineraryDays.map(day => ({

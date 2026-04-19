@@ -72,16 +72,20 @@ export async function POST(request: NextRequest) {
   }
 
   // Create itinerary days from parsed data or date range
+  // Use typed access directly — parsedAny cast only needed for cancellation_policy below
   const parsedAny = parsed as unknown as Record<string, unknown> | null;
-  const parsedDays = parsedAny?.itinerary_days as Array<{
+  type ParsedDayRaw = {
     day_number: number;
-    heading?: string;
-    description?: string;
+    heading?: string | null;
+    description?: string | null;
     city?: string | null;
     date?: string | null;
     day_type?: string | null;
     activities?: Array<{ type: string; description: string }>;
-  }> | undefined;
+  };
+  const parsedDays: ParsedDayRaw[] | undefined = (
+    parsed?.itinerary_days as unknown as ParsedDayRaw[] | undefined
+  ) ?? undefined;
 
   // Helper: auto-assign day_type based on position and city transitions
   function inferDayType(
@@ -105,6 +109,8 @@ export async function POST(request: NextRequest) {
     }
     return '';
   }
+
+  console.log('PARSED DAYS LENGTH:', parsedDays?.length ?? 0);
 
   if (parsedDays?.length) {
     // Use parsed itinerary days with verbatim DMC descriptions
@@ -140,7 +146,9 @@ export async function POST(request: NextRequest) {
         day_type: dayType,
       };
     });
-    const { data: insertedDays } = await supabase.from('itinerary_days').insert(days).select();
+    console.log('INSERTING ITINERARY DAYS:', JSON.stringify(days, null, 2));
+    const { data: insertedDays, error: insertDaysError } = await supabase.from('itinerary_days').insert(days).select();
+    if (insertDaysError) console.error('ITINERARY DAYS INSERT ERROR:', insertDaysError);
 
     // Insert activities for each day
     if (insertedDays) {
