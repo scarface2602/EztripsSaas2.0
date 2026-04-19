@@ -12,6 +12,12 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const parsed = body.parsed_data as ParsedQuote | null;
 
+  // DEBUG: confirm itinerary_days arrive in the save route body
+  console.log('SAVE body.parsed_data itinerary_days sample:', JSON.stringify(
+    (body?.parsed_data?.itinerary_days ?? []).slice(0, 1),
+    null, 2
+  ));
+
   // Create proposal
   const { data: proposal, error: proposalError } = await supabase.from('proposals').insert({
     created_by: user.id,
@@ -111,6 +117,7 @@ export async function POST(request: NextRequest) {
   }
 
   console.log('PARSED DAYS LENGTH:', parsedDays?.length ?? 0);
+  console.log('PARSED DAYS[0] raw:', JSON.stringify(parsedDays?.[0], null, 2));
 
   if (parsedDays?.length) {
     // Use parsed itinerary days with verbatim DMC descriptions
@@ -173,6 +180,7 @@ export async function POST(request: NextRequest) {
       }
     }
   } else if (body.travel_start && body.travel_end) {
+    console.log('FALLING BACK to date-range blank days — parsedDays.length:', parsedDays?.length, 'travel_start:', body.travel_start);
     const start = new Date(body.travel_start);
     const end = new Date(body.travel_end);
     const tripCities = body.trip_cities as Array<{ city: string; nights: number }> | null;
