@@ -5,6 +5,7 @@ const PUBLIC_PATHS = [
   '/p/',
   '/api/auth/',
   '/api/webhooks/',
+  '/api/website/',
   '/invite/',
 ];
 
