@@ -33,13 +33,24 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const {
-      name, email, phone, destination,
-      travel_date, date_flexible, flexibility_days,
-      adults, children, children_ages, budget_range,
-      budget_type, special_requirements, whatsapp_opted,
-      source,
-    } = body;
+    // Accept both camelCase (from website form) and snake_case
+    const name = body.name;
+    const email = body.email;
+    const phone = body.phone;
+    const destination = body.destination;
+    const travel_date = body.travel_date || body.travelDate || null;
+    const date_flexible = body.date_flexible ?? body.dateFlexible ?? false;
+    const flexibility_days = body.flexibility_days || body.flexibilityDays || null;
+    const adults = body.adults;
+    const children = body.children ?? 0;
+    const children_ages = body.children_ages || body.childrenAges || null;
+    const budget_range = body.budget_range || body.budgetRange || null;
+    const budget_type = body.budget_type || body.budgetType || null;
+    const special_requirements = body.special_requirements || body.specialRequirements || null;
+    const whatsapp_opted = body.whatsapp_opted ?? body.whatsappOptin ?? false;
+    const source = body.source || null;
+    const number_of_nights = body.number_of_nights || body.numberOfNights || null;
+    const hotel_category = body.hotel_category || body.hotelCategory || null;
 
     const supabase = createServiceClient();
 
@@ -73,7 +84,7 @@ export async function POST(request: NextRequest) {
         travel_date, date_flexible, flexibility_days,
         adults, children, children_ages, budget_range,
         budget_type, special_requirements, whatsapp_opted,
-        source,
+        source, number_of_nights, hotel_category,
       })
       .select('id')
       .single();
@@ -117,6 +128,8 @@ export async function POST(request: NextRequest) {
         ['Children Ages', children_ages || '—'],
         ['Budget Range', budget_range || '—'],
         ['Budget Type', budget_type || '—'],
+        ['Number of Nights', number_of_nights || '—'],
+        ['Hotel Category', hotel_category || '—'],
         ['Special Requirements', special_requirements || '—'],
         ['WhatsApp Opted', whatsapp_opted ? 'Yes' : 'No'],
         ['Source', source || '—'],
