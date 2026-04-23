@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     // Insert enquiry
     const { data: enquiry, error: enquiryErr } = await supabase
-      .from('enquiries')
+      .from('website_enquiries')
       .insert({
         client_id, name, email, phone, destination,
         travel_date, date_flexible, flexibility_days,
@@ -92,17 +92,6 @@ export async function POST(request: NextRequest) {
     if (enquiryErr || !enquiry) {
       return NextResponse.json({ error: enquiryErr?.message || 'Failed to create enquiry' }, { status: 500, headers });
     }
-
-    // Create draft proposal
-    await supabase.from('proposals').insert({
-      title: `${destination} — Website Enquiry`,
-      status: 'enquiry',
-      client_id,
-      destination,
-      travel_start: travel_date,
-      adults,
-      children,
-    });
 
     // Send notification email
     if (process.env.GMAIL_USER) {
