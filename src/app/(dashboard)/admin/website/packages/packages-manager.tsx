@@ -27,7 +27,7 @@ const schema = z.object({
   highlights: z.string().optional(),
   inclusions: z.string().optional(),
   exclusions: z.string().optional(),
-  published: z.boolean().default(false),
+  published: z.boolean().optional().default(false),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -50,7 +50,7 @@ export default function PackagesManager({ initialData }: { initialData: Pkg[] })
   const [editing, setEditing] = useState<Pkg | null>(null);
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as never,
     defaultValues: { published: false },
   });
 
@@ -152,7 +152,7 @@ export default function PackagesManager({ initialData }: { initialData: Pkg[] })
                   {pkg.published ? 'Published' : 'Draft'}
                 </Badge>
               </div>
-              {pkg.price_from && (
+              {Number(pkg.price_from) > 0 && (
                 <p className="text-sm">From <span className="font-semibold">&#8377;{Number(pkg.price_from).toLocaleString()}</span></p>
               )}
               <div className="flex items-center justify-between pt-2 border-t">

@@ -27,8 +27,8 @@ const schema = z.object({
   cover_image: z.string().optional(),
   duration_days: z.coerce.number().optional(),
   price_from: z.coerce.number().optional(),
-  is_pilgrimage: z.boolean().default(false),
-  published: z.boolean().default(false),
+  is_pilgrimage: z.boolean().optional().default(false),
+  published: z.boolean().optional().default(false),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -43,7 +43,7 @@ export default function DestinationsManager({ initialData }: { initialData: Dest
   const [editing, setEditing] = useState<Destination | null>(null);
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as never,
     defaultValues: { is_pilgrimage: false, published: false },
   });
 
@@ -123,8 +123,6 @@ export default function DestinationsManager({ initialData }: { initialData: Dest
     }
   }
 
-  const titleValue = watch('title');
-
   return (
     <>
       <div className="flex justify-end">
@@ -144,7 +142,7 @@ export default function DestinationsManager({ initialData }: { initialData: Dest
                   {dest.published ? 'Published' : 'Draft'}
                 </Badge>
               </div>
-              {dest.price_from && (
+              {Number(dest.price_from) > 0 && (
                 <p className="text-sm">From <span className="font-semibold">&#8377;{Number(dest.price_from).toLocaleString()}</span></p>
               )}
               <div className="flex items-center justify-between pt-2 border-t">

@@ -16,14 +16,12 @@ export default async function WebsiteCMSPage() {
     { count: newEnquiries },
     { count: publishedDestinations },
     { count: publishedBlogPosts },
-    { count: publishedPackages },
     { data: recentEnquiries },
   ] = await Promise.all([
     supabase.from('website_enquiries').select('*', { count: 'exact', head: true }),
     supabase.from('website_enquiries').select('*', { count: 'exact', head: true }).eq('status', 'new'),
     supabase.from('website_destinations').select('*', { count: 'exact', head: true }).eq('published', true),
     supabase.from('website_blog_posts').select('*', { count: 'exact', head: true }).eq('published', true),
-    supabase.from('website_packages').select('*', { count: 'exact', head: true }).eq('published', true),
     supabase.from('website_enquiries').select('*').order('created_at', { ascending: false }).limit(5),
   ]);
 

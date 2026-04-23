@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 
 type Enquiry = Record<string, unknown>;
 
@@ -116,7 +116,7 @@ export default function EnquiriesTable({ initialData }: { initialData: Enquiry[]
                       <TableCell>
                         <Select
                           value={e.status as string}
-                          onValueChange={(val) => updateStatus(e.id as string, val)}
+                          onValueChange={(val) => val && updateStatus(e.id as string, val)}
                         >
                           <SelectTrigger className="w-[120px] h-8">
                             <Badge className={STATUS_COLORS[(e.status as string) || 'new']}>

@@ -48,7 +48,7 @@ export default function BlogManager({ initialData }: { initialData: BlogPost[] }
   const [aiLoading, setAiLoading] = useState(false);
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as never,
     defaultValues: { published: false },
   });
 
