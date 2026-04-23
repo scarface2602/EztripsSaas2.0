@@ -3,11 +3,23 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import PackageEditor from './PackageEditor';
 
-export default async function EditPackagePage({ params }: { params: { id: string } }) {
+export default async function EditPackagePage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { destination?: string; destination_name?: string };
+}) {
   await requireSuperAdmin();
 
   if (params.id === 'new') {
-    return <PackageEditor pkg={null} />;
+    return (
+      <PackageEditor
+        pkg={null}
+        defaultDestinationSlug={searchParams.destination || ''}
+        defaultDestinationName={searchParams.destination_name || ''}
+      />
+    );
   }
 
   const supabase = createServiceClient();

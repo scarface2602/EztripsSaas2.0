@@ -35,7 +35,18 @@
       "Bash(grep:*)",
       "Bash(find /Users/sudeepsharma/Desktop/EztripsSaas/supabase/migrations -name \"*.sql\" -exec wc -l {} \\\\;)",
       "Bash(npm uninstall:*)",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(vercel ls:*)",
+      "Bash(npm i:*)",
+      "Bash(vercel:*)",
+      "WebFetch(domain:eztrips-website-naby891zu-sudeep-eztrips-projects.vercel.app)",
+      "Bash(git revert:*)",
+      "WebFetch(domain:eztrips-website.vercel.app)",
+      "Bash(git commit:*)",
+      "Bash(ls:*)"
     ]
   }
 }
