@@ -1,54 +1,39 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
+import { Flame, Thermometer, Snowflake } from 'lucide-react';
 
 type Enquiry = Record<string, unknown>;
 
 const STATUS_COLORS: Record<string, string> = {
   new: 'bg-blue-100 text-blue-700',
   contacted: 'bg-yellow-100 text-yellow-700',
-  closed: 'bg-green-100 text-green-700',
+  qualified: 'bg-purple-100 text-purple-700',
+  proposal_sent: 'bg-indigo-100 text-indigo-700',
+  won: 'bg-green-100 text-green-700',
+  lost: 'bg-gray-100 text-gray-700',
   spam: 'bg-red-100 text-red-700',
 };
 
-const TABS = ['all', 'new', 'contacted', 'closed'] as const;
+const PRIORITY_ICONS: Record<string, { icon: typeof Flame; color: string }> = {
+  urgent: { icon: Flame, color: 'text-red-500' },
+  high: { icon: Flame, color: 'text-orange-500' },
+  medium: { icon: Thermometer, color: 'text-yellow-500' },
+  low: { icon: Snowflake, color: 'text-blue-400' },
+};
+
+const TABS = ['all', 'new', 'contacted', 'qualified', 'proposal_sent', 'won'] as const;
 
 export default function EnquiriesTable({ initialData }: { initialData: Enquiry[] }) {
-  const [enquiries, setEnquiries] = useState<Enquiry[]>(initialData);
+  const router = useRouter();
+  const enquiries = initialData;
   const [filter, setFilter] = useState<string>('all');
-  const [editingNotes, setEditingNotes] = useState<string | null>(null);
-  const [notesValue, setNotesValue] = useState('');
-
   const filtered = filter === 'all' ? enquiries : enquiries.filter(e => e.status === filter);
-
-  async function updateStatus(id: string, status: string) {
-    const res = await fetch('/api/website/cms/enquiries', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status }),
-    });
-    if (res.ok) {
-      setEnquiries(prev => prev.map(e => e.id === id ? { ...e, status } : e));
-    }
-  }
-
-  async function saveNotes(id: string) {
-    const res = await fetch('/api/website/cms/enquiries', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, notes: notesValue }),
-    });
-    if (res.ok) {
-      setEnquiries(prev => prev.map(e => e.id === id ? { ...e, notes: notesValue } : e));
-      setEditingNotes(null);
-    }
-  }
 
   return (
     <>
@@ -72,15 +57,15 @@ export default function EnquiriesTable({ initialData }: { initialData: Enquiry[]
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead></TableHead>
                 <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Destination</TableHead>
                 <TableHead>Travel Date</TableHead>
-                <TableHead>Adults</TableHead>
+                <TableHead>Pax</TableHead>
                 <TableHead>Budget</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Notes</TableHead>
+                <TableHead>Follow-up</TableHead>
                 <TableHead>Date</TableHead>
               </TableRow>
             </TableHeader>
@@ -95,66 +80,40 @@ export default function EnquiriesTable({ initialData }: { initialData: Enquiry[]
                 filtered.map((e) => {
                   const phone = (e.phone as string || '').replace(/\D/g, '').replace(/^0+/, '');
                   const waPhone = phone.startsWith('91') ? phone : `91${phone}`;
+                  const pri = PRIORITY_ICONS[(e.priority as string) || 'medium'];
+                  const PriIcon = pri?.icon || Thermometer;
                   return (
-                    <TableRow key={e.id as string}>
+                    <TableRow
+                      key={e.id as string}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/admin/website/enquiries/${e.id}`)}
+                    >
+                      <TableCell className="w-8">
+                        <PriIcon className={`h-4 w-4 ${pri?.color || 'text-yellow-500'}`} />
+                      </TableCell>
                       <TableCell className="font-medium">{e.name as string}</TableCell>
-                      <TableCell className="text-sm">{e.email as string}</TableCell>
                       <TableCell>
                         <a
                           href={`https://wa.me/${waPhone}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-green-600 hover:underline text-sm"
+                          onClick={(ev) => ev.stopPropagation()}
                         >
                           {e.phone as string}
                         </a>
                       </TableCell>
                       <TableCell>{e.destination as string}</TableCell>
                       <TableCell className="text-sm">{(e.travel_date as string) || '—'}</TableCell>
-                      <TableCell>{e.adults as number}</TableCell>
+                      <TableCell>{e.adults as number}{(e.children as number) > 0 ? ` + ${e.children}C` : ''}</TableCell>
                       <TableCell className="text-sm">{(e.budget_range as string) || '—'}</TableCell>
                       <TableCell>
-                        <Select
-                          value={e.status as string}
-                          onValueChange={(val) => val && updateStatus(e.id as string, val)}
-                        >
-                          <SelectTrigger className="w-[120px] h-8">
-                            <Badge className={STATUS_COLORS[(e.status as string) || 'new']}>
-                              {e.status as string}
-                            </Badge>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="new">New</SelectItem>
-                            <SelectItem value="contacted">Contacted</SelectItem>
-                            <SelectItem value="closed">Closed</SelectItem>
-                            <SelectItem value="spam">Spam</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Badge className={STATUS_COLORS[(e.status as string) || 'new']}>
+                          {(e.status as string)?.replace('_', ' ')}
+                        </Badge>
                       </TableCell>
-                      <TableCell>
-                        {editingNotes === (e.id as string) ? (
-                          <div className="flex gap-1">
-                            <Input
-                              value={notesValue}
-                              onChange={(ev) => setNotesValue(ev.target.value)}
-                              className="h-8 text-sm w-40"
-                              onKeyDown={(ev) => ev.key === 'Enter' && saveNotes(e.id as string)}
-                            />
-                            <Button size="sm" variant="outline" onClick={() => saveNotes(e.id as string)}>
-                              Save
-                            </Button>
-                          </div>
-                        ) : (
-                          <button
-                            className="text-sm text-muted-foreground hover:text-foreground text-left"
-                            onClick={() => {
-                              setEditingNotes(e.id as string);
-                              setNotesValue((e.notes as string) || '');
-                            }}
-                          >
-                            {(e.notes as string) || 'Add note...'}
-                          </button>
-                        )}
+                      <TableCell className="text-sm text-muted-foreground">
+                        {(e.follow_up_date as string) || '—'}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                         {new Date(e.created_at as string).toLocaleDateString()}

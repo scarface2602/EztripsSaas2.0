@@ -23,6 +23,8 @@ export default function NewProposalPage() {
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
+  const enquiryId = searchParams.get('enquiry_id') || '';
+
   const [step, setStep] = useState<Step>('quote-type');
   const [quoteType, setQuoteType] = useState<'package' | 'itemised'>('itemised');
   const [clients, setClients] = useState<Client[]>([]);
@@ -144,6 +146,7 @@ export default function NewProposalPage() {
           quote_type: quoteType,
           parsed_data: parsedData,
           trip_cities: tripCities.length > 0 ? tripCities : null,
+          enquiry_id: enquiryId || null,
         }),
       });
       const data = await res.json();
@@ -161,6 +164,7 @@ export default function NewProposalPage() {
     const { data } = await supabase.from('proposals').insert({
       created_by: user.id,
       client_id: selectedClient || null,
+      enquiry_id: enquiryId || null,
       pricing_mode: pricingMode,
       quote_type: quoteType,
       title: title || 'New Proposal',

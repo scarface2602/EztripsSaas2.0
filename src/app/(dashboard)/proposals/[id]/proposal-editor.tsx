@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { Proposal, Hotel, Flight, ItineraryDay, ItineraryActivity, LineItem, Supplier, User } from '@/lib/types/database';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Save, Upload, Undo2, Eye, ArrowLeft, AlertTriangle, History } from 'lucide-react';
+import { Save, Upload, Undo2, Eye, ArrowLeft, AlertTriangle, History, ClipboardList } from 'lucide-react';
 
 import { applyRounding } from '@/lib/utils/pricing';
 import { CoverPageSection } from './sections/cover-page';
@@ -296,6 +296,11 @@ export function ProposalEditor({
           {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
         </div>
         <div className="flex items-center gap-2">
+          {proposal.status === 'confirmed' && (
+            <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => router.push(`/bookings/new?proposal_id=${proposal.id}`)}>
+              <ClipboardList className="h-4 w-4 mr-1" /> Convert to Booking
+            </Button>
+          )}
           {shareUrl && (
             <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(shareUrl)}>
               <Eye className="h-4 w-4 mr-1" /> Copy Link

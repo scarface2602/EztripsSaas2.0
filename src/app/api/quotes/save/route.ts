@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
   const { data: proposal, error: proposalError } = await supabase.from('proposals').insert({
     created_by: user.id,
     client_id: body.client_id,
+    enquiry_id: body.enquiry_id || null,
     pricing_mode: body.pricing_mode || 'standard',
     quote_type: body.quote_type || 'itemised',
     title: body.title,
