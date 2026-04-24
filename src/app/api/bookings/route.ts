@@ -126,11 +126,15 @@ async function copyProposalComponents(
       check_in: h.check_in,
       check_out: h.check_out,
       room_type: h.room_type,
-      meal_plan: h.meal_plan,
+      meal_plan: ['EP','CP','MAP','AP','AI'].includes(h.meal_plan) ? h.meal_plan : null,
       star_rating: h.star_rating,
       room_view: h.room_view,
-      cost_price: h.cp_per_night ? h.cp_per_night * (h.nights || 1) : 0,
-      sell_price: h.sp_per_night ? h.sp_per_night * (h.nights || 1) : 0,
+      cost_price: h.cp_per_night
+        ? h.cp_per_night * Math.max(1, Math.round((new Date(h.check_out).getTime() - new Date(h.check_in).getTime()) / 86400000))
+        : 0,
+      sell_price: h.sp_per_night
+        ? h.sp_per_night * Math.max(1, Math.round((new Date(h.check_out).getTime() - new Date(h.check_in).getTime()) / 86400000))
+        : 0,
       sort_order: i,
     }));
 
@@ -176,6 +180,58 @@ async function copyProposalComponents(
     }
   }
 
+  // Copy sightseeing/activities from itinerary_activities
+  const { data: itinActivities } = await supabase
+    .from('itinerary_activities')
+    .select('*, itinerary_days(date, city)')
+    .eq('proposal_id', proposalId)
+    .order('sort_order');
+
+  if (itinActivities && itinActivities.length > 0) {
+    const actInserts = itinActivities
+      .filter(a => ['sightseeing', 'activity'].includes(a.type))
+      .map((a, i) => {
+        const day = a.itinerary_days as Record<string, unknown> | null;
+        return {
+          booking_id: bookingId,
+          activity_name: a.location || a.type || 'Activity',
+          date: (day?.date as string) || null,
+          location: (day?.city as string) || null,
+          status: 'pending' as const,
+          sort_order: i,
+        };
+      });
+    if (actInserts.length > 0) {
+      const { error } = await supabase.from('booking_activities').insert(actInserts);
+      if (error) {
+        logger.warn('copyComponents', 'Failed to copy activities', { error: error.message });
+      }
+    }
+  }
+
+  // Copy transfers from itinerary_activities
+  if (itinActivities && itinActivities.length > 0) {
+    const transferInserts = itinActivities
+      .filter(a => a.type === 'transfer')
+      .map((a, i) => {
+        const day = a.itinerary_days as Record<string, unknown> | null;
+        return {
+          booking_id: bookingId,
+          type: 'intercity' as const,
+          from_location: a.location || '',
+          date: (day?.date as string) || new Date().toISOString().split('T')[0],
+          status: 'pending' as const,
+          sort_order: i,
+        };
+      });
+    if (transferInserts.length > 0) {
+      const { error } = await supabase.from('booking_transport').insert(transferInserts);
+      if (error) {
+        logger.warn('copyComponents', 'Failed to copy transfers', { error: error.message });
+      }
+    }
+  }
+
   // Log component copy
   await supabase.from('booking_logs').insert({
     booking_id: bookingId,
@@ -185,6 +241,8 @@ async function copyProposalComponents(
       proposal_id: proposalId,
       hotels_copied: hotels?.length || 0,
       flights_copied: flights?.length || 0,
+      activities_copied: itinActivities?.filter(a => ['sightseeing', 'activity'].includes(a.type)).length || 0,
+      transfers_copied: itinActivities?.filter(a => a.type === 'transfer').length || 0,
     },
   });
 }
