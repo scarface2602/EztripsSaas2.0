@@ -20,6 +20,7 @@ import {
   Inbox,
   MapPin,
   BookOpen,
+  ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -27,6 +28,7 @@ import { Separator } from '@/components/ui/separator';
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/proposals', label: 'Proposals', icon: FileText },
+  { href: '/bookings', label: 'Bookings', icon: ClipboardList },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Suppliers', icon: Truck },
   { href: '/receivables', label: 'Receivables', icon: ArrowDownLeft },
