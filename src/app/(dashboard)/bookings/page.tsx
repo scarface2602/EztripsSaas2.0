@@ -8,31 +8,44 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, Plus, ClipboardList } from 'lucide-react';
-import Link from 'next/link';
+import { Search, ClipboardList } from 'lucide-react';
 import { format } from 'date-fns';
 
 const STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-700',
+  blocked: 'bg-purple-100 text-purple-700',
   confirmed: 'bg-green-100 text-green-700',
   in_progress: 'bg-blue-100 text-blue-700',
   completed: 'bg-gray-100 text-gray-700',
   cancelled: 'bg-red-100 text-red-700',
 };
 
+const TYPE_LABELS: Record<string, string> = {
+  package: 'Package',
+  hotel: 'Hotel',
+  land: 'Land',
+  flight: 'Flight',
+};
+
 interface Booking {
   id: string;
   title: string;
+  booking_type: string;
   destination: string | null;
   status: string;
   travel_start: string | null;
   travel_end: string | null;
   pax_adults: number;
   pax_children: number;
-  total_sell_price: number;
-  total_cost_price: number;
+  sell_price: number;
+  cost_price: number;
+  total_paid: number;
+  next_payment_date: string | null;
+  next_payment_amount: number | null;
   currency: string;
   created_at: string;
   clients: { full_name: string; phone: string | null; email: string | null } | null;
+  suppliers: { name: string } | null;
 }
 
 export default function BookingsPage() {
@@ -42,27 +55,31 @@ export default function BookingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get('status');
+  const proposalFilter = searchParams.get('proposal_id');
   const supabase = useMemo(() => createClient(), []);
 
   const fetchBookings = useCallback(async () => {
     setLoading(true);
     let q = supabase
       .from('bookings')
-      .select('*, clients(full_name, phone, email)')
-      .order('travel_start', { ascending: true });
+      .select('*, clients(full_name, phone, email), suppliers(name)')
+      .order('created_at', { ascending: false });
     if (statusFilter) q = q.eq('status', statusFilter);
+    if (proposalFilter) q = q.eq('proposal_id', proposalFilter);
     if (search) q = q.or(`title.ilike.%${search}%,destination.ilike.%${search}%`);
     const { data } = await q;
     setBookings((data as Booking[]) || []);
     setLoading(false);
-  }, [supabase, statusFilter, search]);
+  }, [supabase, statusFilter, proposalFilter, search]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchBookings(), 300);
     return () => clearTimeout(timer);
   }, [fetchBookings]);
 
-  const margin = (b: Booking) => b.total_sell_price - b.total_cost_price;
+  const margin = (b: Booking) => b.sell_price - b.cost_price;
+
+  const statuses = ['pending', 'blocked', 'confirmed', 'in_progress', 'completed', 'cancelled'];
 
   return (
     <div className="space-y-6">
@@ -72,7 +89,6 @@ export default function BookingsPage() {
           <h1 className="text-2xl font-bold">Bookings</h1>
           {statusFilter && <Badge className={STATUS_COLORS[statusFilter]}>{statusFilter.replace('_', ' ')}</Badge>}
         </div>
-        <Link href="/bookings/new"><Button><Plus className="h-4 w-4 mr-2" /> New Booking</Button></Link>
       </div>
 
       <div className="flex gap-2">
@@ -86,13 +102,13 @@ export default function BookingsPage() {
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-4 gap-4">
-        {['confirmed', 'in_progress', 'completed', 'cancelled'].map((s) => {
+      <div className="grid grid-cols-6 gap-3">
+        {statuses.map((s) => {
           const count = bookings.filter((b) => b.status === s).length;
           return (
-            <Card key={s} className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push(`/bookings?status=${s}`)}>
-              <p className="text-sm text-muted-foreground capitalize">{s.replace('_', ' ')}</p>
-              <p className="text-2xl font-bold">{count}</p>
+            <Card key={s} className="p-3 cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push(`/bookings?status=${s}`)}>
+              <p className="text-xs text-muted-foreground capitalize">{s.replace('_', ' ')}</p>
+              <p className="text-xl font-bold">{count}</p>
             </Card>
           );
         })}
@@ -103,35 +119,39 @@ export default function BookingsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Title</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Client</TableHead>
-              <TableHead>Destination</TableHead>
+              <TableHead>Supplier</TableHead>
               <TableHead>Travel Dates</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Pax</TableHead>
+              <TableHead className="text-right">Cost</TableHead>
               <TableHead className="text-right">Sell</TableHead>
               <TableHead className="text-right">Margin</TableHead>
+              <TableHead className="text-right">Paid</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : bookings.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No bookings found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No bookings found</TableCell></TableRow>
             ) : bookings.map((b) => (
               <TableRow key={b.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/bookings/${b.id}`)}>
                 <TableCell className="font-medium">{b.title}</TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{TYPE_LABELS[b.booking_type] || b.booking_type}</Badge></TableCell>
                 <TableCell>{b.clients?.full_name || '-'}</TableCell>
-                <TableCell>{b.destination || '-'}</TableCell>
+                <TableCell className="text-muted-foreground">{b.suppliers?.name || '-'}</TableCell>
                 <TableCell className="text-muted-foreground whitespace-nowrap">
                   {b.travel_start ? format(new Date(b.travel_start), 'dd MMM') : '-'}
-                  {b.travel_end ? ` - ${format(new Date(b.travel_end), 'dd MMM')}` : ''}
+                  {b.travel_end ? ` – ${format(new Date(b.travel_end), 'dd MMM')}` : ''}
                 </TableCell>
                 <TableCell><Badge className={STATUS_COLORS[b.status]}>{b.status.replace('_', ' ')}</Badge></TableCell>
-                <TableCell>{b.pax_adults}A{b.pax_children > 0 ? ` + ${b.pax_children}C` : ''}</TableCell>
-                <TableCell className="text-right">{b.currency} {b.total_sell_price.toLocaleString()}</TableCell>
+                <TableCell className="text-right">{Number(b.cost_price).toLocaleString()}</TableCell>
+                <TableCell className="text-right">{Number(b.sell_price).toLocaleString()}</TableCell>
                 <TableCell className={`text-right font-medium ${margin(b) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {b.currency} {margin(b).toLocaleString()}
+                  {margin(b).toLocaleString()}
                 </TableCell>
+                <TableCell className="text-right text-muted-foreground">{Number(b.total_paid).toLocaleString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>

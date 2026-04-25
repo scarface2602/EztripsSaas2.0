@@ -297,8 +297,16 @@ export function ProposalEditor({
         </div>
         <div className="flex items-center gap-2">
           {proposal.status === 'confirmed' && (
-            <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => router.push(`/bookings/new?proposal_id=${proposal.id}`)}>
-              <ClipboardList className="h-4 w-4 mr-1" /> Convert to Booking
+            <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" onClick={async () => {
+              // Ensure bookings exist (idempotent — API rejects if already created)
+              await fetch('/api/bookings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ proposal_id: proposal.id }),
+              });
+              router.push(`/bookings?proposal_id=${proposal.id}`);
+            }}>
+              <ClipboardList className="h-4 w-4 mr-1" /> View Bookings
             </Button>
           )}
           {shareUrl && (

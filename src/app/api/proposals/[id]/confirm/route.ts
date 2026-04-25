@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendConfirmationToAgent } from '@/lib/email/mailer';
+import { createBookingsFromProposal } from '@/lib/bookings';
 
 interface ConfirmBody {
   choices?: Record<string, 'pvt' | 'sic'>; // activity_id -> choice
@@ -234,6 +235,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await supabase.from('payables').insert(payables);
   }
 
+  // Auto-create ops bookings (one per supplier)
+  const createdBookings = await createBookingsFromProposal(supabase, proposal, proposal.created_by || '');
+
   // Log to proposal_acceptance_log
   await supabase.from('proposal_acceptance_log').insert({
     proposal_id: proposalId,
@@ -282,5 +286,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     grand_total: grandTotal,
     receivables_count: receivables.length,
     payables_count: payables.length,
+    bookings_count: createdBookings.length,
   });
 }

@@ -11,7 +11,8 @@ async function getUser() {
   return data.user;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -19,26 +20,27 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const { data, error } = await supabase
     .from('booking_emails')
     .select('*, suppliers(name)')
-    .eq('booking_id', params.id)
+    .eq('booking_id', id)
     .order('created_at', { ascending: false });
 
   if (error) {
-    logger.error('list', 'Failed to fetch emails', { bookingId: params.id, error: error.message });
+    logger.error('list', 'Failed to fetch emails', { bookingId: id, error: error.message });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   return NextResponse.json(data);
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();
-  body.booking_id = params.id;
+  body.booking_id = id;
   body.sent_by = user.id;
 
-  logger.info('create', 'Creating email', { bookingId: params.id, subject: body.subject, template: body.template_type });
+  logger.info('create', 'Creating email', { bookingId: id, subject: body.subject, template: body.template_type });
 
   const supabase = createServiceClient();
   const { data, error } = await supabase.from('booking_emails').insert(body).select().single();
@@ -49,17 +51,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   await supabase.from('booking_logs').insert({
-    booking_id: params.id,
+    booking_id: id,
     user_id: user.id,
     action: body.status === 'sent' ? 'email_sent' : 'email_drafted',
     details: { email_id: data.id, subject: data.subject, to: data.to_email },
   });
 
-  logger.info('create', 'Email created', { bookingId: params.id, emailId: data.id, status: data.status });
+  logger.info('create', 'Email created', { bookingId: id, emailId: data.id, status: data.status });
   return NextResponse.json(data, { status: 201 });
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const user = await getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -68,7 +71,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (!email_id) return NextResponse.json({ error: 'email_id required' }, { status: 400 });
 
-  logger.info('update', 'Updating email', { bookingId: params.id, emailId: email_id });
+  logger.info('update', 'Updating email', { bookingId: id, emailId: email_id });
 
   const supabase = createServiceClient();
 
@@ -91,7 +94,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (updates.status === 'sent') {
     await supabase.from('booking_logs').insert({
-      booking_id: params.id,
+      booking_id: id,
       user_id: user.id,
       action: 'email_sent',
       details: { email_id, subject: data.subject, to: data.to_email },
