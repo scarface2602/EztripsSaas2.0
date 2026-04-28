@@ -14,9 +14,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   ArrowLeft, CreditCard, Clock, Mail, FileText,
-  CheckCircle2, Trash2, Save,
+  CheckCircle2, Trash2, Save, Package, Plus, Pencil,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import type { BookingItem, ItemType, SupplierStatus } from '@/lib/types/booking-items';
+import { ITEM_TYPE_LABELS, SUPPLIER_STATUS_COLORS } from '@/lib/types/booking-items';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
@@ -77,8 +80,11 @@ export default function BookingDetailPage() {
   const [logs, setLogs] = useState<Record<string, any>[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [emails, setEmails] = useState<Record<string, any>[]>([]);
+  const [items, setItems] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [itemSheetOpen, setItemSheetOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<BookingItem | null>(null);
 
   // Editable fields
   const [refNumber, setRefNumber] = useState('');
@@ -88,11 +94,12 @@ export default function BookingDetailPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [bRes, pRes, lRes, eRes] = await Promise.all([
+    const [bRes, pRes, lRes, eRes, iRes] = await Promise.all([
       supabase.from('bookings').select('*, clients(full_name, phone, email), suppliers(name), proposals(title, quote_type)').eq('id', id).single(),
       supabase.from('booking_payments').select('*').eq('booking_id', id).order('installment_number'),
       supabase.from('booking_logs').select('*, users(full_name)').eq('booking_id', id).order('created_at', { ascending: false }).limit(50),
       supabase.from('booking_emails').select('*, suppliers(name)').eq('booking_id', id).order('created_at', { ascending: false }),
+      supabase.from('booking_items').select('*').eq('booking_id', id).order('sort_order').order('start_date'),
     ]);
     const b = bRes.data as Booking;
     setBooking(b);
@@ -105,6 +112,7 @@ export default function BookingDetailPage() {
     setPayments(pRes.data || []);
     setLogs(lRes.data || []);
     setEmails(eRes.data || []);
+    setItems((iRes.data || []) as BookingItem[]);
     setLoading(false);
   }, [supabase, id]);
 
@@ -145,6 +153,39 @@ export default function BookingDetailPage() {
 
   const deletePayment = async (paymentId: string) => {
     await fetch(`/api/bookings/${id}/payments?payment_id=${paymentId}`, { method: 'DELETE' });
+    fetchAll();
+  };
+
+  const saveItem = async (itemData: Record<string, unknown>) => {
+    if (editingItem) {
+      await fetch(`/api/bookings/${id}/items`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: editingItem.id, ...itemData }),
+      });
+    } else {
+      await fetch(`/api/bookings/${id}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(itemData),
+      });
+    }
+    setItemSheetOpen(false);
+    setEditingItem(null);
+    fetchAll();
+  };
+
+  const markItemConfirmed = async (itemId: string) => {
+    await fetch(`/api/bookings/${id}/items`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, supplier_status: 'confirmed' }),
+    });
+    fetchAll();
+  };
+
+  const deleteItem = async (itemId: string) => {
+    await fetch(`/api/bookings/${id}/items?item_id=${itemId}`, { method: 'DELETE' });
     fetchAll();
   };
 
@@ -236,6 +277,7 @@ export default function BookingDetailPage() {
       <Tabs defaultValue="details">
         <TabsList>
           <TabsTrigger value="details" className="gap-1"><FileText className="h-3.5 w-3.5" /> Details</TabsTrigger>
+          <TabsTrigger value="items" className="gap-1"><Package className="h-3.5 w-3.5" /> Items ({items.length})</TabsTrigger>
           <TabsTrigger value="payments" className="gap-1"><CreditCard className="h-3.5 w-3.5" /> Payments ({payments.length})</TabsTrigger>
           <TabsTrigger value="emails" className="gap-1"><Mail className="h-3.5 w-3.5" /> Emails ({emails.length})</TabsTrigger>
           <TabsTrigger value="logs" className="gap-1"><Clock className="h-3.5 w-3.5" /> Activity Log</TabsTrigger>
@@ -281,6 +323,73 @@ export default function BookingDetailPage() {
                 <div className="text-sm text-muted-foreground">
                   From proposal: <span className="font-medium">{booking.proposals?.title || booking.proposal_id}</span>
                   {booking.proposals?.quote_type && ` (${booking.proposals.quote_type})`}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Items & Confirmations Tab */}
+        <TabsContent value="items">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base">Items & Confirmations</CardTitle>
+              <Button size="sm" onClick={() => { setEditingItem(null); setItemSheetOpen(true); }}>
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Label</TableHead>
+                    <TableHead>Dates</TableHead>
+                    <TableHead>Cost</TableHead>
+                    <TableHead>Sell</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Supplier Ref</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.length === 0 ? (
+                    <TableRow><TableCell colSpan={8} className="text-center py-6 text-muted-foreground">No items yet. Add flights, hotels, transfers, and activities.</TableCell></TableRow>
+                  ) : items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell><Badge variant="outline">{ITEM_TYPE_LABELS[item.item_type]}</Badge></TableCell>
+                      <TableCell className="font-medium">{item.label}</TableCell>
+                      <TableCell className="text-sm">
+                        {item.start_date ? format(new Date(item.start_date), 'dd MMM') : '-'}
+                        {item.end_date && item.end_date !== item.start_date ? ` – ${format(new Date(item.end_date), 'dd MMM')}` : ''}
+                      </TableCell>
+                      <TableCell>{item.cost_price != null ? `${booking.currency} ${Number(item.cost_price).toLocaleString()}` : '-'}</TableCell>
+                      <TableCell>{item.sell_price != null ? `${booking.currency} ${Number(item.sell_price).toLocaleString()}` : '-'}</TableCell>
+                      <TableCell><Badge className={SUPPLIER_STATUS_COLORS[item.supplier_status]}>{item.supplier_status}</Badge></TableCell>
+                      <TableCell className="text-xs font-mono">{item.supplier_reference || '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingItem(item); setItemSheetOpen(true); }} title="Edit">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          {item.supplier_status !== 'confirmed' && item.supplier_status !== 'completed' && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => markItemConfirmed(item.id)} title="Mark Confirmed">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => deleteItem(item.id)} title="Delete">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {items.length > 0 && (
+                <div className="mt-4 flex justify-end gap-6 text-sm text-muted-foreground">
+                  <span>Total Cost: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.cost_price || 0), 0).toLocaleString()}</strong></span>
+                  <span>Total Sell: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.sell_price || 0), 0).toLocaleString()}</strong></span>
                 </div>
               )}
             </CardContent>
@@ -410,6 +519,186 @@ export default function BookingDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Add/Edit Item Sheet */}
+      <Sheet open={itemSheetOpen} onOpenChange={(open) => { setItemSheetOpen(open); if (!open) setEditingItem(null); }}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{editingItem ? 'Edit Item' : 'Add Item'}</SheetTitle>
+          </SheetHeader>
+          <ItemForm
+            item={editingItem}
+            onSave={saveItem}
+            onCancel={() => { setItemSheetOpen(false); setEditingItem(null); }}
+          />
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+function ItemForm({ item, onSave, onCancel }: {
+  item: BookingItem | null;
+  onSave: (data: Record<string, unknown>) => void;
+  onCancel: () => void;
+}) {
+  const [itemType, setItemType] = useState<ItemType>(item?.item_type as ItemType || 'hotel_room');
+  const [label, setLabel] = useState(item?.label || '');
+  const [startDate, setStartDate] = useState(item?.start_date || '');
+  const [endDate, setEndDate] = useState(item?.end_date || '');
+  const [costPrice, setCostPrice] = useState(item?.cost_price?.toString() || '');
+  const [sellPrice, setSellPrice] = useState(item?.sell_price?.toString() || '');
+  const [supplierStatus, setSupplierStatus] = useState<SupplierStatus>(item?.supplier_status || 'pending');
+  const [supplierRef, setSupplierRef] = useState(item?.supplier_reference || '');
+  const [supplierNotes, setSupplierNotes] = useState(item?.supplier_notes || '');
+  const [details, setDetails] = useState<Record<string, unknown>>(item?.details || {});
+
+  const handleSubmit = () => {
+    if (!label.trim()) return;
+    onSave({
+      item_type: itemType,
+      label: label.trim(),
+      start_date: startDate || null,
+      end_date: endDate || null,
+      cost_price: costPrice ? parseFloat(costPrice) : null,
+      sell_price: sellPrice ? parseFloat(sellPrice) : null,
+      supplier_status: supplierStatus,
+      supplier_reference: supplierRef || null,
+      supplier_notes: supplierNotes || null,
+      details,
+    });
+  };
+
+  const detailFields: Record<ItemType, { key: string; label: string; type?: string }[]> = {
+    flight_segment: [
+      { key: 'airline', label: 'Airline' },
+      { key: 'flight_number', label: 'Flight Number' },
+      { key: 'route', label: 'Route' },
+      { key: 'departure_time', label: 'Departure Time' },
+      { key: 'arrival_time', label: 'Arrival Time' },
+      { key: 'seat', label: 'Seat' },
+      { key: 'pnr', label: 'PNR' },
+    ],
+    hotel_room: [
+      { key: 'hotel_name', label: 'Hotel Name' },
+      { key: 'room_type', label: 'Room Type' },
+      { key: 'nights', label: 'Nights', type: 'number' },
+      { key: 'rooms_count', label: 'Rooms', type: 'number' },
+      { key: 'meal_plan', label: 'Meal Plan' },
+      { key: 'conf_number', label: 'Confirmation #' },
+    ],
+    transfer: [
+      { key: 'from_location', label: 'From' },
+      { key: 'to_location', label: 'To' },
+      { key: 'vehicle_type', label: 'Vehicle Type' },
+      { key: 'pickup_time', label: 'Pickup Time' },
+      { key: 'notes', label: 'Notes' },
+    ],
+    activity: [
+      { key: 'activity_name', label: 'Activity Name' },
+      { key: 'time', label: 'Time' },
+      { key: 'duration_hours', label: 'Duration (hrs)', type: 'number' },
+      { key: 'location', label: 'Location' },
+      { key: 'guide_name', label: 'Guide Name' },
+      { key: 'activity_ref', label: 'Activity Ref' },
+    ],
+    meal_plan: [
+      { key: 'location', label: 'Location' },
+      { key: 'meals_included', label: 'Meals Included' },
+      { key: 'notes', label: 'Notes' },
+    ],
+  };
+
+  const fields = detailFields[itemType] || [];
+
+  return (
+    <div className="space-y-4 mt-4">
+      <div className="space-y-2">
+        <Label>Type</Label>
+        <Select value={itemType} onValueChange={(v) => setItemType(v as ItemType)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="flight_segment">Flight</SelectItem>
+            <SelectItem value="hotel_room">Hotel</SelectItem>
+            <SelectItem value="transfer">Transfer</SelectItem>
+            <SelectItem value="activity">Activity</SelectItem>
+            <SelectItem value="meal_plan">Meal Plan</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Label *</Label>
+        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Delhi to Goa — IndiGo 6E-204" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>Start Date</Label>
+          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label>End Date</Label>
+          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>Cost Price</Label>
+          <Input type="number" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} placeholder="0.00" />
+        </div>
+        <div className="space-y-2">
+          <Label>Sell Price</Label>
+          <Input type="number" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder="0.00" />
+        </div>
+      </div>
+
+      {/* Dynamic detail fields */}
+      {fields.length > 0 && (
+        <div className="space-y-3 border-t pt-4">
+          <p className="text-sm font-medium text-muted-foreground">{ITEM_TYPE_LABELS[itemType]} Details</p>
+          <div className="grid grid-cols-2 gap-3">
+            {fields.map((f) => (
+              <div key={f.key} className="space-y-1">
+                <Label className="text-xs">{f.label}</Label>
+                <Input
+                  type={f.type || 'text'}
+                  value={(details[f.key] as string) || ''}
+                  onChange={(e) => setDetails({ ...details, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="border-t pt-4 space-y-3">
+        <p className="text-sm font-medium text-muted-foreground">Supplier Status</p>
+        <Select value={supplierStatus} onValueChange={(v) => setSupplierStatus(v as SupplierStatus)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="requested">Requested</SelectItem>
+            <SelectItem value="confirmed">Confirmed</SelectItem>
+            <SelectItem value="modified">Modified</SelectItem>
+            <SelectItem value="cancelled">Cancelled</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="space-y-2">
+          <Label>Supplier Reference</Label>
+          <Input value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} placeholder="Confirmation / PNR / Ref #" />
+        </div>
+        <div className="space-y-2">
+          <Label>Supplier Notes</Label>
+          <Textarea value={supplierNotes} onChange={(e) => setSupplierNotes(e.target.value)} rows={2} placeholder="Internal supplier notes..." />
+        </div>
+      </div>
+
+      <div className="flex gap-2 pt-2">
+        <Button onClick={handleSubmit} className="flex-1">
+          <Save className="h-3.5 w-3.5 mr-1" /> {item ? 'Update' : 'Add'} Item
+        </Button>
+        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+      </div>
     </div>
   );
 }

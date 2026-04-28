@@ -1,44 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { ZodError } from 'zod';
+import { createServiceClient } from '@/lib/supabase/server';
+import { withAuth } from '@/lib/api/with-auth';
+import { updateProposalSchema } from '@/lib/schemas/proposals';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const { id } = await params;
+    const auth = await withAuth(request, { checkOwnership: { table: 'proposals', id } });
+    if (auth instanceof NextResponse) return auth;
 
-  const supabase = createServiceClient();
-  const body = await request.json();
+    const body = await request.json();
+    const validated = updateProposalSchema.parse(body);
 
-  // Whitelist of allowed fields for PATCH
-  const allowedFields = [
-    'title', 'destination', 'travel_start', 'travel_end',
-    'pax_adults', 'pax_children', 'children_ages', 'special_notes', 'dietary_notes',
-    'cover_image_url', 'cover_image_source', 'cover_image_approved_at',
-    'gst_enabled', 'gst_rate', 'tcs_enabled', 'tcs_rate',
-    'rounding_unit', 'discount_amount', 'discount_note',
-    'payment_terms', 'currency', 'quote_type',
-    'package_cp_per_person', 'package_sp_per_person',
-    'package_cwb_sp', 'package_cnb_sp',
-    'visa_section_enabled',
-    'trip_cities',
-    'land_cp', 'land_sp', 'pricing_display_mode', 'total_sp',
-  ];
+    if (Object.keys(validated).length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+    }
 
-  const updates: Record<string, unknown> = {};
-  for (const key of allowedFields) {
-    if (key in body) updates[key] = body[key];
+    const supabase = createServiceClient();
+    const { error } = await supabase.from('proposals').update(validated).eq('id', id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    if (err instanceof ZodError) {
+      return NextResponse.json({ error: 'Invalid request', details: err.issues }, { status: 400 });
+    }
+    console.error('Route error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-
-  if (Object.keys(updates).length === 0) {
-    return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
-  }
-
-  const { error } = await supabase.from('proposals').update(updates).eq('id', id);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ success: true });
 }

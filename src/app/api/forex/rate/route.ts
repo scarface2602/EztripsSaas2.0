@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ZodError, z } from 'zod';
 import { fetchLiveRate } from '@/lib/utils/forex';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { withAuth } from '@/lib/api/with-auth';
+import { createServiceClient } from '@/lib/supabase/server';
+
+const forexRateSchema = z.object({
+  from_currency: z.string().length(3),
+  proposal_id: z.string().uuid().optional(),
+});
 
 export async function POST(request: NextRequest) {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const supabase = createServiceClient();
-  const { from_currency, proposal_id } = await request.json();
-
   try {
+    const auth = await withAuth(request);
+    if (auth instanceof NextResponse) return auth;
+
+    const body = await request.json();
+    const { from_currency, proposal_id } = forexRateSchema.parse(body);
+
+    const supabase = createServiceClient();
     const rate = await fetchLiveRate(from_currency);
 
     // Lock to proposal if provided
@@ -25,7 +32,11 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ rate, from_currency, to_currency: 'INR' });
-  } catch {
-    return NextResponse.json({ error: 'Failed to fetch rate' }, { status: 500 });
+  } catch (err) {
+    if (err instanceof ZodError) {
+      return NextResponse.json({ error: 'Invalid request', details: err.issues }, { status: 400 });
+    }
+    console.error('Route error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

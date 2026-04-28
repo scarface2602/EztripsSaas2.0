@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { FileText, Upload, Wand2, Loader2, AlertTriangle, Info, ArrowRight, Package, List, Plus, Trash2 } from 'lucide-react';
+import { FileText, Upload, Wand2, Loader2, AlertTriangle, Info, ArrowRight, Package, List, Plus, Trash2, Mail } from 'lucide-react';
 import type { TripCity } from '@/lib/types/database';
 import { CURRENCY_OPTIONS } from '@/lib/utils/pricing';
 import { SupplierSelect, ClientSelect } from '@/components/ui/inline-add-select';
@@ -49,18 +49,49 @@ export default function NewProposalPage() {
   const [currency, setCurrency] = useState('INR');
   const [tripCities, setTripCities] = useState<TripCity[]>([]);
   const [prevStep, setPrevStep] = useState<'manual' | 'review'>('manual');
+  const [enquiryName, setEnquiryName] = useState('');
 
   useEffect(() => {
-    async function fetch() {
+    async function fetchData() {
       const [c, s] = await Promise.all([
         supabase.from('clients').select('*').order('full_name'),
         supabase.from('suppliers').select('*').order('name'),
       ]);
       setClients((c.data as Client[]) || []);
       setSuppliers((s.data as Supplier[]) || []);
+
+      // If coming from an enquiry, fetch enquiry data to pre-fill the form
+      if (enquiryId) {
+        const { data: enq } = await supabase
+          .from('website_enquiries')
+          .select('*')
+          .eq('id', enquiryId)
+          .single();
+
+        if (enq) {
+          setEnquiryName(enq.name || '');
+          if (enq.destination) {
+            setDestination(enq.destination);
+            setTitle(`Trip to ${enq.destination}`);
+          }
+          if (enq.travel_date) setTravelStart(enq.travel_date);
+          if (enq.travel_date && enq.number_of_nights) {
+            const start = new Date(enq.travel_date);
+            start.setDate(start.getDate() + enq.number_of_nights);
+            setTravelEnd(start.toISOString().split('T')[0]);
+          }
+          if (enq.adults) setPaxAdults(enq.adults);
+          if (enq.children) setPaxChildren(enq.children);
+          if (enq.children_ages) {
+            const ages = String(enq.children_ages).split(',').map(Number).filter(n => !isNaN(n));
+            if (ages.length > 0) setChildrenAges(ages);
+          }
+          if (enq.client_id) setSelectedClient(enq.client_id);
+        }
+      }
     }
-    fetch();
-  }, [supabase]);
+    fetchData();
+  }, [supabase, enquiryId]);
 
   function handleSupplierAdded(s: { id: string; name: string }) {
     setSuppliers(prev => [...prev, { id: s.id, name: s.name, created_by: null, type: null, country: null, contact_name: null, contact_email: null, contact_phone: null, payment_terms_days: null, notes: null, created_at: new Date().toISOString() } as Supplier]);
@@ -150,7 +181,17 @@ export default function NewProposalPage() {
         }),
       });
       const data = await res.json();
-      if (data.id) router.push(`/proposals/${data.id}`);
+      if (data.id) {
+        // Update enquiry status if this proposal was created from an enquiry
+        if (enquiryId) {
+          await fetch('/api/website/cms/enquiries', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: enquiryId, status: 'proposal_sent' }),
+          });
+        }
+        router.push(`/proposals/${data.id}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -180,6 +221,15 @@ export default function NewProposalPage() {
     }).select().single();
 
     if (data) {
+      // Update enquiry status if this proposal was created from an enquiry
+      if (enquiryId) {
+        fetch('/api/website/cms/enquiries', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: enquiryId, status: 'proposal_sent' }),
+        });
+      }
+
       // Seed itinerary days from the date range so the itinerary tab is
       // populated immediately. Inclusive on both ends to match the convention
       // in /api/quotes/save: arrival day + nights + departure day.
@@ -223,6 +273,22 @@ export default function NewProposalPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">New Proposal</h1>
+
+      {enquiryId && enquiryName && (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm">
+          <Mail className="h-4 w-4 text-blue-600" />
+          <span className="text-blue-800">
+            Creating from enquiry by <span className="font-medium">{enquiryName}</span>
+            {destination && <> for <span className="font-medium">{destination}</span></>}
+          </span>
+          <button
+            className="ml-auto text-blue-600 hover:underline text-xs"
+            onClick={() => router.push(`/admin/website/enquiries/${enquiryId}`)}
+          >
+            View enquiry
+          </button>
+        </div>
+      )}
 
       {step === 'quote-type' && (
         <div className="space-y-4">

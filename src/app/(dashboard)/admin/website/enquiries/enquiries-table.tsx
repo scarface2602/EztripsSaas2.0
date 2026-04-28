@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Flame, Thermometer, Snowflake } from 'lucide-react';
+import { Flame, Thermometer, Snowflake, FileText } from 'lucide-react';
 
 type Enquiry = Record<string, unknown>;
 
@@ -64,6 +64,7 @@ export default function EnquiriesTable({ initialData }: { initialData: Enquiry[]
                 <TableHead>Travel Date</TableHead>
                 <TableHead>Pax</TableHead>
                 <TableHead>Budget</TableHead>
+                <TableHead>Proposals</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Follow-up</TableHead>
                 <TableHead>Date</TableHead>
@@ -72,7 +73,7 @@ export default function EnquiriesTable({ initialData }: { initialData: Enquiry[]
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                     No enquiries found
                   </TableCell>
                 </TableRow>
@@ -107,6 +108,16 @@ export default function EnquiriesTable({ initialData }: { initialData: Enquiry[]
                       <TableCell className="text-sm">{(e.travel_date as string) || '—'}</TableCell>
                       <TableCell>{e.adults as number}{(e.children as number) > 0 ? ` + ${e.children}C` : ''}</TableCell>
                       <TableCell className="text-sm">{(e.budget_range as string) || '—'}</TableCell>
+                      <TableCell>
+                        {(e.proposal_count as number) > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-sm text-indigo-600 font-medium">
+                            <FileText className="h-3.5 w-3.5" />
+                            {e.proposal_count as number}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge className={STATUS_COLORS[(e.status as string) || 'new']}>
                           {(e.status as string)?.replace('_', ' ')}
