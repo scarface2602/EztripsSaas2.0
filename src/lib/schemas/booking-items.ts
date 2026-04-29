@@ -10,7 +10,7 @@ export const createBookingItemSchema = z.object({
   currency: z.string().length(3).optional(),
   status: z.enum(['pending', 'confirmed', 'cancelled']).optional(),
   supplier_id: z.string().uuid().optional().nullable(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const updateBookingItemSchema = createBookingItemSchema.partial().omit({ booking_id: true });

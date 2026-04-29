@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -60,11 +61,12 @@ export default function DestinationsManager({
               onClick={() => router.push(`/admin/website/destinations/${dest.id}`)}
             >
               {typeof dest.cover_image === 'string' && dest.cover_image && (
-                <div className="h-32 overflow-hidden rounded-t-lg">
-                  <img
+                <div className="relative h-32 overflow-hidden rounded-t-lg">
+                  <Image
                     src={dest.cover_image as string}
                     alt={dest.title as string}
-                    className="w-full h-full object-cover"
+                    fill
+                    className="object-cover"
                   />
                 </div>
               )}

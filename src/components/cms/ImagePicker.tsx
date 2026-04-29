@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -61,7 +62,7 @@ export default function ImagePicker({
       <div className="flex gap-2 mt-1">
         {value && (
           <div className="relative w-16 h-16 rounded-lg overflow-hidden border bg-muted shrink-0">
-            <img src={value} alt="" className="w-full h-full object-cover" />
+            <Image src={value} alt="" fill sizes="64px" className="object-cover" />
             <button
               onClick={() => onChange('')}
               className="absolute top-0 right-0 bg-black/60 text-white rounded-bl p-0.5"
@@ -106,7 +107,9 @@ export default function ImagePicker({
                 onChange={e => setUrlInput(e.target.value)}
               />
               {urlInput && (
-                <img src={urlInput} alt="Preview" className="w-full h-40 object-cover rounded-lg" />
+                <div className="relative w-full h-40">
+                  <Image src={urlInput} alt="Preview" fill className="object-cover rounded-lg" />
+                </div>
               )}
               <Button
                 onClick={() => { onChange(urlInput); setDialogOpen(false); }}
@@ -158,8 +161,9 @@ export default function ImagePicker({
                       key={img.name}
                       onClick={() => { onChange(img.url); setDialogOpen(false); }}
                       className="relative aspect-square rounded-lg overflow-hidden border-2 hover:border-primary transition-colors"
+
                     >
-                      <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                      <Image src={img.url} alt={img.name} fill className="object-cover" />
                     </button>
                   ))}
                 </div>

@@ -83,7 +83,7 @@ export async function GET(
   const supplierName = voucher.supplier_name || voucher.supplier_type;
   const filename = `${voucher.supplier_type}_voucher_${supplierName.replace(/\s+/g, '_')}.pdf`;
 
-  return new NextResponse(pdfBuffer, {
+  return new NextResponse(new Uint8Array(pdfBuffer), {
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,
@@ -120,7 +120,7 @@ export async function POST(
     .eq('id', id)
     .single();
 
-  const recipientEmail = email_to || (booking?.clients as Record<string, string>)?.email;
+  const recipientEmail = email_to || (booking?.clients as unknown as Record<string, string>)?.email;
   if (!recipientEmail) {
     return NextResponse.json({ error: 'No recipient email' }, { status: 400 });
   }
@@ -149,7 +149,7 @@ export async function POST(
   }
 
   const pdfBuffer = await htmlToPdf(html);
-  const customerName = content.customerName || (booking?.clients as Record<string, string>)?.full_name || 'Guest';
+  const customerName = content.customerName || (booking?.clients as unknown as Record<string, string>)?.full_name || 'Guest';
 
   await sendVoucherEmail({
     to: recipientEmail,

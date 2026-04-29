@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CheckCircle2, ExternalLink, AlertCircle } from 'lucide-react';
+import { CheckCircle2, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { ITEM_TYPE_LABELS, SUPPLIER_STATUS_COLORS } from '@/lib/types/booking-items';

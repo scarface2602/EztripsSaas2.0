@@ -1,7 +1,5 @@
 import nodemailer from 'nodemailer';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://eztrips-saas.vercel.app';
-
 function createTransport() {
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
