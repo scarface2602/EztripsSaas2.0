@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 import { signOut } from '@/lib/auth/actions';
 import type { User } from '@/lib/types/database';
 import {
-  Plane,
   LayoutDashboard,
   FileText,
   Users,
@@ -24,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { EzTripsLogo } from '@/components/eztrips-logo';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -56,14 +56,11 @@ export function Sidebar({ user }: { user: User }) {
 
   return (
     <aside className="w-64 bg-background border-r flex flex-col h-full">
-      <div className="p-4 flex items-center gap-2">
-        <Plane className="h-6 w-6 text-primary" />
-        <div>
-          <h1 className="font-bold text-lg leading-tight">EzTrips</h1>
-          {user.agency_name && (
-            <p className="text-xs text-muted-foreground truncate">{user.agency_name}</p>
-          )}
-        </div>
+      <div className="p-4">
+        <EzTripsLogo />
+        {user.agency_name && (
+          <p className="text-xs text-muted-foreground truncate mt-1 ml-8">{user.agency_name}</p>
+        )}
       </div>
       <Separator />
       <nav className="flex-1 p-3 space-y-1">

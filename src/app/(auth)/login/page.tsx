@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Plane } from 'lucide-react';
+import { EzTripsLogo } from '@/components/eztrips-logo';
 
 export default function LoginPage() {
   const [error, setError] = useState('');
@@ -29,9 +29,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Plane className="h-8 w-8 text-primary" />
-            <span className="text-2xl font-bold">EzTrips</span>
+          <div className="flex items-center justify-center mb-2">
+            <EzTripsLogo size="lg" />
           </div>
           <CardTitle className="text-xl">Sign in to your account</CardTitle>
           <CardDescription>Enter your credentials to access the dashboard</CardDescription>
@@ -39,7 +38,7 @@ export default function LoginPage() {
         <CardContent>
           <form action={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+              <div className="p-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
                 {error}
               </div>
             )}
