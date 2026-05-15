@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -94,7 +93,8 @@ export default function BookingDetailPage() {
   const [blockingExpires, setBlockingExpires] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Item expand state
+  // Tab + item expand state
+  const [activeTab, setActiveTab] = useState<'items' | 'payments' | 'details' | 'emails' | 'logs'>('items');
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -273,206 +273,228 @@ export default function BookingDetailPage() {
         </div>
       )}
 
-      {/* Main content — Tabs stacked vertically */}
-      <Tabs defaultValue="items">
-        <TabsList>
-          <TabsTrigger value="items" className="gap-1"><Package className="h-3.5 w-3.5" /> Items & Confirmations ({items.length})</TabsTrigger>
-          <TabsTrigger value="payments" className="gap-1"><CreditCard className="h-3.5 w-3.5" /> Payments ({payments.length})</TabsTrigger>
-          <TabsTrigger value="details" className="gap-1"><FileText className="h-3.5 w-3.5" /> Details</TabsTrigger>
-          <TabsTrigger value="emails" className="gap-1"><Mail className="h-3.5 w-3.5" /> Emails ({emails.length})</TabsTrigger>
-          <TabsTrigger value="logs" className="gap-1"><Clock className="h-3.5 w-3.5" /> Activity Log</TabsTrigger>
-        </TabsList>
-
-        {/* Items & Confirmations Tab — the main ops view */}
-        <TabsContent value="items" className="space-y-3 mt-4">
-          {items.length === 0 ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">No items. Items are auto-created when a booking is made from a proposal.</CardContent></Card>
-          ) : items.map((item) => (
-            <ItemCard
-              key={item.id}
-              item={item}
-              currency={booking.currency}
-              isExpanded={expandedItemId === item.id}
-              onToggle={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}
-              onUpdateStatus={(status, vendorData) => updateItem(item.id, { supplier_status: status, ...vendorData })}
-              onDelete={() => deleteItem(item.id)}
-            />
+      {/* Section navigation — manual tab bar (same pattern as proposal editor) */}
+      <div className="w-full">
+        <div className="sticky top-0 z-10 flex flex-wrap gap-1 bg-muted p-1 rounded-lg">
+          {([
+            ['items', `Items & Confirmations (${items.length})`],
+            ['payments', `Payments (${payments.length})`],
+            ['details', 'Details'],
+            ['emails', `Emails (${emails.length})`],
+            ['logs', 'Activity Log'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                activeTab === key
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {key === 'items' && <Package className="h-3.5 w-3.5" />}
+              {key === 'payments' && <CreditCard className="h-3.5 w-3.5" />}
+              {key === 'details' && <FileText className="h-3.5 w-3.5" />}
+              {key === 'emails' && <Mail className="h-3.5 w-3.5" />}
+              {key === 'logs' && <Clock className="h-3.5 w-3.5" />}
+              {label}
+            </button>
           ))}
+        </div>
 
-          {/* Items total summary */}
-          {items.length > 0 && (
-            <div className="flex justify-end gap-6 text-sm text-muted-foreground pt-2">
-              <span>Total Cost: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.cost_price || 0), 0).toLocaleString()}</strong></span>
-              <span>Total Sell: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.sell_price || 0), 0).toLocaleString()}</strong></span>
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Payments Tab */}
-        <TabsContent value="payments">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">Payment Schedule</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>#</TableHead>
-                    <TableHead>Label</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead>Paid Date</TableHead>
-                    <TableHead>Mode</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payments.length === 0 ? (
-                    <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">No payment installments</TableCell></TableRow>
-                  ) : payments.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell>{p.installment_number}</TableCell>
-                      <TableCell className="font-medium">{p.installment_label || '-'}</TableCell>
-                      <TableCell className="font-medium">{booking.currency} {Number(p.amount).toLocaleString()}</TableCell>
-                      <TableCell>{p.due_date ? format(new Date(p.due_date), 'dd MMM yyyy') : '-'}</TableCell>
-                      <TableCell>{p.paid_date ? format(new Date(p.paid_date), 'dd MMM yyyy') : '-'}</TableCell>
-                      <TableCell className="capitalize">{p.payment_mode?.replace('_', ' ') || '-'}</TableCell>
-                      <TableCell className="text-xs font-mono">{p.reference_number || '-'}</TableCell>
-                      <TableCell><Badge className={BOOKING_STATUS_COLORS[p.status] || ''}>{p.status}</Badge></TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {p.status === 'pending' && (
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => markPayment(p.id, 'paid')} title="Mark paid">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => deletePayment(p.id)} title="Delete">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Details Tab */}
-        <TabsContent value="details">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">Booking Details</CardTitle>
-              <Button size="sm" onClick={saveDetails} disabled={saving}>
-                <Save className="h-3.5 w-3.5 mr-1" /> Save
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Reference / Confirmation Number</Label>
-                  <Input value={refNumber} onChange={(e) => setRefNumber(e.target.value)} placeholder="Supplier confirmation #" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Pax</Label>
-                  <Input disabled value={`${booking.pax_adults} Adults${booking.pax_children > 0 ? `, ${booking.pax_children} Children` : ''}`} />
-                </div>
-                {booking.booking_type === 'hotel' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Blocking Reference</Label>
-                      <Input value={blockingRef} onChange={(e) => setBlockingRef(e.target.value)} placeholder="Hotel blocking ref" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Blocking Expires</Label>
-                      <Input type="date" value={blockingExpires} onChange={(e) => setBlockingExpires(e.target.value)} />
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Internal Notes</Label>
-                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder="Internal notes..." />
-              </div>
-              {booking.proposal_id && (
-                <div className="text-sm text-muted-foreground">
-                  From proposal: <span className="font-medium">{booking.proposals?.title || booking.proposal_id}</span>
-                  {booking.proposals?.quote_type && ` (${booking.proposals.quote_type})`}
+        {/* Tab content — full width below */}
+        <div className="mt-4 w-full">
+          {/* Items & Confirmations */}
+          {activeTab === 'items' && (
+            <div className="space-y-3">
+              {items.length === 0 ? (
+                <Card><CardContent className="py-8 text-center text-muted-foreground">No items. Items are auto-created when a booking is made from a proposal.</CardContent></Card>
+              ) : items.map((item) => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  currency={booking.currency}
+                  isExpanded={expandedItemId === item.id}
+                  onToggle={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}
+                  onUpdateStatus={(status, vendorData) => updateItem(item.id, { supplier_status: status, ...vendorData })}
+                  onDelete={() => deleteItem(item.id)}
+                />
+              ))}
+              {items.length > 0 && (
+                <div className="flex justify-end gap-6 text-sm text-muted-foreground pt-2">
+                  <span>Total Cost: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.cost_price || 0), 0).toLocaleString()}</strong></span>
+                  <span>Total Sell: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.sell_price || 0), 0).toLocaleString()}</strong></span>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+          )}
 
-        {/* Emails Tab */}
-        <TabsContent value="emails">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Supplier Emails</CardTitle></CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>To</TableHead>
-                    <TableHead>Template</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Sent</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {emails.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">No emails</TableCell></TableRow>
-                  ) : emails.map((e) => (
-                    <TableRow key={e.id}>
-                      <TableCell className="font-medium">{e.subject}</TableCell>
-                      <TableCell>{e.to_email || '-'}</TableCell>
-                      <TableCell className="capitalize">{e.template_type?.replace('_', ' ') || '-'}</TableCell>
-                      <TableCell><Badge className={BOOKING_STATUS_COLORS[e.status] || ''}>{e.status}</Badge></TableCell>
-                      <TableCell>{e.sent_at ? format(new Date(e.sent_at), 'dd MMM HH:mm') : '-'}</TableCell>
+          {/* Payments */}
+          {activeTab === 'payments' && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base">Payment Schedule</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Label</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead>Paid Date</TableHead>
+                      <TableHead>Mode</TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  </TableHeader>
+                  <TableBody>
+                    {payments.length === 0 ? (
+                      <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">No payment installments</TableCell></TableRow>
+                    ) : payments.map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell>{p.installment_number}</TableCell>
+                        <TableCell className="font-medium">{p.installment_label || '-'}</TableCell>
+                        <TableCell className="font-medium">{booking.currency} {Number(p.amount).toLocaleString()}</TableCell>
+                        <TableCell>{p.due_date ? format(new Date(p.due_date), 'dd MMM yyyy') : '-'}</TableCell>
+                        <TableCell>{p.paid_date ? format(new Date(p.paid_date), 'dd MMM yyyy') : '-'}</TableCell>
+                        <TableCell className="capitalize">{p.payment_mode?.replace('_', ' ') || '-'}</TableCell>
+                        <TableCell className="text-xs font-mono">{p.reference_number || '-'}</TableCell>
+                        <TableCell><Badge className={BOOKING_STATUS_COLORS[p.status] || ''}>{p.status}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {p.status === 'pending' && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => markPayment(p.id, 'paid')} title="Mark paid">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => deletePayment(p.id)} title="Delete">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
-        {/* Activity Log Tab */}
-        <TabsContent value="logs">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Activity Log</CardTitle></CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {logs.length === 0 ? (
-                  <p className="text-center py-6 text-muted-foreground">No activity yet</p>
-                ) : logs.map((l) => (
-                  <div key={l.id} className="flex items-start gap-3 text-sm border-b pb-2 last:border-0">
-                    <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                    <div className="flex-1">
-                      <span className="font-medium">{l.action.replace(/_/g, ' ')}</span>
-                      {l.details && (
-                        <span className="text-muted-foreground ml-2">
-                          {Object.entries(l.details)
-                            .filter(([, v]) => v)
-                            .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`)
-                            .join(' | ')}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground whitespace-nowrap">
-                      {l.users?.full_name || 'System'} · {format(new Date(l.created_at), 'dd MMM HH:mm')}
-                    </div>
+          {/* Details */}
+          {activeTab === 'details' && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base">Booking Details</CardTitle>
+                <Button size="sm" onClick={saveDetails} disabled={saving}>
+                  <Save className="h-3.5 w-3.5 mr-1" /> Save
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Reference / Confirmation Number</Label>
+                    <Input value={refNumber} onChange={(e) => setRefNumber(e.target.value)} placeholder="Supplier confirmation #" />
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                  <div className="space-y-2">
+                    <Label>Pax</Label>
+                    <Input disabled value={`${booking.pax_adults} Adults${booking.pax_children > 0 ? `, ${booking.pax_children} Children` : ''}`} />
+                  </div>
+                  {booking.booking_type === 'hotel' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Blocking Reference</Label>
+                        <Input value={blockingRef} onChange={(e) => setBlockingRef(e.target.value)} placeholder="Hotel blocking ref" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Blocking Expires</Label>
+                        <Input type="date" value={blockingExpires} onChange={(e) => setBlockingExpires(e.target.value)} />
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Internal Notes</Label>
+                  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder="Internal notes..." />
+                </div>
+                {booking.proposal_id && (
+                  <div className="text-sm text-muted-foreground">
+                    From proposal: <span className="font-medium">{booking.proposals?.title || booking.proposal_id}</span>
+                    {booking.proposals?.quote_type && ` (${booking.proposals.quote_type})`}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Emails */}
+          {activeTab === 'emails' && (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Supplier Emails</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Subject</TableHead>
+                      <TableHead>To</TableHead>
+                      <TableHead>Template</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Sent</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {emails.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">No emails</TableCell></TableRow>
+                    ) : emails.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell className="font-medium">{e.subject}</TableCell>
+                        <TableCell>{e.to_email || '-'}</TableCell>
+                        <TableCell className="capitalize">{e.template_type?.replace('_', ' ') || '-'}</TableCell>
+                        <TableCell><Badge className={BOOKING_STATUS_COLORS[e.status] || ''}>{e.status}</Badge></TableCell>
+                        <TableCell>{e.sent_at ? format(new Date(e.sent_at), 'dd MMM HH:mm') : '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Activity Log */}
+          {activeTab === 'logs' && (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Activity Log</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {logs.length === 0 ? (
+                    <p className="text-center py-6 text-muted-foreground">No activity yet</p>
+                  ) : logs.map((l) => (
+                    <div key={l.id} className="flex items-start gap-3 text-sm border-b pb-2 last:border-0">
+                      <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <span className="font-medium">{l.action.replace(/_/g, ' ')}</span>
+                        {l.details && (
+                          <span className="text-muted-foreground ml-2">
+                            {Object.entries(l.details)
+                              .filter(([, v]) => v)
+                              .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`)
+                              .join(' | ')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground whitespace-nowrap">
+                        {l.users?.full_name || 'System'} · {format(new Date(l.created_at), 'dd MMM HH:mm')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
