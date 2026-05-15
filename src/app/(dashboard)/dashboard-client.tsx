@@ -201,7 +201,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
 
       {/* Stats bar — enquiries + status counts */}
       <div className="grid grid-cols-6 gap-3">
-        <Link href="/enquiries?status=new">
+        <Link href="/admin/website/enquiries?status=new">
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-orange-200 bg-orange-50/50">
             <CardContent className="pt-5 pb-4">
               <p className="text-xs text-orange-700 uppercase tracking-wide mb-1 font-medium">New Enquiries</p>
@@ -296,7 +296,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
               <CardTitle className="text-sm flex items-center gap-2">
                 <Inbox className="h-4 w-4 text-orange-600" /> Recent Enquiries
               </CardTitle>
-              <Link href="/enquiries">
+              <Link href="/admin/website/enquiries">
                 <Button variant="ghost" size="sm" className="text-xs h-7">View All</Button>
               </Link>
             </div>
@@ -307,15 +307,15 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
                 <div key={eq.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-muted/30">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm truncate">{eq.client_name || 'Unknown'}</span>
+                      <span className="font-medium text-sm truncate">{eq.name || 'Unknown'}</span>
                       <Badge className={eq.status === 'new' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700'} variant="secondary">
                         {eq.status}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {eq.destination || 'No destination'}
-                      {eq.travel_dates && ` · ${eq.travel_dates}`}
-                      {eq.pax && ` · ${eq.pax} pax`}
+                      {eq.travel_date && ` · ${eq.travel_date}`}
+                      {eq.adults && ` · ${eq.adults}A${eq.children ? ` + ${eq.children}C` : ''}`}
                     </p>
                   </div>
                   <Link href={`/proposals/new?enquiry_id=${eq.id}`}>

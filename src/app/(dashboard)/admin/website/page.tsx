@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Globe, Inbox, MapPin, FileText, Package, ArrowRight } from 'lucide-react';
+import { Globe, Inbox, MapPin, FileText, Package, ArrowRight, LayoutList } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
@@ -16,12 +16,14 @@ export default async function WebsiteCMSPage() {
     { count: newEnquiries },
     { count: publishedDestinations },
     { count: publishedBlogPosts },
+    { count: publishedPages },
     { data: recentEnquiries },
   ] = await Promise.all([
     supabase.from('website_enquiries').select('*', { count: 'exact', head: true }),
     supabase.from('website_enquiries').select('*', { count: 'exact', head: true }).eq('status', 'new'),
     supabase.from('website_destinations').select('*', { count: 'exact', head: true }).eq('published', true),
     supabase.from('website_blog_posts').select('*', { count: 'exact', head: true }).eq('published', true),
+    supabase.from('website_pages').select('*', { count: 'exact', head: true }).eq('published', true),
     supabase.from('website_enquiries').select('*').order('created_at', { ascending: false }).limit(5),
   ]);
 
@@ -40,7 +42,7 @@ export default async function WebsiteCMSPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total Enquiries</p>
@@ -65,12 +67,19 @@ export default async function WebsiteCMSPage() {
             <p className="text-3xl font-bold">{publishedBlogPosts ?? 0}</p>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Published Pages</p>
+            <p className="text-3xl font-bold">{publishedPages ?? 0}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Quick Links */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { href: '/admin/website/enquiries', icon: Inbox, label: 'Enquiries' },
+          { href: '/admin/website/pages', icon: LayoutList, label: 'Pages' },
           { href: '/admin/website/destinations', icon: MapPin, label: 'Destinations' },
           { href: '/admin/website/blog', icon: FileText, label: 'Blog Posts' },
           { href: '/admin/website/packages', icon: Package, label: 'Packages' },

@@ -5,10 +5,11 @@ import type { Proposal } from '@/lib/types/database';
 
 export interface DashboardEnquiry {
   id: string;
-  client_name: string | null;
+  name: string | null;
   destination: string | null;
-  travel_dates: string | null;
-  pax: string | null;
+  travel_date: string | null;
+  adults: number | null;
+  children: number | null;
   source: string | null;
   status: string;
   created_at: string;
@@ -29,8 +30,8 @@ export default async function DashboardPage() {
       supabase.from('proposals').select('*, clients(full_name)').order('created_at', { ascending: false }),
       supabase.from('receivables').select('*').eq('status', 'pending'),
       supabase.from('payables').select('*').eq('status', 'pending'),
-      supabase.from('enquiries').select('id', { count: 'exact', head: true }).eq('status', 'new'),
-      supabase.from('enquiries').select('id, client_name, destination, travel_dates, pax, source, status, created_at').order('created_at', { ascending: false }).limit(5),
+      supabase.from('website_enquiries').select('id', { count: 'exact', head: true }).eq('status', 'new'),
+      supabase.from('website_enquiries').select('id, name, destination, travel_date, adults, children, source, status, created_at').order('created_at', { ascending: false }).limit(5),
     ]);
 
     proposals = (proposalsRes.data || []) as Proposal[];
