@@ -54,11 +54,37 @@ export function ShareLinkClient({
   const [flightCountdown, setFlightCountdown] = useState<number | null>(null);
   const [showVersions, setShowVersions] = useState(false);
 
-  const dualActivities    = activities.filter(a => a.option_mode === 'dual');
+  const dualActivities = activities.filter(a => a.option_mode === 'dual');
   const optionalActivities = activities.filter(a => a.is_optional);
-  const allDualChosen     = dualActivities.every(a => dualChoices[a.id as string]);
-  const flightExpired     = !!proposal.flight_expires_at && new Date(proposal.flight_expires_at as string) < new Date();
-  const landExpiring      = !!proposal.land_expires_at && new Date(proposal.land_expires_at as string) < new Date();
+  const allDualChosen = dualActivities.every(a => dualChoices[a.id as string]);
+
+  // Determine expiry message based on what's in the proposal
+  const getExpiryMessage = () => {
+    const now = new Date();
+    const hasFlights = flights && flights.length > 0;
+    const hasHotels = hotels && hotels.length > 0;
+    const hasActivities = activities && activities.length > 0;
+
+    const flightExpired = !!proposal.flight_expires_at && new Date(proposal.flight_expires_at as string) < now;
+    const landExpired = !!proposal.land_expires_at && new Date(proposal.land_expires_at as string) < now;
+
+    if (flightExpired && hasFlights && landExpired && (hasHotels || hasActivities)) {
+      return 'Prices have expired';
+    }
+
+    if (flightExpired && hasFlights) {
+      return 'Flight prices have expired';
+    }
+
+    if (landExpired && (hasHotels || hasActivities)) {
+      return 'Hotel & Activity prices have expired';
+    }
+
+    return null;
+  };
+
+  const expiryMsg = getExpiryMessage();
+  const flightExpired = !!proposal.flight_expires_at && new Date(proposal.flight_expires_at as string) < new Date();
 
   useEffect(() => {
     if (!proposal.flight_expires_at) return;
@@ -99,7 +125,7 @@ export function ShareLinkClient({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event_type: 'tc_accepted' }),
-    }).catch(() => {});
+    }).catch(() => { });
     router.push(`/p/${shareToken}/payment?total=${grandTotal}&addons=${Array.from(selectedAddons).join(',')}&choices=${JSON.stringify(dualChoices)}`);
   }
 
@@ -126,12 +152,12 @@ export function ShareLinkClient({
       {/* Single-column content, max-w constrained, responsive padding */}
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-4 -mt-6 relative z-10">
 
-        {/* TTL Warnings */}
-        {!!flightExpired && (
+        {/* TTL Warnings — Fixed to show specific expiry messages */}
+        {expiryMsg && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
             <div>
-              <p className="font-medium text-red-800">Flight prices have expired</p>
+              <p className="font-medium text-red-800">{expiryMsg}</p>
               <p className="text-sm text-red-700">Please request a refreshed quote from your agent.</p>
             </div>
           </div>
@@ -140,12 +166,6 @@ export function ShareLinkClient({
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-600 shrink-0" />
             <span className="text-sm text-amber-800">Flight prices valid for: <strong>{formatCountdown(flightCountdown)}</strong></span>
-          </div>
-        )}
-        {landExpiring && (
-          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0" />
-            <span className="text-sm text-yellow-800">Prices valid as of {fmt(proposal.land_expires_at as string)}. Rates may have changed.</span>
           </div>
         )}
 
@@ -163,14 +183,11 @@ export function ShareLinkClient({
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <span className="text-muted-foreground">Travellers:</span>
-              <span className="font-medium">{proposal.pax_adults as number} Adults{(proposal.pax_children as number) > 0 ? `, ${proposal.pax_children} Children` : ''}</span>
+              <span className="font-medium">
+                {proposal.pax_adults as number || 0} adult{(proposal.pax_adults as number) !== 1 ? 's' : ''}
+                {(proposal.pax_children as number) > 0 && `, ${proposal.pax_children as number} child${(proposal.pax_children as number) !== 1 ? 'ren' : ''}`}
+              </span>
             </div>
-            {!!proposal.special_notes && (
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                <span className="text-muted-foreground">Special Notes:</span>
-                <span>{String(proposal.special_notes)}</span>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -180,28 +197,16 @@ export function ShareLinkClient({
             <CardHeader className="pb-3"><CardTitle className="text-lg">Hotels</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               {hotels.map((h) => (
-                <div key={h.id as string} className="p-3 border rounded-lg">
-                  <div className="flex items-start gap-2 mb-2">
-                    {!!h.star_rating && (
-                      <span className="flex shrink-0 mt-0.5">
-                        {Array.from({ length: Number(h.star_rating) }).map((_, i) => (
-                          <Star key={i} className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                        ))}
-                      </span>
-                    )}
-                    <div>
-                      <span className="font-semibold">{h.name as string}</span>
-                      <span className="text-muted-foreground text-sm"> — {h.city as string}</span>
-                    </div>
+                <div key={h.id as string} className="pb-3 border-b last:border-0">
+                  <div className="flex justify-between items-start mb-1">
+                    <h3 className="font-semibold text-sm">{h.name as string}</h3>
+                    {h.star_rating && <Star className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />}
                   </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                    <div><span className="text-muted-foreground">Check-in: </span>{fmt(h.check_in as string)}</div>
-                    <div><span className="text-muted-foreground">Check-out: </span>{fmt(h.check_out as string)}</div>
-                    <div><span className="text-muted-foreground">Nights: </span>{h.nights as number}</div>
-                    <div><span className="text-muted-foreground">Room: </span>{(h.room_type as string) || 'N/A'}</div>
-                    <div className="col-span-2"><span className="text-muted-foreground">Meal Plan: </span>{(h.meal_plan as string) || 'N/A'}</div>
-                  </div>
-                  {!!h.description && <p className="mt-2 text-sm text-muted-foreground">{String(h.description)}</p>}
+                  <p className="text-xs text-muted-foreground">
+                    {h.city as string} · {fmt(h.check_in as string)} to {fmt(h.check_out as string)} ({h.nights as number} nights)
+                  </p>
+                  {h.room_type && <p className="text-xs text-muted-foreground">{h.room_type as string} · {h.meal_plan || 'RO'}</p>}
+                  {h.description && <p className="text-xs mt-1">{h.description as string}</p>}
                 </div>
               ))}
             </CardContent>
@@ -214,29 +219,13 @@ export function ShareLinkClient({
             <CardHeader className="pb-3"><CardTitle className="text-lg">Flights</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               {flights.map((f) => (
-                <div key={f.id as string} className="p-3 border rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      {!!f.airline && <span className="font-semibold">{String(f.airline)}</span>}
-                      {!!f.flight_number && <Badge variant="outline">{String(f.flight_number).toUpperCase()}</Badge>}
-                    </div>
-                    {!!f.cabin_class && <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">{String(f.cabin_class)}</Badge>}
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm mt-2">
-                    <div>
-                      <p className="font-medium">{f.origin_city as string}{f.origin_iata ? ` (${String(f.origin_iata).toUpperCase()})` : ''}</p>
-                      <p className="text-muted-foreground text-xs">{fmtDT(f.departure_at as string)}</p>
-                    </div>
-                    <div>
-                      <p className="font-medium">{f.destination_city as string}{f.destination_iata ? ` (${String(f.destination_iata).toUpperCase()})` : ''}</p>
-                      <p className="text-muted-foreground text-xs">{fmtDT(f.arrival_at as string)}</p>
-                    </div>
-                  </div>
-                  {!!f.baggage_allowance && (
-                    <p className="text-sm mt-1 text-muted-foreground">
-                      Baggage: {/^\d+(\.\d+)?$/.test(String(f.baggage_allowance).trim()) ? `${String(f.baggage_allowance).trim()} kg` : String(f.baggage_allowance)}
-                    </p>
-                  )}
+                <div key={f.id as string} className="pb-3 border-b last:border-0">
+                  <p className="font-semibold text-sm">{f.flight_number as string} ({f.airline as string})</p>
+                  <p className="text-xs text-muted-foreground">
+                    {f.origin_city as string} ({f.origin_iata as string}) → {f.destination_city as string} ({f.destination_iata as string})
+                  </p>
+                  {f.departure_at && <p className="text-xs text-muted-foreground">{fmt(f.departure_at as string)}</p>}
+                  {f.cabin_class && <p className="text-xs text-muted-foreground">{f.cabin_class as string}</p>}
                 </div>
               ))}
             </CardContent>
