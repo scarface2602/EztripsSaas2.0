@@ -32,7 +32,7 @@ export default function ProposalsPage() {
 
   const fetchProposals = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('proposals').select('*').order('created_at', { ascending: false });
+    let q = supabase.from('proposals').select('*, clients(full_name)').order('created_at', { ascending: false });
     if (statusFilter) q = q.eq('status', statusFilter);
     if (search) q = q.or(`title.ilike.%${search}%,destination.ilike.%${search}%`);
     const { data } = await q;
@@ -85,7 +85,7 @@ export default function ProposalsPage() {
               <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No proposals found</TableCell></TableRow>
             ) : proposals.map((p) => (
               <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/proposals/${p.id}`)}>
-                <TableCell className="font-medium">{p.title || 'Untitled'}</TableCell>
+                <TableCell className="font-medium">{(p as Proposal & { clients?: { full_name: string } }).clients?.full_name ? `${(p as Proposal & { clients?: { full_name: string } }).clients!.full_name.split(' ')[0]}'s Trip to ${p.destination}` : `Trip to ${p.destination}`}</TableCell>
                 <TableCell>{p.destination || 'N/A'}</TableCell>
                 <TableCell><Badge className={STATUS_COLORS[p.status]}>{p.status}</Badge></TableCell>
                 <TableCell>V{p.version}</TableCell>

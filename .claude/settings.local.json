@@ -49,7 +49,8 @@
       "Bash(ls:*)",
       "Bash(xargs -I{} basename {})",
       "Bash(find:*)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "Bash(npx shadcn@latest:*)"
     ]
   }
 }

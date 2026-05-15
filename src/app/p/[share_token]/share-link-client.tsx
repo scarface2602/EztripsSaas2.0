@@ -200,13 +200,13 @@ export function ShareLinkClient({
                 <div key={h.id as string} className="pb-3 border-b last:border-0">
                   <div className="flex justify-between items-start mb-1">
                     <h3 className="font-semibold text-sm">{h.name as string}</h3>
-                    {h.star_rating && <Star className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />}
+                    {Boolean(h.star_rating) && <Star className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {h.city as string} · {fmt(h.check_in as string)} to {fmt(h.check_out as string)} ({h.nights as number} nights)
                   </p>
-                  {h.room_type && <p className="text-xs text-muted-foreground">{h.room_type as string} · {h.meal_plan || 'RO'}</p>}
-                  {h.description && <p className="text-xs mt-1">{h.description as string}</p>}
+                  {Boolean(h.room_type) && <p className="text-xs text-muted-foreground">{h.room_type as string} · {(h.meal_plan as string) || 'RO'}</p>}
+                  {Boolean(h.description) && <p className="text-xs mt-1">{h.description as string}</p>}
                 </div>
               ))}
             </CardContent>
@@ -224,8 +224,8 @@ export function ShareLinkClient({
                   <p className="text-xs text-muted-foreground">
                     {f.origin_city as string} ({f.origin_iata as string}) → {f.destination_city as string} ({f.destination_iata as string})
                   </p>
-                  {f.departure_at && <p className="text-xs text-muted-foreground">{fmt(f.departure_at as string)}</p>}
-                  {f.cabin_class && <p className="text-xs text-muted-foreground">{f.cabin_class as string}</p>}
+                  {Boolean(f.departure_at) && <p className="text-xs text-muted-foreground">{fmt(f.departure_at as string)}</p>}
+                  {Boolean(f.cabin_class) && <p className="text-xs text-muted-foreground">{f.cabin_class as string}</p>}
                 </div>
               ))}
             </CardContent>

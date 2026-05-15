@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -8,7 +8,7 @@ export default async function PendingConfirmationsPage() {
   const supabase = createServiceClient();
 
   // Fetch only confirmed bookings with their items and related data
-  const { data: bookings, error } = await supabase
+  const { data: bookings } = await supabase
     .from('bookings')
     .select(`
       id,
@@ -53,18 +53,20 @@ export default async function PendingConfirmationsPage() {
     );
   }
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const all = bookings as any[];
+
   // Calculate stats
-  const totalItems = bookings.reduce((sum, b: any) => sum + (b.booking_items?.length || 0), 0);
-  const pendingItems = bookings.reduce(
-    (sum, b: any) => sum + (b.booking_items?.filter((i: any) => ['pending', 'requested'].includes(i.supplier_status)).length || 0),
+  const pendingItems = all.reduce(
+    (sum: number, b) => sum + (b.booking_items?.filter((i: any) => ['pending', 'requested'].includes(i.supplier_status)).length || 0),
     0
   );
 
   // Group by confirmation status
-  const awaiting = bookings.filter((b: any) =>
+  const awaiting = all.filter((b) =>
     b.booking_items?.some((i: any) => ['pending', 'requested'].includes(i.supplier_status))
   );
-  const confirmed = bookings.filter((b: any) =>
+  const confirmed = all.filter((b) =>
     !b.booking_items?.some((i: any) => ['pending', 'requested'].includes(i.supplier_status))
   );
 
@@ -83,12 +85,12 @@ export default async function PendingConfirmationsPage() {
           <h2 className="text-xl font-semibold mb-4 text-red-600">Awaiting Confirmations</h2>
           <div className="grid gap-4">
             {awaiting.map((booking: any) => {
-              const pendingCount = booking.booking_items?.filter((i: any) =>
+              const pendingCount = (booking.booking_items)?.filter((i: any) =>
                 ['pending', 'requested'].includes(i.supplier_status)
               ).length || 0;
 
-              const clientName = booking.proposals?.clients?.full_name || 'Guest';
-              const destination = booking.proposals?.destination || 'Unknown';
+              const clientName = (booking.proposals)?.clients?.full_name || 'Guest';
+              const destination = (booking.proposals)?.destination || 'Unknown';
 
               return (
                 <Card key={booking.id}>
@@ -96,7 +98,7 @@ export default async function PendingConfirmationsPage() {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg">
-                          {clientName}'s Trip to {destination}
+                          {clientName}&apos;s Trip to {destination}
                         </h3>
                         <p className="text-sm text-gray-600 mt-1">
                           Booking: {booking.id.slice(0, 8)}...
@@ -121,7 +123,7 @@ export default async function PendingConfirmationsPage() {
                     <div className="mt-4 bg-red-50 p-3 rounded">
                       <p className="text-sm font-semibold text-red-700 mb-2">Pending Items:</p>
                       <ul className="text-sm space-y-1">
-                        {booking.booking_items?.map((item: any) => (
+                        {(booking.booking_items)?.map((item: any) => (
                           ['pending', 'requested'].includes(item.supplier_status) && (
                             <li key={item.id} className="text-red-600">
                               • {item.label} ({item.item_type}) - {item.supplier_status}
@@ -144,8 +146,8 @@ export default async function PendingConfirmationsPage() {
           <h2 className="text-xl font-semibold mb-4 text-green-600">Fully Confirmed</h2>
           <div className="grid gap-4">
             {confirmed.map((booking: any) => {
-              const clientName = booking.proposals?.clients?.full_name || 'Guest';
-              const destination = booking.proposals?.destination || 'Unknown';
+              const clientName = (booking.proposals)?.clients?.full_name || 'Guest';
+              const destination = (booking.proposals)?.destination || 'Unknown';
 
               return (
                 <Card key={booking.id}>
@@ -153,7 +155,7 @@ export default async function PendingConfirmationsPage() {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <h3 className="font-semibold text-lg">
-                          {clientName}'s Trip to {destination}
+                          {clientName}&apos;s Trip to {destination}
                         </h3>
                         <p className="text-sm text-gray-600 mt-1">
                           Booking: {booking.id.slice(0, 8)}...

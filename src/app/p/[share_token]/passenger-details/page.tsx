@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,24 +9,23 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from 'sonner';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyRecord = Record<string, any>;
+
 interface PassengerDetailsPageProps {
     params: { share_token: string };
 }
 
 export default function PassengerDetailsPage({ params }: PassengerDetailsPageProps) {
     const router = useRouter();
-    const [proposal, setProposal] = useState<any>(null);
+    const [proposal, setProposal] = useState<AnyRecord | null>(null);
     const [flightType, setFlightType] = useState<'international' | 'domestic' | 'none'>('none');
-    const [passengers, setPassengers] = useState<any[]>([]);
+    const [passengers, setPassengers] = useState<AnyRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [skipDocuments, setSkipDocuments] = useState(false);
 
-    useEffect(() => {
-        fetchProposalData();
-    }, [params.share_token]);
-
-    const fetchProposalData = async () => {
+    const fetchProposalData = useCallback(async () => {
         try {
             const res = await fetch(`/api/proposals/share/${params.share_token}`);
             if (!res.ok) throw new Error('Failed to fetch proposal');
@@ -35,10 +34,10 @@ export default function PassengerDetailsPage({ params }: PassengerDetailsPagePro
             setProposal(data);
 
             // Determine flight type
-            const hasInternationalFlights = data.flights?.some((f: any) =>
+            const hasInternationalFlights = data.flights?.some((f: AnyRecord) =>
                 isInternationalRoute(f.origin_iata, f.destination_iata)
             );
-            const hasDomesticFlights = data.flights?.some((f: any) =>
+            const hasDomesticFlights = data.flights?.some((f: AnyRecord) =>
                 !isInternationalRoute(f.origin_iata, f.destination_iata)
             );
 
@@ -69,14 +68,19 @@ export default function PassengerDetailsPage({ params }: PassengerDetailsPagePro
             toast.error('Failed to load proposal');
             setLoading(false);
         }
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [params.share_token]);
+
+    useEffect(() => {
+        fetchProposalData();
+    }, [fetchProposalData]);
 
     const isInternationalRoute = (origin: string, destination: string) => {
         const indianAirports = ['DEL', 'BOM', 'BLR', 'HYD', 'CCU', 'MAA', 'PNQ', 'COK', 'AMD', 'LKO'];
         return !indianAirports.includes(origin) || !indianAirports.includes(destination);
     };
 
-    const handlePassengerChange = (index: number, field: string, value: any) => {
+    const handlePassengerChange = (index: number, field: string, value: string | string[] | boolean) => {
         setPassengers(prev => {
             const updated = [...prev];
             updated[index] = { ...updated[index], [field]: value };
@@ -107,7 +111,7 @@ export default function PassengerDetailsPage({ params }: PassengerDetailsPagePro
 
             handlePassengerChange(index, fieldName, [...(passengers[index][fieldName] || []), url]);
             toast.success(`${fileType.charAt(0).toUpperCase() + fileType.slice(1)} uploaded`);
-        } catch (err) {
+        } catch {
             toast.error(`Failed to upload ${fileType}`);
         }
     };
@@ -157,7 +161,7 @@ export default function PassengerDetailsPage({ params }: PassengerDetailsPagePro
 
         setSubmitting(true);
         try {
-            const res = await fetch(`/api/bookings/${proposal.booking_id}/passenger-details`, {
+            const res = await fetch(`/api/bookings/${proposal!.booking_id}/passenger-details`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
