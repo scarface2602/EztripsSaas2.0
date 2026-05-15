@@ -60,9 +60,6 @@ export function Sidebar({ user }: { user: User }) {
     <aside className="w-64 bg-background border-r flex flex-col h-full">
       <div className="p-4">
         <Link href="/"><EzTripsLogo /></Link>
-        {user.agency_name && (
-          <p className="text-xs text-muted-foreground truncate mt-1 ml-8">{user.agency_name}</p>
-        )}
       </div>
       <Separator />
       <nav className="flex-1 p-3 space-y-1">
