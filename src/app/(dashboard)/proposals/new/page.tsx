@@ -182,12 +182,12 @@ export default function NewProposalPage() {
       });
       const data = await res.json();
       if (data.id) {
-        // Update enquiry status if this proposal was created from an enquiry
+        // Mark enquiry as in_progress (proposal_sent happens only on publish)
         if (enquiryId) {
           await fetch('/api/website/cms/enquiries', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: enquiryId, status: 'proposal_sent' }),
+            body: JSON.stringify({ id: enquiryId, status: 'in_progress' }),
           });
         }
         router.push(`/proposals/${data.id}`);
@@ -221,12 +221,12 @@ export default function NewProposalPage() {
     }).select().single();
 
     if (data) {
-      // Update enquiry status if this proposal was created from an enquiry
+      // Mark enquiry as in_progress (proposal_sent happens only on publish)
       if (enquiryId) {
         fetch('/api/website/cms/enquiries', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: enquiryId, status: 'proposal_sent' }),
+          body: JSON.stringify({ id: enquiryId, status: 'in_progress' }),
         });
       }
 

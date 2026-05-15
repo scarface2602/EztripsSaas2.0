@@ -94,6 +94,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Failed to publish', details: updateErr.message }, { status: 500 });
   }
 
+  // If proposal was created from an enquiry, mark it as 'proposal_sent' now
+  if (proposal.enquiry_id) {
+    await supabase
+      .from('enquiries')
+      .update({ status: 'proposal_sent', updated_at: now.toISOString() })
+      .eq('id', proposal.enquiry_id);
+  }
+
   // Send share link email to client (fire-and-forget — don't block the response)
   try {
     const [{ data: clientData }, { data: agentData }] = await Promise.all([

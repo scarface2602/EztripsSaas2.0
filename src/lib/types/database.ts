@@ -512,3 +512,49 @@ export interface ParsedActivity {
   description: string;
   type: 'transfer' | 'sightseeing' | 'activity' | 'other';
 }
+
+export interface Voucher {
+  id: string;
+  booking_id: string;
+  supplier_type: 'hotel' | 'flight' | 'activity' | 'transfer';
+  supplier_name: string | null;
+  booking_reference: string | null;
+  content: VoucherContent;
+  pdf_url: string | null;
+  issued_at: string;
+  email_sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VoucherContent {
+  // Common fields
+  customerName?: string;
+  confirmationNumber?: string;
+  checkIn?: string;
+  checkOut?: string;
+  // Hotel-specific
+  hotelName?: string;
+  roomType?: string;
+  mealPlan?: string;
+  nights?: number;
+  guests?: string;
+  specialRequests?: string;
+  // Flight-specific
+  airline?: string;
+  flightNumber?: string;
+  origin?: string;
+  destination?: string;
+  departureTime?: string;
+  arrivalTime?: string;
+  pnr?: string;
+  cabinClass?: string;
+  // Activity/transfer-specific
+  activityName?: string;
+  date?: string;
+  time?: string;
+  pickupLocation?: string;
+  dropLocation?: string;
+  vehicleType?: string;
+  notes?: string;
+}

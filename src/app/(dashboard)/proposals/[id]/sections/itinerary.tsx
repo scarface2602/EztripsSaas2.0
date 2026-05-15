@@ -375,6 +375,29 @@ export function ItinerarySection({
       supplier_id: act.supplier_id,
       conflict_acknowledged: act.conflict_acknowledged,
     }).eq('id', act.id);
+
+    // Run conflict detection in background after save
+    runConflictCheck();
+  }
+
+  async function runConflictCheck() {
+    try {
+      const res = await fetch(`/api/proposals/${proposal.id}/check-conflicts`, { method: 'POST' });
+      if (res.ok) {
+        const result = await res.json();
+        if (result.conflicts > 0) {
+          // Re-fetch activities to pick up updated conflict flags
+          const { data } = await supabase
+            .from('itinerary_activities')
+            .select('*')
+            .eq('proposal_id', proposal.id)
+            .order('sort_order');
+          if (data) setActivities(data);
+        }
+      }
+    } catch {
+      // Conflict check is non-blocking
+    }
   }
 
   const expectedDayCount = tripDateRange().length;
@@ -519,7 +542,9 @@ export function ItinerarySection({
                       </select>
                       {act.option_mode === 'tbd' && <Badge className="bg-orange-100 text-orange-700">TBD</Badge>}
                       {act.conflict_flagged && !act.conflict_acknowledged && (
-                        <Badge className="bg-red-100 text-red-700"><AlertTriangle className="h-3 w-3 mr-1" /> Conflict</Badge>
+                        <Badge className="bg-red-100 text-red-700" title={act.conflict_note || 'Scheduling conflict detected'}>
+                          <AlertTriangle className="h-3 w-3 mr-1" /> Conflict
+                        </Badge>
                       )}
                       <div className="flex-1" />
                       <div className="flex items-center gap-1">
