@@ -14,14 +14,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   ArrowLeft, CreditCard, Clock, Mail, FileText,
-  CheckCircle2, Trash2, Save, Package, Plus, Pencil,
+  CheckCircle2, Trash2, Save, Package, ChevronDown, ChevronUp,
+  Hotel, Plane, Car, MapPin, UtensilsCrossed, Briefcase,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import type { BookingItem, ItemType, SupplierStatus } from '@/lib/types/booking-items';
-import { ITEM_TYPE_LABELS, SUPPLIER_STATUS_COLORS } from '@/lib/types/booking-items';
+import type { BookingItem, SupplierStatus } from '@/lib/types/booking-items';
+import {
+  ITEM_TYPE_LABELS, SUPPLIER_STATUS_LABELS, SUPPLIER_STATUS_COLORS, STATUS_TRANSITIONS,
+} from '@/lib/types/booking-items';
 
-const STATUS_COLORS: Record<string, string> = {
+const BOOKING_STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
   blocked: 'bg-purple-100 text-purple-700',
   confirmed: 'bg-green-100 text-green-700',
@@ -35,10 +37,12 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  package: 'Package',
-  hotel: 'Hotel',
-  land: 'Land Services',
-  flight: 'Flight',
+  package: 'Package', hotel: 'Hotel', land: 'Land Services', flight: 'Flight',
+};
+
+const ITEM_ICONS: Record<string, typeof Hotel> = {
+  hotel_room: Hotel, flight_segment: Plane, transfer: Car,
+  activity: MapPin, meal_plan: UtensilsCrossed, dmc_package: Briefcase,
 };
 
 interface Booking {
@@ -83,14 +87,15 @@ export default function BookingDetailPage() {
   const [items, setItems] = useState<BookingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [itemSheetOpen, setItemSheetOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<BookingItem | null>(null);
 
   // Editable fields
   const [refNumber, setRefNumber] = useState('');
   const [blockingRef, setBlockingRef] = useState('');
   const [blockingExpires, setBlockingExpires] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Item expand state
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -138,13 +143,26 @@ export default function BookingDetailPage() {
     });
   };
 
+  const updateItem = async (itemId: string, updates: Record<string, unknown>) => {
+    await fetch(`/api/bookings/${id}/items`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, ...updates }),
+    });
+    fetchAll();
+  };
+
+  const deleteItem = async (itemId: string) => {
+    await fetch(`/api/bookings/${id}/items?item_id=${itemId}`, { method: 'DELETE' });
+    fetchAll();
+  };
+
   const markPayment = async (paymentId: string, status: string) => {
     await fetch(`/api/bookings/${id}/payments`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        payment_id: paymentId,
-        status,
+        payment_id: paymentId, status,
         ...(status === 'paid' ? { paid_date: new Date().toISOString().split('T')[0] } : {}),
       }),
     });
@@ -156,55 +174,20 @@ export default function BookingDetailPage() {
     fetchAll();
   };
 
-  const saveItem = async (itemData: Record<string, unknown>) => {
-    if (editingItem) {
-      await fetch(`/api/bookings/${id}/items`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: editingItem.id, ...itemData }),
-      });
-    } else {
-      await fetch(`/api/bookings/${id}/items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(itemData),
-      });
-    }
-    setItemSheetOpen(false);
-    setEditingItem(null);
-    fetchAll();
-  };
-
-  const markItemConfirmed = async (itemId: string) => {
-    await fetch(`/api/bookings/${id}/items`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_id: itemId, supplier_status: 'confirmed' }),
-    });
-    fetchAll();
-  };
-
-  const deleteItem = async (itemId: string) => {
-    await fetch(`/api/bookings/${id}/items?item_id=${itemId}`, { method: 'DELETE' });
-    fetchAll();
-  };
-
-  if (loading) {
-    return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading booking...</div>;
-  }
-
-  if (!booking) {
-    return <div className="flex items-center justify-center h-64 text-muted-foreground">Booking not found</div>;
-  }
+  if (loading) return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading booking...</div>;
+  if (!booking) return <div className="flex items-center justify-center h-64 text-muted-foreground">Booking not found</div>;
 
   const margin = Number(booking.sell_price) - Number(booking.cost_price);
   const marginPct = Number(booking.sell_price) > 0 ? (margin / Number(booking.sell_price) * 100).toFixed(1) : '0';
   const balance = Number(booking.cost_price) - Number(booking.total_paid);
 
+  const pendingCount = items.filter(i => i.supplier_status === 'pending' || i.supplier_status === 'confirmation_requested').length;
+  const confirmedCount = items.filter(i => i.supplier_status === 'confirmed' || i.supplier_status === 'completed').length;
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header — buttons on top */}
+      <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => router.push('/bookings')}>
             <ArrowLeft className="h-4 w-4" />
@@ -240,8 +223,8 @@ export default function BookingDetailPage() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-5 gap-4">
+      {/* Summary Cards — full width row */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className="p-4">
           <p className="text-xs text-muted-foreground">Cost Price</p>
           <p className="text-xl font-bold">{booking.currency} {Number(booking.cost_price).toLocaleString()}</p>
@@ -273,15 +256,111 @@ export default function BookingDetailPage() {
         </Card>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="details">
+      {/* Confirmation Progress Bar */}
+      {items.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground">Confirmations:</span>
+          <div className="flex-1 bg-gray-100 rounded-full h-2.5">
+            <div
+              className="bg-green-500 h-2.5 rounded-full transition-all"
+              style={{ width: `${items.length > 0 ? (confirmedCount / items.length) * 100 : 0}%` }}
+            />
+          </div>
+          <span className="text-sm font-medium">
+            {confirmedCount}/{items.length} confirmed
+            {pendingCount > 0 && <span className="text-red-600 ml-2">({pendingCount} pending)</span>}
+          </span>
+        </div>
+      )}
+
+      {/* Main content — Tabs stacked vertically */}
+      <Tabs defaultValue="items">
         <TabsList>
-          <TabsTrigger value="details" className="gap-1"><FileText className="h-3.5 w-3.5" /> Details</TabsTrigger>
-          <TabsTrigger value="items" className="gap-1"><Package className="h-3.5 w-3.5" /> Items ({items.length})</TabsTrigger>
+          <TabsTrigger value="items" className="gap-1"><Package className="h-3.5 w-3.5" /> Items & Confirmations ({items.length})</TabsTrigger>
           <TabsTrigger value="payments" className="gap-1"><CreditCard className="h-3.5 w-3.5" /> Payments ({payments.length})</TabsTrigger>
+          <TabsTrigger value="details" className="gap-1"><FileText className="h-3.5 w-3.5" /> Details</TabsTrigger>
           <TabsTrigger value="emails" className="gap-1"><Mail className="h-3.5 w-3.5" /> Emails ({emails.length})</TabsTrigger>
           <TabsTrigger value="logs" className="gap-1"><Clock className="h-3.5 w-3.5" /> Activity Log</TabsTrigger>
         </TabsList>
+
+        {/* Items & Confirmations Tab — the main ops view */}
+        <TabsContent value="items" className="space-y-3 mt-4">
+          {items.length === 0 ? (
+            <Card><CardContent className="py-8 text-center text-muted-foreground">No items. Items are auto-created when a booking is made from a proposal.</CardContent></Card>
+          ) : items.map((item) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              currency={booking.currency}
+              isExpanded={expandedItemId === item.id}
+              onToggle={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)}
+              onUpdateStatus={(status, vendorData) => updateItem(item.id, { supplier_status: status, ...vendorData })}
+              onDelete={() => deleteItem(item.id)}
+            />
+          ))}
+
+          {/* Items total summary */}
+          {items.length > 0 && (
+            <div className="flex justify-end gap-6 text-sm text-muted-foreground pt-2">
+              <span>Total Cost: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.cost_price || 0), 0).toLocaleString()}</strong></span>
+              <span>Total Sell: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.sell_price || 0), 0).toLocaleString()}</strong></span>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Payments Tab */}
+        <TabsContent value="payments">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-base">Payment Schedule</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Label</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead>Paid Date</TableHead>
+                    <TableHead>Mode</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payments.length === 0 ? (
+                    <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">No payment installments</TableCell></TableRow>
+                  ) : payments.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell>{p.installment_number}</TableCell>
+                      <TableCell className="font-medium">{p.installment_label || '-'}</TableCell>
+                      <TableCell className="font-medium">{booking.currency} {Number(p.amount).toLocaleString()}</TableCell>
+                      <TableCell>{p.due_date ? format(new Date(p.due_date), 'dd MMM yyyy') : '-'}</TableCell>
+                      <TableCell>{p.paid_date ? format(new Date(p.paid_date), 'dd MMM yyyy') : '-'}</TableCell>
+                      <TableCell className="capitalize">{p.payment_mode?.replace('_', ' ') || '-'}</TableCell>
+                      <TableCell className="text-xs font-mono">{p.reference_number || '-'}</TableCell>
+                      <TableCell><Badge className={BOOKING_STATUS_COLORS[p.status] || ''}>{p.status}</Badge></TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {p.status === 'pending' && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => markPayment(p.id, 'paid')} title="Mark paid">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => deletePayment(p.id)} title="Delete">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Details Tab */}
         <TabsContent value="details">
@@ -329,133 +408,10 @@ export default function BookingDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* Items & Confirmations Tab */}
-        <TabsContent value="items">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">Items & Confirmations</CardTitle>
-              <Button size="sm" onClick={() => { setEditingItem(null); setItemSheetOpen(true); }}>
-                <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Label</TableHead>
-                    <TableHead>Dates</TableHead>
-                    <TableHead>Cost</TableHead>
-                    <TableHead>Sell</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Supplier Ref</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-6 text-muted-foreground">No items yet. Add flights, hotels, transfers, and activities.</TableCell></TableRow>
-                  ) : items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell><Badge variant="outline">{ITEM_TYPE_LABELS[item.item_type]}</Badge></TableCell>
-                      <TableCell className="font-medium">{item.label}</TableCell>
-                      <TableCell className="text-sm">
-                        {item.start_date ? format(new Date(item.start_date), 'dd MMM') : '-'}
-                        {item.end_date && item.end_date !== item.start_date ? ` – ${format(new Date(item.end_date), 'dd MMM')}` : ''}
-                      </TableCell>
-                      <TableCell>{item.cost_price != null ? `${booking.currency} ${Number(item.cost_price).toLocaleString()}` : '-'}</TableCell>
-                      <TableCell>{item.sell_price != null ? `${booking.currency} ${Number(item.sell_price).toLocaleString()}` : '-'}</TableCell>
-                      <TableCell><Badge className={SUPPLIER_STATUS_COLORS[item.supplier_status]}>{item.supplier_status}</Badge></TableCell>
-                      <TableCell className="text-xs font-mono">{item.supplier_reference || '-'}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingItem(item); setItemSheetOpen(true); }} title="Edit">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          {item.supplier_status !== 'confirmed' && item.supplier_status !== 'completed' && (
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => markItemConfirmed(item.id)} title="Mark Confirmed">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => deleteItem(item.id)} title="Delete">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {items.length > 0 && (
-                <div className="mt-4 flex justify-end gap-6 text-sm text-muted-foreground">
-                  <span>Total Cost: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.cost_price || 0), 0).toLocaleString()}</strong></span>
-                  <span>Total Sell: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.sell_price || 0), 0).toLocaleString()}</strong></span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Payments Tab */}
-        <TabsContent value="payments">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">Payment Schedule</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>#</TableHead>
-                    <TableHead>Label</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead>Paid Date</TableHead>
-                    <TableHead>Mode</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payments.length === 0 ? (
-                    <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">No payment installments</TableCell></TableRow>
-                  ) : payments.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell>{p.installment_number}</TableCell>
-                      <TableCell className="font-medium">{p.installment_label || '-'}</TableCell>
-                      <TableCell className="font-medium">{booking.currency} {Number(p.amount).toLocaleString()}</TableCell>
-                      <TableCell>{p.due_date ? format(new Date(p.due_date), 'dd MMM yyyy') : '-'}</TableCell>
-                      <TableCell>{p.paid_date ? format(new Date(p.paid_date), 'dd MMM yyyy') : '-'}</TableCell>
-                      <TableCell className="capitalize">{p.payment_mode?.replace('_', ' ') || '-'}</TableCell>
-                      <TableCell className="text-xs font-mono">{p.reference_number || '-'}</TableCell>
-                      <TableCell><Badge className={STATUS_COLORS[p.status] || ''}>{p.status}</Badge></TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {p.status === 'pending' && (
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => markPayment(p.id, 'paid')} title="Mark paid">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => deletePayment(p.id)} title="Delete">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Emails Tab */}
         <TabsContent value="emails">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">Supplier Emails</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Supplier Emails</CardTitle></CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
@@ -475,7 +431,7 @@ export default function BookingDetailPage() {
                       <TableCell className="font-medium">{e.subject}</TableCell>
                       <TableCell>{e.to_email || '-'}</TableCell>
                       <TableCell className="capitalize">{e.template_type?.replace('_', ' ') || '-'}</TableCell>
-                      <TableCell><Badge className={STATUS_COLORS[e.status] || ''}>{e.status}</Badge></TableCell>
+                      <TableCell><Badge className={BOOKING_STATUS_COLORS[e.status] || ''}>{e.status}</Badge></TableCell>
                       <TableCell>{e.sent_at ? format(new Date(e.sent_at), 'dd MMM HH:mm') : '-'}</TableCell>
                     </TableRow>
                   ))}
@@ -488,9 +444,7 @@ export default function BookingDetailPage() {
         {/* Activity Log Tab */}
         <TabsContent value="logs">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Activity Log</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Activity Log</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {logs.length === 0 ? (
@@ -519,186 +473,254 @@ export default function BookingDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Add/Edit Item Sheet */}
-      <Sheet open={itemSheetOpen} onOpenChange={(open) => { setItemSheetOpen(open); if (!open) setEditingItem(null); }}>
-        <SheetContent className="sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{editingItem ? 'Edit Item' : 'Add Item'}</SheetTitle>
-          </SheetHeader>
-          <ItemForm
-            item={editingItem}
-            onSave={saveItem}
-            onCancel={() => { setItemSheetOpen(false); setEditingItem(null); }}
-          />
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
 
-function ItemForm({ item, onSave, onCancel }: {
-  item: BookingItem | null;
-  onSave: (data: Record<string, unknown>) => void;
-  onCancel: () => void;
-}) {
-  const [itemType, setItemType] = useState<ItemType>(item?.item_type as ItemType || 'hotel_room');
-  const [label, setLabel] = useState(item?.label || '');
-  const [startDate, setStartDate] = useState(item?.start_date || '');
-  const [endDate, setEndDate] = useState(item?.end_date || '');
-  const [costPrice, setCostPrice] = useState(item?.cost_price?.toString() || '');
-  const [sellPrice, setSellPrice] = useState(item?.sell_price?.toString() || '');
-  const [supplierStatus, setSupplierStatus] = useState<SupplierStatus>(item?.supplier_status || 'pending');
-  const [supplierRef, setSupplierRef] = useState(item?.supplier_reference || '');
-  const [supplierNotes, setSupplierNotes] = useState(item?.supplier_notes || '');
-  const [details, setDetails] = useState<Record<string, unknown>>(item?.details || {});
+/* ─────────────────────────────────────────────────────────
+   ItemCard — each booking item as an expandable card
+   Shows: type icon, label, dates, status badge, cost/sell
+   Expands to show: item details (read-only from proposal),
+   status update workflow with vendor tracking prompts
+   ───────────────────────────────────────────────────────── */
 
-  const handleSubmit = () => {
-    if (!label.trim()) return;
-    onSave({
-      item_type: itemType,
-      label: label.trim(),
-      start_date: startDate || null,
-      end_date: endDate || null,
-      cost_price: costPrice ? parseFloat(costPrice) : null,
-      sell_price: sellPrice ? parseFloat(sellPrice) : null,
-      supplier_status: supplierStatus,
+function ItemCard({
+  item, currency, isExpanded, onToggle, onUpdateStatus, onDelete,
+}: {
+  item: BookingItem;
+  currency: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onUpdateStatus: (status: SupplierStatus, vendorData: Record<string, unknown>) => void;
+  onDelete: () => void;
+}) {
+  const Icon = ITEM_ICONS[item.item_type] || Package;
+  const nextStatuses = STATUS_TRANSITIONS[item.supplier_status] || [];
+
+  // Local state for vendor tracking fields (prompted on status change)
+  const [pendingStatus, setPendingStatus] = useState<SupplierStatus | null>(null);
+  const [vendorName, setVendorName] = useState(item.vendor_name || '');
+  const [vendorEmail, setVendorEmail] = useState(item.vendor_email || '');
+  const [portalName, setPortalName] = useState(item.portal_name || '');
+  const [paymentDueDate, setPaymentDueDate] = useState(item.payment_due_date || '');
+  const [supplierRef, setSupplierRef] = useState(item.supplier_reference || '');
+  const [supplierNotes, setSupplierNotes] = useState(item.supplier_notes || '');
+
+  const handleStatusClick = (status: SupplierStatus) => {
+    // Statuses that need extra info before saving
+    if (['confirmation_requested', 'on_hold', 'confirmed'].includes(status)) {
+      setPendingStatus(status);
+    } else {
+      onUpdateStatus(status, {});
+    }
+  };
+
+  const confirmStatusChange = () => {
+    if (!pendingStatus) return;
+    onUpdateStatus(pendingStatus, {
+      vendor_name: vendorName || null,
+      vendor_email: vendorEmail || null,
+      portal_name: portalName || null,
+      payment_due_date: paymentDueDate || null,
       supplier_reference: supplierRef || null,
       supplier_notes: supplierNotes || null,
-      details,
     });
+    setPendingStatus(null);
   };
 
-  const detailFields: Record<ItemType, { key: string; label: string; type?: string }[]> = {
-    flight_segment: [
-      { key: 'airline', label: 'Airline' },
-      { key: 'flight_number', label: 'Flight Number' },
-      { key: 'route', label: 'Route' },
-      { key: 'departure_time', label: 'Departure Time' },
-      { key: 'arrival_time', label: 'Arrival Time' },
-      { key: 'seat', label: 'Seat' },
-      { key: 'pnr', label: 'PNR' },
-    ],
-    hotel_room: [
-      { key: 'hotel_name', label: 'Hotel Name' },
-      { key: 'room_type', label: 'Room Type' },
-      { key: 'nights', label: 'Nights', type: 'number' },
-      { key: 'rooms_count', label: 'Rooms', type: 'number' },
-      { key: 'meal_plan', label: 'Meal Plan' },
-      { key: 'conf_number', label: 'Confirmation #' },
-    ],
-    transfer: [
-      { key: 'from_location', label: 'From' },
-      { key: 'to_location', label: 'To' },
-      { key: 'vehicle_type', label: 'Vehicle Type' },
-      { key: 'pickup_time', label: 'Pickup Time' },
-      { key: 'notes', label: 'Notes' },
-    ],
-    activity: [
-      { key: 'activity_name', label: 'Activity Name' },
-      { key: 'time', label: 'Time' },
-      { key: 'duration_hours', label: 'Duration (hrs)', type: 'number' },
-      { key: 'location', label: 'Location' },
-      { key: 'guide_name', label: 'Guide Name' },
-      { key: 'activity_ref', label: 'Activity Ref' },
-    ],
-    meal_plan: [
-      { key: 'location', label: 'Location' },
-      { key: 'meals_included', label: 'Meals Included' },
-      { key: 'notes', label: 'Notes' },
-    ],
-  };
+  const details = item.details as Record<string, unknown>;
 
-  const fields = detailFields[itemType] || [];
+  // Build a readable summary from details
+  const detailSummary = buildDetailSummary(item.item_type, details);
 
   return (
-    <div className="space-y-4 mt-4">
-      <div className="space-y-2">
-        <Label>Type</Label>
-        <Select value={itemType} onValueChange={(v) => setItemType(v as ItemType)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="flight_segment">Flight</SelectItem>
-            <SelectItem value="hotel_room">Hotel</SelectItem>
-            <SelectItem value="transfer">Transfer</SelectItem>
-            <SelectItem value="activity">Activity</SelectItem>
-            <SelectItem value="meal_plan">Meal Plan</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label>Label *</Label>
-        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Delhi to Goa — IndiGo 6E-204" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label>Start Date</Label>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label>End Date</Label>
-          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label>Cost Price</Label>
-          <Input type="number" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} placeholder="0.00" />
-        </div>
-        <div className="space-y-2">
-          <Label>Sell Price</Label>
-          <Input type="number" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder="0.00" />
-        </div>
-      </div>
-
-      {/* Dynamic detail fields */}
-      {fields.length > 0 && (
-        <div className="space-y-3 border-t pt-4">
-          <p className="text-sm font-medium text-muted-foreground">{ITEM_TYPE_LABELS[itemType]} Details</p>
-          <div className="grid grid-cols-2 gap-3">
-            {fields.map((f) => (
-              <div key={f.key} className="space-y-1">
-                <Label className="text-xs">{f.label}</Label>
-                <Input
-                  type={f.type || 'text'}
-                  value={(details[f.key] as string) || ''}
-                  onChange={(e) => setDetails({ ...details, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })}
-                />
-              </div>
-            ))}
+    <Card className={`${item.supplier_status === 'confirmed' || item.supplier_status === 'completed' ? 'border-green-200' : item.supplier_status === 'pending' ? 'border-red-200' : 'border-yellow-200'}`}>
+      {/* Collapsed header row */}
+      <div
+        className="flex items-center gap-3 p-4 cursor-pointer hover:bg-muted/30 transition-colors"
+        onClick={onToggle}
+      >
+        <Icon className="h-5 w-5 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium truncate">{item.label}</span>
+            <Badge variant="outline" className="shrink-0 text-xs">{ITEM_TYPE_LABELS[item.item_type]}</Badge>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+            {item.start_date && <span>{format(new Date(item.start_date), 'dd MMM yyyy')}{item.end_date && item.end_date !== item.start_date ? ` – ${format(new Date(item.end_date), 'dd MMM yyyy')}` : ''}</span>}
+            {detailSummary && <span>· {detailSummary}</span>}
           </div>
         </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {item.cost_price != null && (
+            <span className="text-sm text-muted-foreground">{currency} {Number(item.cost_price).toLocaleString()}</span>
+          )}
+          <Badge className={SUPPLIER_STATUS_COLORS[item.supplier_status]}>
+            {SUPPLIER_STATUS_LABELS[item.supplier_status]}
+          </Badge>
+          {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </div>
+      </div>
+
+      {/* Expanded panel */}
+      {isExpanded && (
+        <CardContent className="border-t pt-4 space-y-4">
+          {/* Item details from proposal (read-only) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {Object.entries(details).filter(([, v]) => v != null && v !== '').map(([k, v]) => (
+              <div key={k}>
+                <p className="text-xs text-muted-foreground">{k.replace(/_/g, ' ')}</p>
+                <p className="text-sm font-medium">
+                  {Array.isArray(v) ? v.join(', ') : String(v)}
+                </p>
+              </div>
+            ))}
+            <div>
+              <p className="text-xs text-muted-foreground">Cost Price</p>
+              <p className="text-sm font-medium">{item.cost_price != null ? `${currency} ${Number(item.cost_price).toLocaleString()}` : '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Sell Price</p>
+              <p className="text-sm font-medium">{item.sell_price != null ? `${currency} ${Number(item.sell_price).toLocaleString()}` : '-'}</p>
+            </div>
+          </div>
+
+          {/* Vendor tracking info (if filled) */}
+          {(item.vendor_name || item.vendor_email || item.portal_name || item.payment_due_date || item.supplier_reference) && (
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Vendor & Confirmation</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                {item.vendor_name && <div><span className="text-xs text-muted-foreground">Vendor</span><p className="font-medium">{item.vendor_name}</p></div>}
+                {item.vendor_email && <div><span className="text-xs text-muted-foreground">Email</span><p className="font-medium">{item.vendor_email}</p></div>}
+                {item.portal_name && <div><span className="text-xs text-muted-foreground">Portal</span><p className="font-medium">{item.portal_name}</p></div>}
+                {item.payment_due_date && <div><span className="text-xs text-muted-foreground">Payment Due</span><p className="font-medium">{format(new Date(item.payment_due_date), 'dd MMM yyyy')}</p></div>}
+                {item.supplier_reference && <div><span className="text-xs text-muted-foreground">Ref / Confirmation #</span><p className="font-medium font-mono">{item.supplier_reference}</p></div>}
+              </div>
+            </div>
+          )}
+
+          {/* Status change prompt */}
+          {pendingStatus && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+              <p className="text-sm font-semibold text-blue-800">
+                Update to: {SUPPLIER_STATUS_LABELS[pendingStatus]}
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {pendingStatus === 'confirmation_requested' && (
+                  <>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vendor / Supplier Name</Label>
+                      <Input value={vendorName} onChange={(e) => setVendorName(e.target.value)} placeholder="e.g. TBO, Via.com, Direct" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Mail Sent To (email)</Label>
+                      <Input value={vendorEmail} onChange={(e) => setVendorEmail(e.target.value)} placeholder="vendor@example.com" />
+                    </div>
+                  </>
+                )}
+                {pendingStatus === 'on_hold' && (
+                  <>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Blocked On Portal</Label>
+                      <Input value={portalName} onChange={(e) => setPortalName(e.target.value)} placeholder="e.g. TBO, Booking.com, Direct" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Payment Due Date</Label>
+                      <Input type="date" value={paymentDueDate} onChange={(e) => setPaymentDueDate(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vendor / Supplier</Label>
+                      <Input value={vendorName} onChange={(e) => setVendorName(e.target.value)} placeholder="Vendor name" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Supplier Reference</Label>
+                      <Input value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} placeholder="Booking ref / hold ID" />
+                    </div>
+                  </>
+                )}
+                {pendingStatus === 'confirmed' && (
+                  <>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Confirmation / PNR #</Label>
+                      <Input value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} placeholder="Confirmation number" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vendor / Supplier</Label>
+                      <Input value={vendorName} onChange={(e) => setVendorName(e.target.value)} placeholder="Vendor name" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Payment Due Date</Label>
+                      <Input type="date" value={paymentDueDate} onChange={(e) => setPaymentDueDate(e.target.value)} />
+                    </div>
+                  </>
+                )}
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs">Notes</Label>
+                  <Input value={supplierNotes} onChange={(e) => setSupplierNotes(e.target.value)} placeholder="Any additional notes..." />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={confirmStatusChange}>
+                  <Save className="h-3.5 w-3.5 mr-1" /> Save
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setPendingStatus(null)}>Cancel</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Status action buttons */}
+          {!pendingStatus && nextStatuses.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground">Update status:</span>
+              {nextStatuses.map((s) => (
+                <Button
+                  key={s}
+                  size="sm"
+                  variant="outline"
+                  className={s === 'confirmed' ? 'border-green-300 text-green-700 hover:bg-green-50' : s === 'cancelled' ? 'border-red-300 text-red-700 hover:bg-red-50' : ''}
+                  onClick={() => handleStatusClick(s)}
+                >
+                  {SUPPLIER_STATUS_LABELS[s]}
+                </Button>
+              ))}
+              <Button size="sm" variant="ghost" className="text-red-500 ml-auto" onClick={onDelete}>
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+              </Button>
+            </div>
+          )}
+
+          {/* Inline edit for supplier notes */}
+          {item.supplier_notes && !pendingStatus && (
+            <p className="text-xs text-muted-foreground italic">Notes: {item.supplier_notes}</p>
+          )}
+        </CardContent>
       )}
-
-      <div className="border-t pt-4 space-y-3">
-        <p className="text-sm font-medium text-muted-foreground">Supplier Status</p>
-        <Select value={supplierStatus} onValueChange={(v) => setSupplierStatus(v as SupplierStatus)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="requested">Requested</SelectItem>
-            <SelectItem value="confirmed">Confirmed</SelectItem>
-            <SelectItem value="modified">Modified</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="space-y-2">
-          <Label>Supplier Reference</Label>
-          <Input value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} placeholder="Confirmation / PNR / Ref #" />
-        </div>
-        <div className="space-y-2">
-          <Label>Supplier Notes</Label>
-          <Textarea value={supplierNotes} onChange={(e) => setSupplierNotes(e.target.value)} rows={2} placeholder="Internal supplier notes..." />
-        </div>
-      </div>
-
-      <div className="flex gap-2 pt-2">
-        <Button onClick={handleSubmit} className="flex-1">
-          <Save className="h-3.5 w-3.5 mr-1" /> {item ? 'Update' : 'Add'} Item
-        </Button>
-        <Button variant="outline" onClick={onCancel}>Cancel</Button>
-      </div>
-    </div>
+    </Card>
   );
+}
+
+function buildDetailSummary(itemType: string, details: Record<string, unknown>): string {
+  switch (itemType) {
+    case 'hotel_room': {
+      const parts: string[] = [];
+      if (details.room_type) parts.push(String(details.room_type));
+      if (details.meal_plan) parts.push(String(details.meal_plan));
+      if (details.nights) parts.push(`${details.nights}N`);
+      return parts.join(' · ');
+    }
+    case 'flight_segment': {
+      const parts: string[] = [];
+      if (details.airline) parts.push(String(details.airline));
+      if (details.cabin_class) parts.push(String(details.cabin_class));
+      return parts.join(' · ');
+    }
+    case 'transfer':
+      return details.vehicle_type ? String(details.vehicle_type) : '';
+    case 'dmc_package': {
+      const count = (Number(details.activity_count) || 0) + (Number(details.line_item_count) || 0);
+      return count > 0 ? `${count} components` : '';
+    }
+    default:
+      return details.location ? String(details.location) : '';
+  }
 }

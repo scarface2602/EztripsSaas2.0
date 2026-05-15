@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();
-  const { item_type, label, start_date, end_date, cost_price, sell_price, supplier_status, supplier_reference, supplier_notes, details, sort_order } = body;
+  const { item_type, label, start_date, end_date, cost_price, sell_price, supplier_status, supplier_reference, supplier_notes, vendor_name, vendor_email, portal_name, payment_due_date, details, sort_order } = body;
 
   if (!item_type || !label) {
     return NextResponse.json({ error: 'item_type and label are required' }, { status: 400 });
@@ -60,6 +60,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       supplier_status: supplier_status || 'pending',
       supplier_reference: supplier_reference || null,
       supplier_notes: supplier_notes || null,
+      vendor_name: vendor_name || null,
+      vendor_email: vendor_email || null,
+      portal_name: portal_name || null,
+      payment_due_date: payment_due_date || null,
       details: details || {},
       sort_order: sort_order ?? 0,
     })
