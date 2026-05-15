@@ -9,11 +9,13 @@ import Link from 'next/link';
 import {
   FileText, Users, Clock, ArrowDownLeft, ArrowUpRight, Plus,
   TrendingUp, Search, Edit, Copy, ExternalLink, ChevronDown, ChevronRight,
+  Inbox, ArrowRight,
 } from 'lucide-react';
 import { differenceInHours, format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { Proposal } from '@/lib/types/database';
+import type { DashboardEnquiry } from './page';
 
 const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
@@ -36,9 +38,11 @@ interface DashboardClientProps {
   proposals: Proposal[];
   receivables: Record<string, unknown>[];
   payables: Record<string, unknown>[];
+  newEnquiryCount: number;
+  recentEnquiries: DashboardEnquiry[];
 }
 
-export function DashboardClient({ proposals, receivables, payables }: DashboardClientProps) {
+export function DashboardClient({ proposals, receivables, payables, newEnquiryCount, recentEnquiries }: DashboardClientProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [search, setSearch] = useState('');
@@ -195,18 +199,31 @@ export function DashboardClient({ proposals, receivables, payables }: DashboardC
         </div>
       </div>
 
-      {/* Stats bar — status counts */}
-      <div className="grid grid-cols-5 gap-3">
-        {STATUS_ORDER.map(status => (
-          <Link key={status} href={`/proposals?status=${status}`}>
-            <Card className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardContent className="pt-5 pb-4">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{STATUS_LABELS[status]}</p>
-                <p className="text-3xl font-bold">{statusCounts[status]}</p>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+      {/* Stats bar — enquiries + status counts */}
+      <div className="grid grid-cols-6 gap-3">
+        <Link href="/enquiries?status=new">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-orange-200 bg-orange-50/50">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-xs text-orange-700 uppercase tracking-wide mb-1 font-medium">New Enquiries</p>
+              <p className="text-3xl font-bold text-orange-700">{newEnquiryCount}</p>
+            </CardContent>
+          </Card>
+        </Link>
+        {STATUS_ORDER.map(status => {
+          const count = status === 'draft'
+            ? allProposals.filter(p => p.status === 'draft' && !p.published_data).length
+            : statusCounts[status];
+          return (
+            <Link key={status} href={`/proposals?status=${status}`}>
+              <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardContent className="pt-5 pb-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{STATUS_LABELS[status]}</p>
+                  <p className="text-3xl font-bold">{count}</p>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
 
       {/* Financial summary */}
@@ -266,6 +283,48 @@ export function DashboardClient({ proposals, receivables, payables }: DashboardC
                   </Link>
                 );
               })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent Enquiries */}
+      {recentEnquiries.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Inbox className="h-4 w-4 text-orange-600" /> Recent Enquiries
+              </CardTitle>
+              <Link href="/enquiries">
+                <Button variant="ghost" size="sm" className="text-xs h-7">View All</Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0 px-0 pb-0">
+            <div className="divide-y">
+              {recentEnquiries.map(eq => (
+                <div key={eq.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-muted/30">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm truncate">{eq.client_name || 'Unknown'}</span>
+                      <Badge className={eq.status === 'new' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700'} variant="secondary">
+                        {eq.status}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {eq.destination || 'No destination'}
+                      {eq.travel_dates && ` · ${eq.travel_dates}`}
+                      {eq.pax && ` · ${eq.pax} pax`}
+                    </p>
+                  </div>
+                  <Link href={`/proposals/new?enquiry_id=${eq.id}`}>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                      Create Proposal <ArrowRight className="h-3 w-3" />
+                    </Button>
+                  </Link>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

@@ -12,7 +12,6 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Settings, Save, Building2, Upload, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { createClient } from '@/lib/supabase/client';
 
 interface OrgData {
   id?: string;
@@ -144,13 +143,15 @@ export default function SettingsPage() {
   async function handleLogoUpload(file: File) {
     setUploadingLogo(true);
     try {
-      const supabase = createClient();
-      const ext = file.name.split('.').pop();
-      const path = `org-logos/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from('org-logos').upload(path, file, { upsert: true });
-      if (error) { toast.error('Upload failed'); return; }
-      const { data: urlData } = supabase.storage.from('org-logos').getPublicUrl(path);
-      setOrg({ ...org, logo_url: urlData.publicUrl });
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/settings/org/upload-logo', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Upload failed'); return; }
+      setOrg({ ...org, logo_url: data.url });
+      toast.success('Logo uploaded — click Save Company to apply');
+    } catch {
+      toast.error('Upload failed');
     } finally {
       setUploadingLogo(false);
     }
