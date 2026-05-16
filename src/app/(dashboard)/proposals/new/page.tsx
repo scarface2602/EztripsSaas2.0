@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { FileText, Upload, Wand2, Loader2, AlertTriangle, Info, ArrowRight, Package, List, Plus, Trash2, Mail } from 'lucide-react';
 import type { TripCity } from '@/lib/types/database';
@@ -403,29 +402,43 @@ export default function NewProposalPage() {
 
             <div className="space-y-4">
               <Label>Quote Source</Label>
-              <Tabs value={sourceTab} onValueChange={setSourceTab}>
-                <TabsList className="h-10 w-full">
-                  <TabsTrigger value="text" className="flex-1 h-9 px-4 text-sm">Email / WhatsApp Text</TabsTrigger>
-                  <TabsTrigger value="file" className="flex-1 h-9 px-4 text-sm">PDF / Excel / CSV</TabsTrigger>
-                </TabsList>
-                <TabsContent value="text" className="mt-4 space-y-2">
-                  <Textarea
-                    placeholder="Paste supplier quote text here..."
-                    value={rawText}
-                    onChange={(e) => setRawText(e.target.value)}
-                    rows={12}
-                  />
-                  <p className="text-xs text-muted-foreground text-right">{rawText.length} characters</p>
-                </TabsContent>
-                <TabsContent value="file" className="mt-4 space-y-4">
+              <div className="space-y-4">
+                <div className="flex bg-muted rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={() => setSourceTab('text')}
+                    className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${sourceTab === 'text' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    Email / WhatsApp Text
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSourceTab('file')}
+                    className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${sourceTab === 'file' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    PDF / Excel / CSV
+                  </button>
+                </div>
+                {sourceTab === 'text' && (
+                  <div className="space-y-2">
+                    <Textarea
+                      placeholder="Paste supplier quote text here..."
+                      value={rawText}
+                      onChange={(e) => setRawText(e.target.value)}
+                      rows={12}
+                    />
+                    <p className="text-xs text-muted-foreground text-right">{rawText.length} characters</p>
+                  </div>
+                )}
+                {sourceTab === 'file' && (
                   <div className="border-2 border-dashed rounded-lg p-8 text-center">
                     <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                     <p className="text-sm text-muted-foreground mb-2">Drag & drop or click to upload</p>
                     <Input type="file" accept=".pdf,.xlsx,.xls,.csv" onChange={(e) => setFile(e.target.files?.[0] || null)} className="max-w-xs mx-auto" />
                     {file && <p className="text-sm mt-2 font-medium">{file.name}</p>}
                   </div>
-                </TabsContent>
-              </Tabs>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-between">

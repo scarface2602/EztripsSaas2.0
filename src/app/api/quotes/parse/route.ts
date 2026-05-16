@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { checkSanitisation, SANITISATION_SYSTEM_PROMPT } from '@/lib/utils/sanitisation';
 
+export const maxDuration = 60;
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const EXTRACTION_PROMPT = `You are a travel proposal extraction assistant.
