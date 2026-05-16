@@ -39,6 +39,7 @@ const NAV_ITEMS = [
 
 const ADMIN_ITEMS = [
   { href: '/admin', label: 'Admin', icon: Shield },
+  { href: '/admin/users', label: 'Team', icon: Users },
 ];
 
 const WEBSITE_ITEMS = [
