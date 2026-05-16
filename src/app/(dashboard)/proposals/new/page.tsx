@@ -50,6 +50,7 @@ export default function NewProposalPage() {
   const [tripCities, setTripCities] = useState<TripCity[]>([]);
   const [prevStep, setPrevStep] = useState<'manual' | 'review'>('manual');
   const [enquiryName, setEnquiryName] = useState('');
+  const [parseError, setParseError] = useState('');
 
   useEffect(() => {
     async function fetchData() {
@@ -103,6 +104,7 @@ export default function NewProposalPage() {
 
   async function handleParse() {
     setLoading(true);
+    setParseError('');
     setStep('parsing');
 
     try {
@@ -115,8 +117,12 @@ export default function NewProposalPage() {
 
         const importRes = await fetch('/api/quotes/import', { method: 'POST', body: formData });
         const importData = await importRes.json();
+        if (!importRes.ok) throw new Error(importData.error || 'Failed to import file');
         text = importData.text || '';
+        if (!text.trim()) throw new Error('No text could be extracted from the file');
       }
+
+      if (!text.trim()) throw new Error('No text to parse');
 
       const parseRes = await fetch('/api/quotes/parse', {
         method: 'POST',
@@ -124,6 +130,8 @@ export default function NewProposalPage() {
         body: JSON.stringify({ text, supplier_id: selectedSupplier }),
       });
       const parseData = await parseRes.json();
+      if (!parseRes.ok) throw new Error(parseData.error || 'AI parsing failed');
+      if (!parseData.parsed) throw new Error('AI returned empty result');
 
       setParsedData(parseData.parsed);
       setSanitisationFlags(parseData.sanitisation_flags || []);
@@ -145,7 +153,9 @@ export default function NewProposalPage() {
       if (p.pax_children) setPaxChildren(p.pax_children);
 
       setStep('review');
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Parsing failed';
+      setParseError(msg);
       setStep('import-setup');
     } finally {
       setLoading(false);
@@ -384,29 +394,39 @@ export default function NewProposalPage() {
 
             <Separator />
 
-            <Tabs value={sourceTab} onValueChange={setSourceTab}>
-              <TabsList>
-                <TabsTrigger value="text">Email / WhatsApp Text</TabsTrigger>
-                <TabsTrigger value="file">PDF / Excel / CSV</TabsTrigger>
-              </TabsList>
-              <TabsContent value="text" className="space-y-2">
-                <Textarea
-                  placeholder="Paste supplier quote text here..."
-                  value={rawText}
-                  onChange={(e) => setRawText(e.target.value)}
-                  rows={12}
-                />
-                <p className="text-xs text-muted-foreground text-right">{rawText.length} characters</p>
-              </TabsContent>
-              <TabsContent value="file" className="space-y-4">
-                <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground mb-2">Drag & drop or click to upload</p>
-                  <Input type="file" accept=".pdf,.xlsx,.xls,.csv" onChange={(e) => setFile(e.target.files?.[0] || null)} className="max-w-xs mx-auto" />
-                  {file && <p className="text-sm mt-2 font-medium">{file.name}</p>}
-                </div>
-              </TabsContent>
-            </Tabs>
+            {parseError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5" />
+                <p className="text-sm text-red-700">{parseError}</p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <Label>Quote Source</Label>
+              <Tabs value={sourceTab} onValueChange={setSourceTab}>
+                <TabsList className="h-10 w-full">
+                  <TabsTrigger value="text" className="flex-1 h-9 px-4 text-sm">Email / WhatsApp Text</TabsTrigger>
+                  <TabsTrigger value="file" className="flex-1 h-9 px-4 text-sm">PDF / Excel / CSV</TabsTrigger>
+                </TabsList>
+                <TabsContent value="text" className="mt-4 space-y-2">
+                  <Textarea
+                    placeholder="Paste supplier quote text here..."
+                    value={rawText}
+                    onChange={(e) => setRawText(e.target.value)}
+                    rows={12}
+                  />
+                  <p className="text-xs text-muted-foreground text-right">{rawText.length} characters</p>
+                </TabsContent>
+                <TabsContent value="file" className="mt-4 space-y-4">
+                  <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                    <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground mb-2">Drag & drop or click to upload</p>
+                    <Input type="file" accept=".pdf,.xlsx,.xls,.csv" onChange={(e) => setFile(e.target.files?.[0] || null)} className="max-w-xs mx-auto" />
+                    {file && <p className="text-sm mt-2 font-medium">{file.name}</p>}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
 
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setStep('choose')}>Back</Button>

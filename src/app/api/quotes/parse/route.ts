@@ -80,6 +80,7 @@ IMPORTANT extraction rules:
 - payment_terms: Extract the full payment terms text verbatim.`;
 
 export async function POST(request: NextRequest) {
+  try {
   const { text } = await request.json();
 
   if (!text) {
@@ -123,4 +124,9 @@ export async function POST(request: NextRequest) {
     parsed,
     sanitisation_flags: sanitisationResult.flaggedFields,
   });
+  } catch (err) {
+    console.error('Quote parse error:', err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: `AI parsing failed: ${message}` }, { status: 500 });
+  }
 }

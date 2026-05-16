@@ -573,9 +573,11 @@ src/app/(dashboard)/bookings/[id]/page.tsx       — show linked receivables
 > **Goal**: Improve agent productivity, customer experience, and system reliability.
 > **Estimated effort**: 5-7 days
 
-### 2.1 — Connect Website to CMS APIs
+### 2.1 — Connect Website to CMS APIs (Partially Done ✅)
 
-**Problem**: Website uses static `lib/data.ts` for destinations and hardcoded blog posts. CMS exists in SaaS but isn't connected.
+**Done**: Website About page now fetches from CMS via `fetchPage('about')`. Pages CRUD built (`/admin/website/pages`). Public pages API created.
+
+**Remaining**: Website uses static `lib/data.ts` for destinations and hardcoded blog posts. CMS exists in SaaS but isn't connected.
 
 **Files to modify (EztripsWebsite)**:
 ```
@@ -783,31 +785,25 @@ src/app/api/proposals/[id]/revisions/route.ts    — NEW: CRUD for revision note
 
 ---
 
-### 3.3 — Multi-Agent Team Management
+### 3.3 — Multi-Agent Team Management ✅ DONE (2026-05-16)
 
-**SQL migration**:
-```sql
-CREATE TABLE team_invitations (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  org_id UUID NOT NULL REFERENCES organisations(id),
-  email TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'agent',
-  invited_by UUID REFERENCES users(id),
-  accepted_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
+**Implemented without separate team_invitations table — uses Supabase admin.createUser() directly.**
 
-**New pages**:
+**Files created**:
 ```
-src/app/(dashboard)/admin/team/page.tsx          — manage team members
+src/app/api/admin/users/route.ts                 — GET (list), POST (create), PATCH (update role)
+src/app/api/admin/users/[id]/stats/route.ts      — GET agent stats (simulated dashboard)
+src/app/(dashboard)/admin/users/page.tsx          — server page
+src/app/(dashboard)/admin/users/users-manager.tsx — full UI: list, add agent, role change
+src/app/(dashboard)/admin/users/[id]/page.tsx     — agent detail view
+src/app/(dashboard)/admin/users/[id]/agent-detail-client.tsx — simulated dashboard for any agent
 ```
 
-**New API routes**:
-```
-src/app/api/admin/team/route.ts                  — list/invite team members
-src/app/api/admin/team/[id]/route.ts             — update role, deactivate
-```
+**Features**:
+- Add new agents (creates auth user + DB row)
+- Change roles inline (agent ↔ super_admin)
+- View any agent's full dashboard: proposals, clients, bookings, receivables, payables
+- "Team" link in sidebar for super_admin
 
 ---
 
@@ -1283,11 +1279,11 @@ Integration into booking detail page:
 | **1** | Proposal view notification | 1h | Sales | Missed follow-up timing |
 | **1** | Voucher system | 2-3d | Core flow | Cannot deliver documents |
 | **1** | Payment unification | 1d | Finance | Confusion, double-tracking |
-| **2** | Website ↔ CMS connection | 1d | Content | Stale website content |
+| **2** | Website ↔ CMS connection | 1d | Content | ~~Stale website content~~ Partial ✅ |
 | **2** | Expiry notifications | 4h | Revenue | Expired quotes unnoticed |
 | **2** | WhatsApp share | 1h | Conversion | Slower outreach |
 | **2** | Error handling cleanup | 4h | DX | Debugging difficulty |
 | **3** | Customer portal | 3-4d | Differentiation | Share-link only |
 | **3** | Revision history | 2d | Collaboration | No audit trail |
-| **3** | Team management | 2d | Scale | Single-agent limitation |
+| **3** | ~~Team management~~ | ~~2d~~ | ~~Scale~~ | ✅ Done |
 | **3** | Test suite | 3-4d | Confidence | Fear of refactoring |
