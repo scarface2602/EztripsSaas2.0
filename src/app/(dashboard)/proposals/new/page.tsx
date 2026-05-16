@@ -115,6 +115,10 @@ export default function NewProposalPage() {
         formData.append('source_type', file.name.endsWith('.pdf') ? 'pdf' : 'excel');
 
         const importRes = await fetch('/api/quotes/import', { method: 'POST', body: formData });
+        const importCt = importRes.headers.get('content-type') || '';
+        if (!importCt.includes('application/json')) {
+          throw new Error(`File import returned ${importRes.status} — not JSON. You may need to re-login.`);
+        }
         const importData = await importRes.json();
         if (!importRes.ok) throw new Error(importData.error || 'Failed to import file');
         text = importData.text || '';
@@ -128,6 +132,10 @@ export default function NewProposalPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, supplier_id: selectedSupplier }),
       });
+      const contentType = parseRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Server returned ${parseRes.status} (${parseRes.statusText}) — not JSON. You may need to re-login.`);
+      }
       const parseData = await parseRes.json();
       if (!parseRes.ok) throw new Error(parseData.error || 'AI parsing failed');
       if (!parseData.parsed) throw new Error('AI returned empty result');
