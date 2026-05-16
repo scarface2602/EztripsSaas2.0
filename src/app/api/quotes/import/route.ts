@@ -3,6 +3,23 @@ import * as XLSX from 'xlsx';
 
 export const maxDuration = 60;
 
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  // Use pdfjs-dist directly — pure JS, works on Vercel (no native bindings)
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const pages: string[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const strings = content.items
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((item: unknown) => typeof item === 'object' && item !== null && 'str' in item)
+      .map((item: unknown) => (item as Record<string, unknown>).str as string);
+    pages.push(strings.join(' '));
+  }
+  return pages.join('\n\n');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -17,13 +34,7 @@ export async function POST(request: NextRequest) {
     let text = '';
 
     if (sourceType === 'pdf') {
-      // pdf-parse v2: instantiate → load → getText
-      const { PDFParse } = await import('pdf-parse');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parser: any = new PDFParse({ data: new Uint8Array(buffer) });
-      await parser.load();
-      const pdfData = await parser.getText();
-      text = typeof pdfData === 'string' ? pdfData : pdfData?.text || '';
+      text = await extractPdfText(buffer);
     } else {
       // Excel/CSV
       const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -43,6 +54,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ text, source_type: sourceType });
   } catch (err) {
     console.error('Quote import error:', err);
-    return NextResponse.json({ error: 'Failed to parse file' }, { status: 500 });
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: `Failed to parse file: ${msg}` }, { status: 500 });
   }
 }
