@@ -195,7 +195,7 @@ export default function BlogManager({ initialData }: { initialData: BlogPost[] }
 
       {/* Editor Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-6">
           <SheetHeader>
             <SheetTitle>{editing ? 'Edit Post' : 'New Post'}</SheetTitle>
           </SheetHeader>

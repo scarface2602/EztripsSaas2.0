@@ -82,7 +82,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
         </div>
         <Button onClick={() => setOpen(true)}><UserPlus className="h-4 w-4 mr-2" /> Add Agent</Button>
         <Sheet open={open} onOpenChange={setOpen}>
-          <SheetContent>
+          <SheetContent className="p-6">
             <SheetHeader>
               <SheetTitle>Add New Agent</SheetTitle>
             </SheetHeader>

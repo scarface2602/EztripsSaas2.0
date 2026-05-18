@@ -77,7 +77,7 @@ export default function LeadsClient({
 
 /* ─── Admin / Manager View ─── */
 
-const EMPTY_FORM = { name: '', phone: '', email: '', destination: '', travel_date: '', adults: '1', children: '0', budget_range: '', number_of_nights: '', special_requirements: '', notes: '', source: 'offline' };
+const EMPTY_FORM = { name: '', phone: '', email: '', destination: '', travel_date: '', adults: '1', children: '0', children_ages: [] as string[], budget_range: '', number_of_nights: '', special_requirements: '', notes: '', source: 'offline' };
 
 function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent[] }) {
   const router = useRouter();
@@ -104,6 +104,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
           ...form,
           adults: parseInt(form.adults) || 1,
           children: parseInt(form.children) || 0,
+          children_ages: form.children_ages.filter(a => a).join(', ') || null,
           number_of_nights: form.number_of_nights ? parseInt(form.number_of_nights) : null,
         }),
       });
@@ -159,11 +160,11 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
         </Button>
       </div>
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="overflow-y-auto">
+        <SheetContent className="overflow-y-auto p-6">
           <SheetHeader>
             <SheetTitle>Add Offline Enquiry</SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-6">
+          <div className="space-y-4 mt-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Name *</Label>
@@ -195,13 +196,40 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
               </div>
               <div>
                 <Label>Children</Label>
-                <Input type="number" min="0" value={form.children} onChange={e => setForm(f => ({ ...f, children: e.target.value }))} />
+                <Input type="number" min="0" value={form.children} onChange={e => {
+                  const count = parseInt(e.target.value) || 0;
+                  setForm(f => ({
+                    ...f,
+                    children: e.target.value,
+                    children_ages: Array.from({ length: count }, (_, i) => f.children_ages[i] || ''),
+                  }));
+                }} />
               </div>
               <div>
                 <Label>Nights</Label>
                 <Input type="number" min="1" value={form.number_of_nights} onChange={e => setForm(f => ({ ...f, number_of_nights: e.target.value }))} placeholder="—" />
               </div>
             </div>
+            {form.children_ages.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                {form.children_ages.map((age, i) => (
+                  <div key={i}>
+                    <Label>Child {i + 1} Age</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="17"
+                      value={age}
+                      onChange={e => setForm(f => ({
+                        ...f,
+                        children_ages: f.children_ages.map((a, j) => j === i ? e.target.value : a),
+                      }))}
+                      placeholder="Age"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
             <div>
               <Label>Budget Range</Label>
               <Select value={form.budget_range || undefined} onValueChange={v => setForm(f => ({ ...f, budget_range: v || '' }))}>
