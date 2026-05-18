@@ -21,9 +21,10 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
   const [error, setError] = useState('');
 
   // New user form
-  const [form, setForm] = useState({ email: '', full_name: '', password: '', role: 'agent' as string });
+  const [form, setForm] = useState({ email: '', full_name: '', password: '', role: 'agent' as string, max_active_leads: 10 });
 
   const agents = users.filter(u => u.role === 'agent');
+  const managers = users.filter(u => u.role === 'manager');
   const admins = users.filter(u => u.role === 'super_admin');
 
   async function handleCreate() {
@@ -48,7 +49,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
       if (!res.ok) throw new Error(data.error);
 
       setUsers(prev => [data, ...prev]);
-      setForm({ email: '', full_name: '', password: '', role: 'agent' });
+      setForm({ email: '', full_name: '', password: '', role: 'agent', max_active_leads: 10 });
       setOpen(false);
       router.refresh();
     } catch (e) {
@@ -104,10 +105,17 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="agent">Agent</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
                     <SelectItem value="super_admin">Super Admin</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {form.role === 'agent' && (
+                <div>
+                  <Label>Max Active Leads</Label>
+                  <Input type="number" min={1} value={form.max_active_leads} onChange={e => setForm(f => ({ ...f, max_active_leads: parseInt(e.target.value) || 10 }))} />
+                </div>
+              )}
               {error && <p className="text-sm text-red-500">{error}</p>}
               <Button onClick={handleCreate} disabled={saving} className="w-full">
                 {saving ? 'Creating...' : 'Create Agent'}
@@ -118,7 +126,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total Users</p>
@@ -129,6 +137,12 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Agents</p>
             <p className="text-3xl font-bold">{agents.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Managers</p>
+            <p className="text-3xl font-bold">{managers.length}</p>
           </CardContent>
         </Card>
         <Card>
@@ -151,6 +165,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Max Leads</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -160,7 +175,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
-                      {user.role === 'super_admin' ? <Shield className="h-4 w-4 text-amber-500" /> : <UserCircle className="h-4 w-4 text-muted-foreground" />}
+                      {user.role === 'super_admin' ? <Shield className="h-4 w-4 text-amber-500" /> : user.role === 'manager' ? <Shield className="h-4 w-4 text-blue-500" /> : <UserCircle className="h-4 w-4 text-muted-foreground" />}
                       {user.full_name}
                     </div>
                   </TableCell>
@@ -172,9 +187,13 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="manager">Manager</SelectItem>
                         <SelectItem value="super_admin">Super Admin</SelectItem>
                       </SelectContent>
                     </Select>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {user.role === 'agent' ? (user.max_active_leads ?? 10) : '—'}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {new Date(user.created_at).toLocaleDateString()}

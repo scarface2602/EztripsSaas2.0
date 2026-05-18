@@ -30,6 +30,7 @@ const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/proposals', label: 'Proposals', icon: FileText },
   { href: '/bookings', label: 'Bookings', icon: ClipboardList },
+  { href: '/leads', label: 'Leads', icon: Inbox },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Suppliers', icon: Truck },
   { href: '/receivables', label: 'Receivables', icon: ArrowDownLeft },
@@ -53,7 +54,7 @@ const WEBSITE_ITEMS = [
 export function Sidebar({ user }: { user: User }) {
   const pathname = usePathname();
 
-  const items = user.role === 'super_admin'
+  const items = (user.role === 'super_admin' || user.role === 'manager')
     ? [...NAV_ITEMS, ...ADMIN_ITEMS]
     : NAV_ITEMS;
 
@@ -85,7 +86,7 @@ export function Sidebar({ user }: { user: User }) {
             </Link>
           );
         })}
-        {user.role === 'super_admin' && (
+        {(user.role === 'super_admin' || user.role === 'manager') && (
           <>
             <p className="text-xs text-muted-foreground px-3 py-1 mt-4">Website CMS</p>
             {WEBSITE_ITEMS.map((item) => {

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'email, full_name, and password are required' }, { status: 400 });
   }
 
-  if (role !== 'agent' && role !== 'super_admin') {
+  if (role !== 'agent' && role !== 'manager' && role !== 'super_admin') {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
   }
 
@@ -84,7 +84,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Only allow safe fields
-  const allowed = ['full_name', 'role', 'agency_name', 'whatsapp_number'];
+  const allowed = ['full_name', 'role', 'agency_name', 'whatsapp_number', 'max_active_leads'];
   const filtered: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in updates) filtered[key] = updates[key];

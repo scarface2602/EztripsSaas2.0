@@ -38,6 +38,7 @@ export async function requireAuth(): Promise<{ user: User; authUser: { id: strin
     default_payment_terms: null,
     margin_threshold_pct: 12,
     rounding_unit: 0,
+    max_active_leads: 10,
     tc_content: null,
     tc_version: 1,
     created_at: new Date().toISOString(),
@@ -56,10 +57,20 @@ export async function requireSuperAdmin(): Promise<{ user: User; authUser: { id:
   return result;
 }
 
-export async function requireRole(role: 'agent' | 'super_admin'): Promise<{ user: User; authUser: { id: string; email: string } }> {
+export async function requireRole(role: 'agent' | 'manager' | 'super_admin'): Promise<{ user: User; authUser: { id: string; email: string } }> {
   const result = await requireAuth();
 
   if (result.user.role !== role && result.user.role !== 'super_admin') {
+    redirect('/');
+  }
+
+  return result;
+}
+
+export async function requireManagerOrAdmin(): Promise<{ user: User; authUser: { id: string; email: string } }> {
+  const result = await requireAuth();
+
+  if (result.user.role !== 'super_admin' && result.user.role !== 'manager') {
     redirect('/');
   }
 

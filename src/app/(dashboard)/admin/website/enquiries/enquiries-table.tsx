@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Flame, Thermometer, Snowflake, FileText } from 'lucide-react';
 
 type Enquiry = Record<string, unknown>;
@@ -29,10 +30,29 @@ const PRIORITY_ICONS: Record<string, { icon: typeof Flame; color: string }> = {
 
 const TABS = ['all', 'new', 'contacted', 'qualified', 'proposal_sent', 'won'] as const;
 
-export default function EnquiriesTable({ initialData }: { initialData: Enquiry[] }) {
+type Agent = { id: string; full_name: string; role: string; max_active_leads: number };
+
+export default function EnquiriesTable({ initialData, agents = [] }: { initialData: Enquiry[]; agents?: Agent[] }) {
   const router = useRouter();
-  const enquiries = initialData;
+  const [enquiries, setEnquiries] = useState(initialData);
   const [filter, setFilter] = useState<string>('all');
+  async function handleAssign(enquiryId: string, agentId: string) {
+    try {
+      const res = await fetch('/api/website/cms/enquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: enquiryId, assigned_to: agentId || null }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to assign');
+        return;
+      }
+      setEnquiries(prev => prev.map(e => e.id === enquiryId ? { ...e, assigned_to: agentId || null } : e));
+    } catch {
+      alert('Failed to assign lead');
+    }
+  }
   const filtered = filter === 'all' ? enquiries : enquiries.filter(e => e.status === filter);
 
   return (
@@ -65,6 +85,7 @@ export default function EnquiriesTable({ initialData }: { initialData: Enquiry[]
                 <TableHead>Pax</TableHead>
                 <TableHead>Budget</TableHead>
                 <TableHead>Proposals</TableHead>
+                <TableHead>Assigned To</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Follow-up</TableHead>
                 <TableHead>Date</TableHead>
@@ -73,7 +94,7 @@ export default function EnquiriesTable({ initialData }: { initialData: Enquiry[]
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
                     No enquiries found
                   </TableCell>
                 </TableRow>
@@ -117,6 +138,22 @@ export default function EnquiriesTable({ initialData }: { initialData: Enquiry[]
                         ) : (
                           <span className="text-muted-foreground text-sm">—</span>
                         )}
+                      </TableCell>
+                      <TableCell onClick={(ev) => ev.stopPropagation()}>
+                        <Select
+                          value={(e.assigned_to as string) || 'unassigned'}
+                          onValueChange={v => { if (v) handleAssign(e.id as string, v === 'unassigned' ? '' : v); }}
+                        >
+                          <SelectTrigger className="w-[140px] h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                            {agents.map(a => (
+                              <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell>
                         <Badge className={STATUS_COLORS[(e.status as string) || 'new']}>

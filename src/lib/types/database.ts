@@ -15,7 +15,7 @@ export interface User {
   id: string;
   email: string;
   full_name: string;
-  role: 'agent' | 'super_admin';
+  role: 'agent' | 'manager' | 'super_admin';
   agency_name: string | null;
   logo_url: string | null;
   whatsapp_number: string | null;
@@ -25,6 +25,7 @@ export interface User {
   rounding_unit: number;
   org_id: string | null;
   tc_content: string | null;
+  max_active_leads: number;
   tc_version: number;
   created_at: string;
 }

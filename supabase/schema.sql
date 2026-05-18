@@ -14,7 +14,7 @@ CREATE TABLE users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text UNIQUE NOT NULL,
   full_name text NOT NULL,
-  role text NOT NULL CHECK (role IN ('agent', 'super_admin')),
+  role text NOT NULL CHECK (role IN ('agent', 'manager', 'super_admin')),
   agency_name text,
   logo_url text,
   whatsapp_number text,

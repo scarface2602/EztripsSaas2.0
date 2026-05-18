@@ -26,6 +26,32 @@ export async function PATCH(request: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
   const supabase = createServiceClient();
+
+  // If assigning to an agent, check their max_active_leads limit
+  if (body.assigned_to) {
+    const { data: agent } = await supabase
+      .from('users')
+      .select('max_active_leads')
+      .eq('id', body.assigned_to)
+      .single();
+
+    if (agent) {
+      const { count } = await supabase
+        .from('website_enquiries')
+        .select('id', { count: 'exact', head: true })
+        .eq('assigned_to', body.assigned_to)
+        .in('status', ['new', 'contacted', 'qualified'])
+        .neq('id', id); // exclude the current enquiry if reassigning
+
+      if ((count ?? 0) >= (agent.max_active_leads ?? 10)) {
+        return NextResponse.json(
+          { error: `Agent has reached their max active leads limit (${agent.max_active_leads ?? 10})` },
+          { status: 400 }
+        );
+      }
+    }
+  }
+
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
   const allowedFields = [

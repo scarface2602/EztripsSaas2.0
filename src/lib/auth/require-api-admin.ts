@@ -15,7 +15,7 @@ export async function requireApiAdmin(): Promise<{ authorized: true } | NextResp
     .eq('id', data.user.id)
     .single();
 
-  if (!user || user.role !== 'super_admin') {
+  if (!user || (user.role !== 'super_admin' && user.role !== 'manager')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

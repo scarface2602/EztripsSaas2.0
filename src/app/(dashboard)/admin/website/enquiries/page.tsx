@@ -1,13 +1,13 @@
-import { requireSuperAdmin } from '@/lib/auth/require-role';
+import { requireManagerOrAdmin } from '@/lib/auth/require-role';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Inbox } from 'lucide-react';
 import EnquiriesTable from './enquiries-table';
 
 export default async function EnquiriesPage() {
-  await requireSuperAdmin();
+  await requireManagerOrAdmin();
   const supabase = createServiceClient();
 
-  const [{ data: enquiries }, { data: proposalCounts }] = await Promise.all([
+  const [{ data: enquiries }, { data: proposalCounts }, { data: agents }] = await Promise.all([
     supabase
       .from('website_enquiries')
       .select('*')
@@ -16,6 +16,10 @@ export default async function EnquiriesPage() {
       .from('proposals')
       .select('enquiry_id')
       .not('enquiry_id', 'is', null),
+    supabase
+      .from('users')
+      .select('id, full_name, role, max_active_leads')
+      .in('role', ['agent', 'manager']),
   ]);
 
   // Build a count map: enquiry_id → number of linked proposals
@@ -37,7 +41,7 @@ export default async function EnquiriesPage() {
         <Inbox className="h-6 w-6" />
         <h1 className="text-2xl font-bold">Website Enquiries</h1>
       </div>
-      <EnquiriesTable initialData={enriched} />
+      <EnquiriesTable initialData={enriched} agents={(agents || []) as { id: string; full_name: string; role: string; max_active_leads: number }[]} />
     </div>
   );
 }
