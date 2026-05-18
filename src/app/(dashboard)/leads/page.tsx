@@ -6,7 +6,52 @@ import LeadsClient from './leads-client';
 export default async function LeadsPage() {
   const { user } = await requireAuth();
   const supabase = createServiceClient();
+  const isAdmin = user.role === 'super_admin' || user.role === 'manager';
 
+  if (isAdmin) {
+    // Admin/manager: fetch ALL enquiries + agents list + proposal counts
+    const [{ data: enquiries }, { data: agents }, { data: proposalCounts }] = await Promise.all([
+      supabase
+        .from('website_enquiries')
+        .select('*')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('users')
+        .select('id, full_name, role, max_active_leads')
+        .in('role', ['agent', 'manager']),
+      supabase
+        .from('proposals')
+        .select('enquiry_id')
+        .not('enquiry_id', 'is', null),
+    ]);
+
+    const countMap: Record<string, number> = {};
+    (proposalCounts || []).forEach((p) => {
+      const eid = p.enquiry_id as string;
+      countMap[eid] = (countMap[eid] || 0) + 1;
+    });
+
+    const enriched = (enquiries || []).map((e) => ({
+      ...e,
+      proposal_count: countMap[e.id as string] || 0,
+    }));
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2">
+          <Inbox className="h-6 w-6" />
+          <h1 className="text-2xl font-bold">Leads & Enquiries</h1>
+        </div>
+        <LeadsClient
+          role={user.role}
+          allEnquiries={enriched}
+          agents={(agents || []) as { id: string; full_name: string; role: string; max_active_leads: number }[]}
+        />
+      </div>
+    );
+  }
+
+  // Agent view: my leads + unassigned pool
   const [{ data: myLeads }, { data: unassignedLeads }] = await Promise.all([
     supabase
       .from('website_enquiries')
@@ -21,7 +66,6 @@ export default async function LeadsPage() {
       .order('created_at', { ascending: false }),
   ]);
 
-  // Count active leads for limit display
   const activeCount = (myLeads || []).filter(l =>
     ['new', 'contacted', 'qualified'].includes(l.status as string)
   ).length;
@@ -33,6 +77,7 @@ export default async function LeadsPage() {
         <h1 className="text-2xl font-bold">My Leads</h1>
       </div>
       <LeadsClient
+        role={user.role}
         myLeads={myLeads || []}
         unassignedLeads={unassignedLeads || []}
         activeCount={activeCount}

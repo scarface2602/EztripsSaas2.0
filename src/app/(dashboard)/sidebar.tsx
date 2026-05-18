@@ -45,7 +45,6 @@ const ADMIN_ITEMS = [
 
 const WEBSITE_ITEMS = [
   { href: '/admin/website', label: 'Overview', icon: Globe },
-  { href: '/admin/website/enquiries', label: 'Enquiries', icon: Inbox },
   { href: '/admin/website/pages', label: 'Pages', icon: LayoutList },
   { href: '/admin/website/destinations', label: 'Destinations & Packages', icon: MapPin },
   { href: '/admin/website/blog', label: 'Blog', icon: BookOpen },
