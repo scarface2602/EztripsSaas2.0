@@ -30,7 +30,7 @@ const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/proposals', label: 'Proposals', icon: FileText },
   { href: '/bookings', label: 'Bookings', icon: ClipboardList },
-  { href: '/leads', label: 'Leads', icon: Inbox },
+  { href: '/leads', label: 'Enquiries', icon: Inbox },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Suppliers', icon: Truck },
   { href: '/receivables', label: 'Receivables', icon: ArrowDownLeft },

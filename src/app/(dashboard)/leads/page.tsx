@@ -40,7 +40,7 @@ export default async function LeadsPage() {
       <div className="space-y-6">
         <div className="flex items-center gap-2">
           <Inbox className="h-6 w-6" />
-          <h1 className="text-2xl font-bold">Leads & Enquiries</h1>
+          <h1 className="text-2xl font-bold">Enquiries</h1>
         </div>
         <LeadsClient
           role={user.role}
@@ -74,7 +74,7 @@ export default async function LeadsPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Inbox className="h-6 w-6" />
-        <h1 className="text-2xl font-bold">My Leads</h1>
+        <h1 className="text-2xl font-bold">My Enquiries</h1>
       </div>
       <LeadsClient
         role={user.role}

@@ -17,6 +17,46 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(data);
 }
 
+export async function POST(request: NextRequest) {
+  const auth = await requireApiAdmin();
+  if (auth instanceof NextResponse) return auth;
+
+  const body = await request.json();
+  const { name, phone, email, destination, travel_date, adults, children, children_ages, budget_range, number_of_nights, hotel_category, special_requirements, notes, source } = body;
+
+  if (!name || !phone) {
+    return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 });
+  }
+
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from('website_enquiries')
+    .insert({
+      name,
+      phone,
+      email: email || null,
+      destination: destination || null,
+      travel_date: travel_date || null,
+      adults: adults || 1,
+      children: children || 0,
+      children_ages: children_ages || null,
+      budget_range: budget_range || null,
+      number_of_nights: number_of_nights || null,
+      hotel_category: hotel_category || null,
+      special_requirements: special_requirements || null,
+      notes: notes || null,
+      source: source || 'offline',
+      status: 'new',
+      priority: 'medium',
+      lead_temperature: 'warm',
+    })
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data, { status: 201 });
+}
+
 export async function PATCH(request: NextRequest) {
   const auth = await requireApiAdmin();
   if (auth instanceof NextResponse) return auth;

@@ -7,7 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Flame, Thermometer, Snowflake, FileText } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Flame, Thermometer, Snowflake, FileText, Plus } from 'lucide-react';
 
 type Lead = Record<string, unknown>;
 type Agent = { id: string; full_name: string; role: string; max_active_leads: number };
@@ -73,11 +77,51 @@ export default function LeadsClient({
 
 /* ─── Admin / Manager View ─── */
 
+const EMPTY_FORM = { name: '', phone: '', email: '', destination: '', travel_date: '', adults: '1', children: '0', budget_range: '', number_of_nights: '', special_requirements: '', notes: '', source: 'offline' };
+
 function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent[] }) {
   const router = useRouter();
   const [enquiries, setEnquiries] = useState(initialData);
   const [filter, setFilter] = useState<string>('all');
   const [assignFilter, setAssignFilter] = useState<string>('all');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  async function handleCreate() {
+    setFormError('');
+    if (!form.name || !form.phone) {
+      setFormError('Name and phone are required');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/website/cms/enquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          adults: parseInt(form.adults) || 1,
+          children: parseInt(form.children) || 0,
+          number_of_nights: form.number_of_nights ? parseInt(form.number_of_nights) : null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to create');
+      }
+      const created = await res.json();
+      setEnquiries(prev => [{ ...created, proposal_count: 0 }, ...prev]);
+      setForm(EMPTY_FORM);
+      setSheetOpen(false);
+      router.refresh();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to create enquiry');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleAssign(enquiryId: string, agentId: string) {
     try {
@@ -108,6 +152,98 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
 
   return (
     <>
+      {/* Add Enquiry button + Sheet */}
+      <div className="flex justify-end">
+        <Button onClick={() => setSheetOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" /> Add Offline Enquiry
+        </Button>
+      </div>
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Add Offline Enquiry</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 mt-6">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Name *</Label>
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Client name" />
+              </div>
+              <div>
+                <Label>Phone *</Label>
+                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91..." />
+              </div>
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Optional" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Destination</Label>
+                <Input value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))} placeholder="e.g. Bali" />
+              </div>
+              <div>
+                <Label>Travel Date</Label>
+                <Input type="date" value={form.travel_date} onChange={e => setForm(f => ({ ...f, travel_date: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Adults</Label>
+                <Input type="number" min="1" value={form.adults} onChange={e => setForm(f => ({ ...f, adults: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Children</Label>
+                <Input type="number" min="0" value={form.children} onChange={e => setForm(f => ({ ...f, children: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Nights</Label>
+                <Input type="number" min="1" value={form.number_of_nights} onChange={e => setForm(f => ({ ...f, number_of_nights: e.target.value }))} placeholder="—" />
+              </div>
+            </div>
+            <div>
+              <Label>Budget Range</Label>
+              <Select value={form.budget_range || undefined} onValueChange={v => setForm(f => ({ ...f, budget_range: v || '' }))}>
+                <SelectTrigger><SelectValue placeholder="Select budget" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="under_50k">Under 50K</SelectItem>
+                  <SelectItem value="50k_1l">50K - 1L</SelectItem>
+                  <SelectItem value="1l_2l">1L - 2L</SelectItem>
+                  <SelectItem value="2l_5l">2L - 5L</SelectItem>
+                  <SelectItem value="above_5l">Above 5L</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Source</Label>
+              <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v || 'offline' }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="offline">Offline</SelectItem>
+                  <SelectItem value="phone">Phone Call</SelectItem>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="referral">Referral</SelectItem>
+                  <SelectItem value="walk_in">Walk-in</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Special Requirements</Label>
+              <Textarea value={form.special_requirements} onChange={e => setForm(f => ({ ...f, special_requirements: e.target.value }))} placeholder="Any special requests..." rows={2} />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Internal notes..." rows={2} />
+            </div>
+            {formError && <p className="text-sm text-red-500">{formError}</p>}
+            <Button onClick={handleCreate} disabled={saving} className="w-full">
+              {saving ? 'Creating...' : 'Create Enquiry'}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4">
         <Card>
