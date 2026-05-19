@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Globe, Inbox, MapPin, FileText, Package, ArrowRight, LayoutList } from 'lucide-react';
+import { Globe, Inbox, MapPin, FileText, Package, ArrowRight, LayoutList, Home } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
@@ -78,6 +78,7 @@ export default async function WebsiteCMSPage() {
       {/* Quick Links */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
+          { href: '/admin/website/homepage', icon: Home, label: 'Homepage' },
           { href: '/admin/website/enquiries', icon: Inbox, label: 'Enquiries' },
           { href: '/admin/website/pages', icon: LayoutList, label: 'Pages' },
           { href: '/admin/website/destinations', icon: MapPin, label: 'Destinations' },
