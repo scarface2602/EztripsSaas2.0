@@ -21,6 +21,7 @@ function checkRateLimit(ip: string): boolean {
 
 const ALLOWED_ORIGINS = [
   'https://eztrips.in',
+  'https://www.eztrips.in',
   'http://localhost:3000',
 ];
 

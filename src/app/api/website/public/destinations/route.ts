@@ -11,7 +11,7 @@ function corsHeaders(origin: string | null) {
 
 function getAllowedOrigin(request: NextRequest): string | null {
   const origin = request.headers.get('origin') || '';
-  if (['https://eztrips.in', 'http://localhost:3000'].includes(origin)) return origin;
+  if (['https://eztrips.in', 'https://www.eztrips.in', 'http://localhost:3000'].includes(origin)) return origin;
   if (/^https:\/\/.*\.vercel\.app$/.test(origin)) return origin;
   return origin || null;
 }
