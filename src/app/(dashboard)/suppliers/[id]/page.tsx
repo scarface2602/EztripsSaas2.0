@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Pencil, Save, Trash2, X, Plus } from 'lucide-react';
+import { Pencil, Save, Trash2, X, Plus } from 'lucide-react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { toast } from 'sonner';
 
 export default function SupplierDetailPage() {
   const params = useParams();
@@ -55,7 +56,8 @@ export default function SupplierDetailPage() {
       notes: editData.notes,
     }).eq('id', supplierId);
 
-    if (!error) { setEditing(false); fetchData(); }
+    if (!error) { setEditing(false); fetchData(); toast.success('Supplier updated'); }
+    else { toast.error('Failed to update supplier'); }
   }
 
   async function handleDelete() {

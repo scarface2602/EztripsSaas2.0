@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { signOut } from '@/lib/auth/actions';
 import type { User } from '@/lib/types/database';
@@ -23,6 +24,8 @@ import {
   ClipboardList,
   LayoutList,
   Menu,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -56,6 +59,24 @@ const WEBSITE_ITEMS = [
   { href: '/admin/website/destinations', label: 'Destinations & Packages', icon: MapPin },
   { href: '/admin/website/blog', label: 'Blog', icon: BookOpen },
 ];
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      className="h-8 w-8"
+      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </Button>
+  );
+}
 
 function SidebarNav({ user, onNavigate, overdueFollowUps = 0 }: { user: User; onNavigate?: () => void; overdueFollowUps?: number }) {
   const pathname = usePathname();
@@ -129,12 +150,15 @@ function SidebarNav({ user, onNavigate, overdueFollowUps = 0 }: { user: User; on
           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           <p className="text-xs text-muted-foreground capitalize">{user.role.replace('_', ' ')}</p>
         </div>
-        <form action={signOut}>
-          <Button variant="outline" size="sm" className="w-full" type="submit">
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign Out
-          </Button>
-        </form>
+        <div className="flex gap-2">
+          <form action={signOut} className="flex-1">
+            <Button variant="outline" size="sm" className="w-full" type="submit">
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </form>
+          <ThemeToggle />
+        </div>
       </div>
     </>
   );

@@ -18,6 +18,7 @@ import {
   Snowflake, AlertCircle, Users,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'New', color: 'bg-blue-100 text-blue-700' },
@@ -62,6 +63,16 @@ const OUTCOME_OPTIONS = [
   { value: 'voicemail', label: 'Voicemail' },
 ];
 
+const LOSS_REASONS = [
+  { value: 'price_too_high', label: 'Price too high' },
+  { value: 'chose_competitor', label: 'Chose competitor' },
+  { value: 'trip_cancelled', label: 'Trip cancelled' },
+  { value: 'no_response', label: 'No response / ghosted' },
+  { value: 'budget_constraints', label: 'Budget constraints' },
+  { value: 'dates_changed', label: 'Dates changed' },
+  { value: 'other', label: 'Other' },
+];
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Enquiry = Record<string, any>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -93,6 +104,11 @@ export default function EnquiryDetailPage() {
   const [actFollowUpDate, setActFollowUpDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Loss reason
+  const [showLossDialog, setShowLossDialog] = useState(false);
+  const [lossReason, setLossReason] = useState('');
+  const [lossNotes, setLossNotes] = useState('');
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     const [eRes, aRes, pRes, uRes] = await Promise.all([
@@ -119,7 +135,26 @@ export default function EnquiryDetailPage() {
     if (res.ok) {
       const data = await res.json();
       setEnquiry(data);
+      toast.success('Enquiry updated');
+    } else {
+      toast.error('Failed to update enquiry');
     }
+  }
+
+  function handleStatusChange(newStatus: string) {
+    if (newStatus === 'lost') {
+      setShowLossDialog(true);
+    } else {
+      updateEnquiry({ status: newStatus });
+    }
+  }
+
+  function confirmLost() {
+    if (!lossReason) return;
+    updateEnquiry({ status: 'lost', lost_reason: lossReason, lost_notes: lossNotes || null });
+    setShowLossDialog(false);
+    setLossReason('');
+    setLossNotes('');
   }
 
   async function addActivity() {
@@ -147,6 +182,9 @@ export default function EnquiryDetailPage() {
       setActDuration('');
       setActFollowUpDate('');
       fetchAll();
+      toast.success('Activity logged');
+    } else {
+      toast.error('Failed to log activity');
     }
     setSubmitting(false);
   }
@@ -247,7 +285,7 @@ export default function EnquiryDetailPage() {
             <CardContent className="space-y-3">
               <div className="space-y-1">
                 <Label className="text-xs">Status</Label>
-                <Select value={enquiry.status} onValueChange={(v) => v && updateEnquiry({ status: v })}>
+                <Select value={enquiry.status} onValueChange={(v) => v && handleStatusChange(v)}>
                   <SelectTrigger className="h-8">
                     <Badge className={statusOption?.color || ''}>{statusOption?.label || enquiry.status}</Badge>
                   </SelectTrigger>
@@ -257,6 +295,12 @@ export default function EnquiryDetailPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {enquiry.lost_reason && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Lost reason: {LOSS_REASONS.find(r => r.value === enquiry.lost_reason)?.label || enquiry.lost_reason}
+                    {enquiry.lost_notes && ` — ${enquiry.lost_notes}`}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -498,6 +542,43 @@ export default function EnquiryDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Loss Reason Dialog */}
+      {showLossDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg shadow-lg w-full max-w-md mx-4 p-6 space-y-4">
+            <h3 className="text-lg font-semibold">Why was this lead lost?</h3>
+            <div className="space-y-2">
+              <Label className="text-sm">Reason *</Label>
+              <Select value={lossReason} onValueChange={(v) => setLossReason(v || '')}>
+                <SelectTrigger><SelectValue placeholder="Select a reason..." /></SelectTrigger>
+                <SelectContent>
+                  {LOSS_REASONS.map(r => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm">Notes (optional)</Label>
+              <Textarea
+                value={lossNotes}
+                onChange={e => setLossNotes(e.target.value)}
+                placeholder="Any additional context..."
+                rows={3}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setShowLossDialog(false); setLossReason(''); setLossNotes(''); }}>
+                Cancel
+              </Button>
+              <Button onClick={confirmLost} disabled={!lossReason}>
+                Mark as Lost
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

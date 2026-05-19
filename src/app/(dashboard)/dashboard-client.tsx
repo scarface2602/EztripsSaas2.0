@@ -209,14 +209,28 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <div className="flex gap-2">
-          <Link href="/proposals/new">
-            <Button><Plus className="h-4 w-4 mr-2" /> New Proposal</Button>
-          </Link>
-          <Link href="/clients">
-            <Button variant="outline"><Users className="h-4 w-4 mr-2" /> Clients</Button>
-          </Link>
-        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex flex-wrap gap-2">
+        <Link href="/proposals/new">
+          <Button size="sm"><Plus className="h-4 w-4 mr-1" /> New Proposal</Button>
+        </Link>
+        <Link href="/leads">
+          <Button size="sm" variant="outline"><Inbox className="h-4 w-4 mr-1" /> Enquiries</Button>
+        </Link>
+        <Link href="/clients">
+          <Button size="sm" variant="outline"><Users className="h-4 w-4 mr-1" /> Clients</Button>
+        </Link>
+        <Link href="/receivables">
+          <Button size="sm" variant="outline"><ArrowDownLeft className="h-4 w-4 mr-1" /> Receivables</Button>
+        </Link>
+        <Link href="/payables">
+          <Button size="sm" variant="outline"><ArrowUpRight className="h-4 w-4 mr-1" /> Payables</Button>
+        </Link>
+        <Link href="/bookings">
+          <Button size="sm" variant="outline"><FileText className="h-4 w-4 mr-1" /> Bookings</Button>
+        </Link>
       </div>
 
       {/* Today's Follow-Ups */}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 import type { Payable } from '@/lib/types/database';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -100,6 +101,7 @@ export default function PayablesPage() {
         notes: paymentNotes || undefined,
       }),
     });
+    toast.success('Payable marked as paid');
     setMarkPaidId(null);
     setReference('');
     setPaymentNotes('');

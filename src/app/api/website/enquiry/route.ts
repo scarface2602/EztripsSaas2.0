@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import nodemailer from 'nodemailer';
 
+// Simple in-memory rate limiter: max 5 submissions per IP per 15 minutes
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 5;
+const RATE_WINDOW = 15 * 60 * 1000;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
 const ALLOWED_ORIGINS = [
   'https://eztrips.in',
   'http://localhost:3000',
@@ -31,6 +48,14 @@ export async function POST(request: NextRequest) {
   const origin = getAllowedOrigin(request);
   const headers = corsHeaders(origin);
 
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.' },
+      { status: 429, headers }
+    );
+  }
+
   try {
     const body = await request.json();
     // Accept both camelCase (from website form) and snake_case
@@ -53,6 +78,23 @@ export async function POST(request: NextRequest) {
     const hotel_category = body.hotel_category || body.hotelCategory || null;
 
     const supabase = createServiceClient();
+
+    // Duplicate detection: same phone + destination within last 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: dupes } = await supabase
+      .from('website_enquiries')
+      .select('id')
+      .eq('phone', phone)
+      .eq('destination', destination || '')
+      .gte('created_at', sevenDaysAgo)
+      .limit(1);
+
+    if (dupes && dupes.length > 0) {
+      return NextResponse.json(
+        { error: 'A similar enquiry was already submitted recently. Our team will contact you soon.' },
+        { status: 409, headers }
+      );
+    }
 
     // Find or create client
     let client_id: string;

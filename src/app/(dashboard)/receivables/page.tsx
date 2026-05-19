@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 import type { Receivable } from '@/lib/types/database';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -89,6 +90,7 @@ export default function ReceivablesPage() {
         notes: paymentNotes || undefined,
       }),
     });
+    toast.success('Receivable marked as paid');
     setMarkPaidId(null);
     setPaymentMethod('bank_transfer');
     setPaymentNotes('');

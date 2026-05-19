@@ -309,6 +309,9 @@ export function ProposalEditor({
               <ClipboardList className="h-4 w-4 mr-1" /> View Bookings
             </Button>
           )}
+          <Button variant="outline" size="sm" onClick={() => window.open(`/proposals/${proposal.id}/preview`, '_blank')}>
+            <Eye className="h-4 w-4 mr-1" /> Preview
+          </Button>
           {shareUrl && (
             <>
               <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(shareUrl)}>

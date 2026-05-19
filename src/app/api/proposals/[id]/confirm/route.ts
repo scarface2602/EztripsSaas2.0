@@ -93,6 +93,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
     .eq('id', proposalId);
 
+  // If proposal was created from an enquiry, mark it as 'won'
+  if (proposal.enquiry_id) {
+    await supabase
+      .from('website_enquiries')
+      .update({ status: 'won', converted_at: now, updated_at: now })
+      .eq('id', proposal.enquiry_id);
+  }
+
   // Auto-generate receivables from payment_terms
   const paymentTerms = proposal.payment_terms as { deposit_pct?: number; balance_days_before?: number; notes?: string } | null;
   const depositPct = paymentTerms?.deposit_pct ?? 25;

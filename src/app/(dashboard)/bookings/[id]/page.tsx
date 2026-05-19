@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -126,11 +127,20 @@ export default function BookingDetailPage() {
 
   const updateBooking = async (updates: Record<string, unknown>) => {
     setSaving(true);
-    await fetch('/api/bookings', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...updates }),
-    });
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...updates }),
+      });
+      if (res.ok) {
+        toast.success('Booking updated');
+      } else {
+        toast.error('Failed to update booking');
+      }
+    } catch {
+      toast.error('Failed to update booking');
+    }
     await fetchAll();
     setSaving(false);
   };
@@ -159,14 +169,19 @@ export default function BookingDetailPage() {
   };
 
   const markPayment = async (paymentId: string, status: string) => {
-    await fetch(`/api/bookings/${id}/payments`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        payment_id: paymentId, status,
-        ...(status === 'paid' ? { paid_date: new Date().toISOString().split('T')[0] } : {}),
-      }),
-    });
+    try {
+      await fetch(`/api/bookings/${id}/payments`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payment_id: paymentId, status,
+          ...(status === 'paid' ? { paid_date: new Date().toISOString().split('T')[0] } : {}),
+        }),
+      });
+      toast.success(status === 'paid' ? 'Payment marked as paid' : 'Payment status updated');
+    } catch {
+      toast.error('Failed to update payment');
+    }
     fetchAll();
   };
 

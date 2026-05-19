@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Pencil, Save, Trash2, X } from 'lucide-react';
+import { Pencil, Save, Trash2, X } from 'lucide-react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -66,6 +67,9 @@ export default function ClientDetailPage() {
     if (!error) {
       setEditing(false);
       fetchData();
+      toast.success('Client updated');
+    } else {
+      toast.error('Failed to update client');
     }
   }
 

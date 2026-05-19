@@ -29,6 +29,24 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createServiceClient();
+
+  // Check for potential duplicate (same phone + destination in last 7 days)
+  let duplicate_warning: string | null = null;
+  if (phone) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const dupQ = supabase
+      .from('website_enquiries')
+      .select('id, name, created_at')
+      .eq('phone', phone)
+      .gte('created_at', sevenDaysAgo)
+      .limit(1);
+    if (destination) dupQ.eq('destination', destination);
+    const { data: dupes } = await dupQ;
+    if (dupes && dupes.length > 0) {
+      duplicate_warning = `Possible duplicate: ${dupes[0].name} (${new Date(dupes[0].created_at).toLocaleDateString()})`;
+    }
+  }
+
   const { data, error } = await supabase
     .from('website_enquiries')
     .insert({
@@ -54,7 +72,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
+  return NextResponse.json({ ...data, duplicate_warning }, { status: 201 });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -97,6 +115,7 @@ export async function PATCH(request: NextRequest) {
   const allowedFields = [
     'status', 'notes', 'assigned_to', 'priority', 'lead_temperature',
     'follow_up_date', 'last_contacted_at', 'converted_at',
+    'lost_reason', 'lost_notes',
   ];
   for (const field of allowedFields) {
     if (body[field] !== undefined) update[field] = body[field];

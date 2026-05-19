@@ -11,7 +11,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Flame, Thermometer, Snowflake, FileText, Plus } from 'lucide-react';
+import { Flame, Thermometer, Snowflake, FileText, Plus, Search } from 'lucide-react';
+import { toast } from 'sonner';
 import { Pagination, paginateArray } from '@/components/pagination';
 
 type Lead = Record<string, unknown>;
@@ -86,6 +87,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
   const [enquiries, setEnquiries] = useState(initialData);
   const [filter, setFilter] = useState<string>('all');
   const [assignFilter, setAssignFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -116,6 +118,9 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
         throw new Error(data.error || 'Failed to create');
       }
       const created = await res.json();
+      if (created.duplicate_warning) {
+        toast.warning(created.duplicate_warning);
+      }
       setEnquiries(prev => [{ ...created, proposal_count: 0 }, ...prev]);
       setForm(EMPTY_FORM);
       setSheetOpen(false);
@@ -151,6 +156,15 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
   } else if (assignFilter !== 'all') {
     filtered = filtered.filter(e => e.assigned_to === assignFilter);
   }
+  if (searchQuery.trim()) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(e =>
+      (e.name as string || '').toLowerCase().includes(q) ||
+      (e.phone as string || '').toLowerCase().includes(q) ||
+      (e.destination as string || '').toLowerCase().includes(q) ||
+      (e.email as string || '').toLowerCase().includes(q)
+    );
+  }
 
   const { data: pagedFiltered, totalPages } = useMemo(
     () => paginateArray(filtered, page, PAGE_SIZE),
@@ -159,7 +173,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
 
   // Reset page when filters change
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setPage(1); }, [filter, assignFilter]);
+  useEffect(() => { setPage(1); }, [filter, assignFilter, searchQuery]);
 
   const unassignedCount = enquiries.filter(e => !e.assigned_to).length;
 
@@ -312,7 +326,16 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
         </Card>
       </div>
 
-      {/* Filters row */}
+      {/* Search + Filters row */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by name, phone, destination, email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10 h-9"
+        />
+      </div>
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
         <div className="flex gap-2 flex-wrap">
           {TABS.map(tab => (
@@ -466,6 +489,18 @@ function AgentView({
   const [unassigned, setUnassigned] = useState(initialUnassigned);
   const [activeCount, setActiveCount] = useState(initialActive);
   const [picking, setPicking] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const q = searchQuery.toLowerCase();
+  const filteredMyLeads = q ? myLeads.filter(e =>
+    (e.name as string || '').toLowerCase().includes(q) ||
+    (e.phone as string || '').toLowerCase().includes(q) ||
+    (e.destination as string || '').toLowerCase().includes(q)
+  ) : myLeads;
+  const filteredUnassigned = q ? unassigned.filter(e =>
+    (e.name as string || '').toLowerCase().includes(q) ||
+    (e.destination as string || '').toLowerCase().includes(q)
+  ) : unassigned;
 
   async function handlePick(enquiryId: string) {
     setPicking(enquiryId);
@@ -512,10 +547,21 @@ function AgentView({
         </CardContent>
       </Card>
 
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search leads by name, phone, destination..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10 h-9"
+        />
+      </div>
+
       {/* My Leads */}
       <Card>
         <CardHeader>
-          <CardTitle>My Assigned Leads ({myLeads.length})</CardTitle>
+          <CardTitle>My Assigned Leads ({filteredMyLeads.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -532,13 +578,13 @@ function AgentView({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {myLeads.length === 0 ? (
+              {filteredMyLeads.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    No leads assigned to you yet
+                    {searchQuery ? 'No matching leads' : 'No leads assigned to you yet'}
                   </TableCell>
                 </TableRow>
-              ) : myLeads.map(e => {
+              ) : filteredMyLeads.map(e => {
                 const phone = (e.phone as string || '').replace(/\D/g, '').replace(/^0+/, '');
                 const waPhone = phone.startsWith('91') ? phone : `91${phone}`;
                 return (
@@ -582,7 +628,7 @@ function AgentView({
       {/* Unassigned Leads */}
       <Card>
         <CardHeader>
-          <CardTitle>Available Leads ({unassigned.length})</CardTitle>
+          <CardTitle>Available Leads ({filteredUnassigned.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -598,13 +644,13 @@ function AgentView({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {unassigned.length === 0 ? (
+              {filteredUnassigned.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No unassigned leads available
+                    {searchQuery ? 'No matching leads' : 'No unassigned leads available'}
                   </TableCell>
                 </TableRow>
-              ) : unassigned.map(e => (
+              ) : filteredUnassigned.map(e => (
                 <TableRow key={e.id as string}>
                   <TableCell className="font-medium">{e.name as string}</TableCell>
                   <TableCell>{e.destination as string}</TableCell>

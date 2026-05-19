@@ -97,7 +97,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // If proposal was created from an enquiry, mark it as 'proposal_sent' now
   if (proposal.enquiry_id) {
     await supabase
-      .from('enquiries')
+      .from('website_enquiries')
       .update({ status: 'proposal_sent', updated_at: now.toISOString() })
       .eq('id', proposal.enquiry_id);
   }
