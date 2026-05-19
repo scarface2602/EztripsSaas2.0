@@ -195,7 +195,7 @@ export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItem
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
           {renderList(inclusions, 'Included', true)}
           {renderList(exclusions, 'Excluded', false)}
         </div>

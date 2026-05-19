@@ -10,7 +10,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Settings, Save, Building2, Upload, Loader2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Settings, Save, Building2, Upload, Loader2, UserRoundCog } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface OrgData {
@@ -22,6 +23,8 @@ interface OrgData {
   email: string | null;
   website: string | null;
   terms_and_conditions: string | null;
+  auto_assign_enabled?: boolean;
+  auto_assign_strategy?: string | null;
 }
 
 interface SettingsData {
@@ -45,7 +48,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [userRole, setUserRole] = useState('agent');
-  const [org, setOrg] = useState<OrgData>({ name: '', logo_url: null, phone: null, address: null, email: null, website: null, terms_and_conditions: null });
+  const [org, setOrg] = useState<OrgData>({ name: '', logo_url: null, phone: null, address: null, email: null, website: null, terms_and_conditions: null, auto_assign_enabled: false, auto_assign_strategy: 'round_robin' });
   const [savingOrg, setSavingOrg] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
 
@@ -167,7 +170,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Settings className="h-6 w-6" />
           <h1 className="text-2xl font-bold">Settings</h1>
@@ -189,7 +192,7 @@ export default function SettingsPage() {
               </Button>
             )}
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {userRole === 'super_admin' ? (
               <>
                 <div className="space-y-2">
@@ -228,11 +231,11 @@ export default function SettingsPage() {
                   <Label>Website</Label>
                   <Input value={org.website || ''} onChange={(e) => setOrg({ ...org, website: e.target.value })} />
                 </div>
-                <div className="space-y-2 col-span-2">
+                <div className="space-y-2 col-span-full">
                   <Label>Address</Label>
                   <Input value={org.address || ''} onChange={(e) => setOrg({ ...org, address: e.target.value })} />
                 </div>
-                <div className="space-y-2 col-span-2">
+                <div className="space-y-2 col-span-full">
                   <Label>Terms &amp; Conditions (shown in PDF)</Label>
                   <Textarea
                     value={org.terms_and_conditions || ''}
@@ -243,7 +246,7 @@ export default function SettingsPage() {
                 </div>
               </>
             ) : (
-              <div className="col-span-2 grid grid-cols-2 gap-4 text-sm">
+              <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div><span className="text-muted-foreground">Company:</span> {org.name || 'Not set'}</div>
                 <div><span className="text-muted-foreground">Phone:</span> {org.phone || 'N/A'}</div>
                 <div><span className="text-muted-foreground">Email:</span> {org.email || 'N/A'}</div>
@@ -257,12 +260,56 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Lead Assignment (admin only) */}
+        {userRole === 'super_admin' && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2"><UserRoundCog className="h-5 w-5" /> Lead Assignment</CardTitle>
+              <Button size="sm" onClick={handleSaveOrg} disabled={savingOrg}>
+                <Save className="h-4 w-4 mr-1" /> {savingOrg ? 'Saving...' : 'Save'}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Auto-assign new website enquiries</Label>
+                  <p className="text-xs text-muted-foreground mt-1">Automatically assign incoming enquiries to agents</p>
+                </div>
+                <Switch
+                  checked={org.auto_assign_enabled ?? false}
+                  onCheckedChange={(checked) => setOrg({ ...org, auto_assign_enabled: checked })}
+                />
+              </div>
+              {org.auto_assign_enabled && (
+                <div className="space-y-2">
+                  <Label>Assignment Strategy</Label>
+                  <Select
+                    value={org.auto_assign_strategy || 'round_robin'}
+                    onValueChange={(v) => setOrg({ ...org, auto_assign_strategy: v })}
+                  >
+                    <SelectTrigger className="w-full sm:w-[300px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="round_robin">Round Robin — rotate through agents equally</SelectItem>
+                      <SelectItem value="least_loaded">Least Loaded — assign to agent with fewest active leads</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Agents who have reached their max active leads limit will be skipped.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Agency Profile */}
         <Card>
           <CardHeader>
             <CardTitle>Agency Profile</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Full Name</Label>
               <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
@@ -298,7 +345,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle>Default Payment Terms</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-4">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Deposit Percentage (%)</Label>
               <Input
@@ -318,7 +365,7 @@ export default function SettingsPage() {
                 onChange={(e) => setBalanceDaysBefore(Number(e.target.value))}
               />
             </div>
-            <div className="space-y-2 col-span-3">
+            <div className="space-y-2 col-span-full">
               <Label>Payment Notes</Label>
               <Input value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="Additional payment terms notes" />
             </div>
@@ -330,7 +377,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle>Pricing Settings</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Margin Threshold (%)</Label>
               <Input

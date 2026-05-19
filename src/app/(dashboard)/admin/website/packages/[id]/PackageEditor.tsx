@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -198,6 +199,10 @@ export default function PackageEditor({
 
   return (
     <div className="space-y-4 max-w-4xl">
+      <Breadcrumbs items={[
+        { label: 'Destinations', href: '/admin/website/destinations' },
+        { label: title || 'New Package' },
+      ]} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -227,7 +232,7 @@ export default function PackageEditor({
       {/* Basic Info */}
       <Section id="basic" title="Basic Information">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>Package Name *</Label>
               <Input
@@ -248,7 +253,7 @@ export default function PackageEditor({
             <Label>Subtitle</Label>
             <Input value={subtitle} onChange={e => setSubtitle(e.target.value)} placeholder="e.g. 5 Nights / 6 Days · All Meals Included" />
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <Label>Nights</Label>
               <Input type="number" value={nights} onChange={e => setNights(e.target.value ? Number(e.target.value) : '')} />
@@ -270,7 +275,7 @@ export default function PackageEditor({
       <Section id="pricing" title="Pricing">
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">Set per-person prices for each hotel category. The lowest price shows as the &quot;starting from&quot; price.</p>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <Label>3-Star (per person)</Label>
               <Input type="number" value={price3star} onChange={e => setPrice3star(e.target.value ? Number(e.target.value) : '')} placeholder="₹" />
@@ -284,7 +289,7 @@ export default function PackageEditor({
               <Input type="number" value={price5star} onChange={e => setPrice5star(e.target.value ? Number(e.target.value) : '')} placeholder="₹" />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <Label>Display Price (optional)</Label>
               <Input type="number" value={priceFrom} onChange={e => setPriceFrom(e.target.value ? Number(e.target.value) : '')} placeholder="Auto = 3-star price" />
@@ -357,7 +362,7 @@ export default function PackageEditor({
                   <Trash2 className="h-3 w-3 text-red-500" />
                 </Button>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Name</Label>
                   <Input value={hotel.name} onChange={e => updateHotel(i, 'name', e.target.value)} placeholder="Hotel name" />
@@ -380,7 +385,7 @@ export default function PackageEditor({
                   <Input value={hotel.location} onChange={e => updateHotel(i, 'location', e.target.value)} placeholder="City / Area" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Category</Label>
                   <Input value={hotel.category || ''} onChange={e => updateHotel(i, 'category', e.target.value)} placeholder="e.g. Boutique, Resort" />
@@ -390,7 +395,7 @@ export default function PackageEditor({
                   <Input value={hotel.rooms || ''} onChange={e => updateHotel(i, 'rooms', e.target.value)} placeholder="e.g. Deluxe, Suite" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Meals</Label>
                   <Input value={hotel.meals || ''} onChange={e => updateHotel(i, 'meals', e.target.value)} placeholder="CP / MAP / AP" />

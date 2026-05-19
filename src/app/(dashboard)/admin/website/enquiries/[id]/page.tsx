@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -172,6 +173,10 @@ export default function EnquiryDetailPage() {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[
+        { label: 'Enquiries', href: '/leads' },
+        { label: enquiry.name || 'Enquiry' },
+      ]} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -190,7 +195,7 @@ export default function EnquiryDetailPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
         {/* Left Column: Enquiry Details + Controls */}
         <div className="col-span-1 space-y-4">
           {/* Contact Card */}
@@ -385,7 +390,7 @@ export default function EnquiryDetailPage() {
             {showActivityForm && (
               <CardContent className="border-b pb-4">
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs">Type</Label>
                       <Select value={actType} onValueChange={(v) => v && setActType(v)}>
@@ -417,7 +422,7 @@ export default function EnquiryDetailPage() {
                     <Label className="text-xs">Notes</Label>
                     <Textarea rows={3} value={actBody} onChange={(e) => setActBody(e.target.value)} placeholder="What was discussed? Key points, client preferences, objections..." />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs">Duration (minutes)</Label>
                       <Input className="h-8" type="number" value={actDuration} onChange={(e) => setActDuration(e.target.value)} placeholder="e.g. 15" />

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { Sidebar } from './sidebar';
+import { Sidebar, MobileHeader } from './sidebar';
 import type { User } from '@/lib/types/database';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -57,14 +57,31 @@ export default async function DashboardLayout({ children }: { children: React.Re
     } as User;
   }
 
+  // Fetch overdue follow-up count for sidebar badge
+  let overdueFollowUps = 0;
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { count } = await supabase
+      .from('website_enquiries')
+      .select('id', { count: 'exact', head: true })
+      .lt('follow_up_date', today)
+      .not('status', 'in', '("won","lost","spam")');
+    overdueFollowUps = count ?? 0;
+  } catch {
+    // ignore
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar user={user} />
-      <main className="flex-1 overflow-y-auto bg-muted/30">
-        <div className="p-6 max-w-7xl mx-auto">
-          {children}
-        </div>
-      </main>
+      <Sidebar user={user} overdueFollowUps={overdueFollowUps} />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <MobileHeader user={user} overdueFollowUps={overdueFollowUps} />
+        <main className="flex-1 overflow-y-auto bg-muted/30">
+          <div className="p-4 md:p-6 max-w-7xl mx-auto">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

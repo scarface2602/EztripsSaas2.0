@@ -2,6 +2,7 @@ import { requireAuth } from '@/lib/auth/require-role';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { ProposalEditor } from './proposal-editor';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 
 export default async function ProposalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -49,6 +50,12 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
 
   return (
     <div>
+      <Breadcrumbs items={[
+        { label: 'Dashboard', href: '/' },
+        { label: 'Proposals', href: '/proposals' },
+        { label: proposal.title || proposal.destination || 'Untitled' },
+      ]} />
+
       {enquiry && (
         <div className="mb-4 flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>

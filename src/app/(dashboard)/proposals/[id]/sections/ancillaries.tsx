@@ -84,7 +84,7 @@ export function AncillariesSection({ proposalId, lineItems, setLineItems, suppli
       {ancillaries.map((item) => (
         <Card key={item.id}>
           <CardContent className="pt-6 space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div className="col-span-2 space-y-2">
                 <Label>Description</Label>
                 <Input
@@ -106,7 +106,7 @@ export function AncillariesSection({ proposalId, lineItems, setLineItems, suppli
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-md">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-muted/50 rounded-md">
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">CP (internal)</Label>
                 <Input type="number" step="0.01" value={item.cp ?? ''} onChange={(e) => updateAncillary(item.id, { cp: e.target.value ? Number(e.target.value) : 0 })} />

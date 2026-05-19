@@ -218,7 +218,7 @@ export function PricingSummarySection({
 
           {/* Per Person inputs */}
           {(displayMode === 'per_person' || displayMode === 'both') && (
-            <div className="grid grid-cols-2 gap-4 p-3 bg-muted/30 rounded-md">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-muted/30 rounded-md">
               <div className="space-y-1">
                 <Label className="text-sm">Per Adult SP</Label>
                 <Input

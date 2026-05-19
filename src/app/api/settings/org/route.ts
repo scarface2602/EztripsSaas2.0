@@ -43,7 +43,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await request.json();
-  const orgData = {
+  const orgData: Record<string, unknown> = {
     name: body.name,
     logo_url: body.logo_url || null,
     phone: body.phone || null,
@@ -52,6 +52,14 @@ export async function PATCH(request: NextRequest) {
     website: body.website || null,
     terms_and_conditions: body.terms_and_conditions || null,
   };
+
+  // Auto-assignment settings (optional fields)
+  if (body.auto_assign_enabled !== undefined) {
+    orgData.auto_assign_enabled = !!body.auto_assign_enabled;
+  }
+  if (body.auto_assign_strategy) {
+    orgData.auto_assign_strategy = body.auto_assign_strategy;
+  }
 
   if (userData.org_id) {
     // Update existing

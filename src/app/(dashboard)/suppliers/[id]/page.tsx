@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowLeft, Pencil, Save, Trash2, X, Plus } from 'lucide-react';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 
 export default function SupplierDetailPage() {
   const params = useParams();
@@ -90,9 +91,11 @@ export default function SupplierDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Button variant="ghost" onClick={() => router.push('/suppliers')}>
-        <ArrowLeft className="h-4 w-4 mr-2" /> Back to Suppliers
-      </Button>
+      <Breadcrumbs items={[
+        { label: 'Dashboard', href: '/' },
+        { label: 'Suppliers', href: '/suppliers' },
+        { label: supplier.name },
+      ]} />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -113,7 +116,7 @@ export default function SupplierDetailPage() {
         </CardHeader>
         <CardContent>
           {editing ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Name</Label><Input value={editData.name || ''} onChange={(e) => setEditData({ ...editData, name: e.target.value })} /></div>
               <div className="space-y-2">
                 <Label>Type</Label>
@@ -130,7 +133,7 @@ export default function SupplierDetailPage() {
               <div className="space-y-2"><Label>Notes</Label><Input value={editData.notes || ''} onChange={(e) => setEditData({ ...editData, notes: e.target.value })} /></div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div><span className="text-muted-foreground">Type:</span> {supplier.type || 'N/A'}</div>
               <div><span className="text-muted-foreground">Destination:</span> {supplier.country || 'N/A'}</div>
               <div><span className="text-muted-foreground">Contact:</span> {supplier.contact_name || 'N/A'}</div>
@@ -152,7 +155,7 @@ export default function SupplierDetailPage() {
         </CardHeader>
         <CardContent>
           {showSurchargeForm && (
-            <form onSubmit={handleAddSurcharge} className="grid grid-cols-2 gap-4 mb-4 p-4 border rounded-md">
+            <form onSubmit={handleAddSurcharge} className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 p-4 border rounded-md">
               <div className="space-y-2"><Label>Label *</Label><Input name="label" required /></div>
               <div className="space-y-2">
                 <Label>Type *</Label>

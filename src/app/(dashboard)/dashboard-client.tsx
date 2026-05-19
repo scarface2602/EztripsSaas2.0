@@ -9,13 +9,13 @@ import Link from 'next/link';
 import {
   FileText, Users, Clock, ArrowDownLeft, ArrowUpRight, Plus,
   TrendingUp, Search, Edit, Copy, ExternalLink, ChevronDown, ChevronRight,
-  Inbox, ArrowRight,
+  Inbox, ArrowRight, CalendarCheck, CheckCircle2,
 } from 'lucide-react';
 import { differenceInHours, format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { Proposal } from '@/lib/types/database';
-import type { DashboardEnquiry } from './page';
+import type { DashboardEnquiry, FollowUpEnquiry } from './page';
 
 const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
@@ -40,9 +40,11 @@ interface DashboardClientProps {
   payables: Record<string, unknown>[];
   newEnquiryCount: number;
   recentEnquiries: DashboardEnquiry[];
+  todayFollowUps: FollowUpEnquiry[];
+  overdueFollowUpCount: number;
 }
 
-export function DashboardClient({ proposals, receivables, payables, newEnquiryCount, recentEnquiries }: DashboardClientProps) {
+export function DashboardClient({ proposals, receivables, payables, newEnquiryCount, recentEnquiries, todayFollowUps, overdueFollowUpCount }: DashboardClientProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [search, setSearch] = useState('');
@@ -52,6 +54,8 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
   });
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<string | null>(null);
+  const [followUps, setFollowUps] = useState(todayFollowUps);
+  const [markingDone, setMarkingDone] = useState<string | null>(null);
 
   const allProposals = useMemo(() => proposals || [], [proposals]);
   const now = new Date();
@@ -184,10 +188,26 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
     window.open(`/api/proposals/${p.id}/pdf`, '_blank');
   }
 
+  async function handleMarkFollowUpDone(enquiryId: string) {
+    setMarkingDone(enquiryId);
+    try {
+      await fetch('/api/website/cms/enquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: enquiryId, follow_up_date: null }),
+      });
+      setFollowUps(prev => prev.filter(f => f.id !== enquiryId));
+    } catch {
+      // ignore
+    } finally {
+      setMarkingDone(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <div className="flex gap-2">
           <Link href="/proposals/new">
@@ -199,8 +219,58 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
         </div>
       </div>
 
+      {/* Today's Follow-Ups */}
+      {(followUps.length > 0 || overdueFollowUpCount > 0) && (
+        <Card className="border-orange-200 bg-orange-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2 text-orange-800">
+              <CalendarCheck className="h-4 w-4" />
+              Today&apos;s Follow-Ups ({followUps.length})
+              {overdueFollowUpCount > 0 && (
+                <Badge variant="destructive" className="text-xs ml-2">
+                  {overdueFollowUpCount} overdue
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          {followUps.length > 0 && (
+            <CardContent className="pt-0 px-0 pb-0">
+              <div className="divide-y">
+                {followUps.map(f => (
+                  <div key={f.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-orange-100/50">
+                    <div className="min-w-0">
+                      <span className="font-medium text-sm">{f.name || 'Unknown'}</span>
+                      <p className="text-xs text-muted-foreground">
+                        {f.destination || 'No destination'}
+                        <span className="ml-2">·</span>
+                        <span className="ml-2 capitalize">{f.status.replace('_', ' ')}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Link href={`/admin/website/enquiries/${f.id}`}>
+                        <Button size="sm" variant="outline" className="text-xs h-8">View</Button>
+                      </Link>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8 text-green-700 border-green-300 hover:bg-green-50"
+                        onClick={() => handleMarkFollowUpDone(f.id)}
+                        disabled={markingDone === f.id}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                        {markingDone === f.id ? 'Done...' : 'Mark Done'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
       {/* Stats bar — enquiries + status counts */}
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         <Link href="/admin/website/enquiries?status=new">
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-orange-200 bg-orange-50/50">
             <CardContent className="pt-5 pb-4">
@@ -227,7 +297,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
       </div>
 
       {/* Financial summary */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card>
           <CardContent className="pt-5">
             <div className="flex items-center gap-3">
@@ -304,7 +374,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
           <CardContent className="pt-0 px-0 pb-0">
             <div className="divide-y">
               {recentEnquiries.map(eq => (
-                <div key={eq.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-muted/30">
+                <div key={eq.id} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-2.5 hover:bg-muted/30 gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm truncate">{eq.name || 'Unknown'}</span>
@@ -367,7 +437,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
                     const isExpiring = flightHrs !== null && flightHrs >= 0 && flightHrs < 48;
 
                     return (
-                      <div key={p.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 group">
+                      <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 hover:bg-muted/30 group gap-2">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
@@ -398,7 +468,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
                         </div>
 
                         {/* Quick actions */}
-                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1 shrink-0 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <Button
                             variant="ghost"
                             size="sm"

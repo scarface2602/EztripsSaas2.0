@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Flame, Thermometer, Snowflake, FileText } from 'lucide-react';
+import { Pagination, paginateArray } from '@/components/pagination';
 
 type Enquiry = Record<string, unknown>;
 
@@ -29,6 +30,7 @@ const PRIORITY_ICONS: Record<string, { icon: typeof Flame; color: string }> = {
 };
 
 const TABS = ['all', 'new', 'contacted', 'qualified', 'proposal_sent', 'won'] as const;
+const PAGE_SIZE = 20;
 
 type Agent = { id: string; full_name: string; role: string; max_active_leads: number };
 
@@ -36,6 +38,11 @@ export default function EnquiriesTable({ initialData, agents = [] }: { initialDa
   const router = useRouter();
   const [enquiries, setEnquiries] = useState(initialData);
   const [filter, setFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(1); }, [filter]);
+
   async function handleAssign(enquiryId: string, agentId: string) {
     try {
       const res = await fetch('/api/website/cms/enquiries', {
@@ -54,6 +61,10 @@ export default function EnquiriesTable({ initialData, agents = [] }: { initialDa
     }
   }
   const filtered = filter === 'all' ? enquiries : enquiries.filter(e => e.status === filter);
+  const { data: pagedFiltered, totalPages } = useMemo(
+    () => paginateArray(filtered, page, PAGE_SIZE),
+    [filtered, page]
+  );
 
   return (
     <>
@@ -99,7 +110,7 @@ export default function EnquiriesTable({ initialData, agents = [] }: { initialDa
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((e) => {
+                pagedFiltered.map((e) => {
                   const phone = (e.phone as string || '').replace(/\D/g, '').replace(/^0+/, '');
                   const waPhone = phone.startsWith('91') ? phone : `91${phone}`;
                   const pri = PRIORITY_ICONS[(e.priority as string) || 'medium'];
@@ -174,6 +185,8 @@ export default function EnquiriesTable({ initialData, agents = [] }: { initialDa
           </Table>
         </CardContent>
       </Card>
+
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </>
   );
 }

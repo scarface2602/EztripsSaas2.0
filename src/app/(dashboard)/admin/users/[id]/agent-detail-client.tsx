@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import type { User } from '@/lib/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +41,10 @@ export function AgentDetailClient({ agent, proposals, clients, receivables, paya
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[
+        { label: 'Team', href: '/admin/users' },
+        { label: agent.full_name },
+      ]} />
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/admin/users">
@@ -59,7 +64,7 @@ export function AgentDetailClient({ agent, proposals, clients, receivables, paya
       <Separator />
 
       {/* Agent Info */}
-      <div className="grid grid-cols-4 gap-4 text-sm">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
         <div><span className="text-muted-foreground">Agency:</span> {agent.agency_name || '—'}</div>
         <div><span className="text-muted-foreground">WhatsApp:</span> {agent.whatsapp_number || '—'}</div>
         <div><span className="text-muted-foreground">Currency:</span> {agent.default_currency}</div>
@@ -67,7 +72,7 @@ export function AgentDetailClient({ agent, proposals, clients, receivables, paya
       </div>
 
       {/* Stats — simulated dashboard view */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">

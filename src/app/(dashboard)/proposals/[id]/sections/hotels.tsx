@@ -140,7 +140,7 @@ export function HotelsSection({ proposal, hotels, setHotels, suppliers, setHasUn
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Name</Label>
                 <Input value={hotel.name} onChange={(e) => updateHotel(index, { name: e.target.value })} />
@@ -201,7 +201,7 @@ export function HotelsSection({ proposal, hotels, setHotels, suppliers, setHasUn
 
             {/* Pricing — hidden in package mode since DMC gives a single per-person rate */}
             {proposal.quote_type !== 'package' && (
-              <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-md">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-3 bg-muted/50 rounded-md">
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">CP / Night (internal)</Label>
                   <Input type="number" step="0.01" value={hotel.cp_per_night ?? ''} onChange={(e) => updateHotel(index, { cp_per_night: e.target.value ? Number(e.target.value) : null })} />

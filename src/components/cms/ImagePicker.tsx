@@ -155,7 +155,7 @@ export default function ImagePicker({
               ) : gallery.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">No images uploaded yet</p>
               ) : (
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   {gallery.map(img => (
                     <button
                       key={img.name}

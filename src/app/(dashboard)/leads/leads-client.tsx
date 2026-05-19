@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Flame, Thermometer, Snowflake, FileText, Plus } from 'lucide-react';
+import { Pagination, paginateArray } from '@/components/pagination';
 
 type Lead = Record<string, unknown>;
 type Agent = { id: string; full_name: string; role: string; max_active_leads: number };
@@ -34,6 +35,7 @@ const PRIORITY_ICONS: Record<string, { icon: typeof Flame; color: string }> = {
 };
 
 const TABS = ['all', 'new', 'contacted', 'qualified', 'proposal_sent', 'won'] as const;
+const PAGE_SIZE = 20;
 
 export default function LeadsClient({
   role,
@@ -88,6 +90,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [page, setPage] = useState(1);
 
   async function handleCreate() {
     setFormError('');
@@ -149,6 +152,15 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
     filtered = filtered.filter(e => e.assigned_to === assignFilter);
   }
 
+  const { data: pagedFiltered, totalPages } = useMemo(
+    () => paginateArray(filtered, page, PAGE_SIZE),
+    [filtered, page]
+  );
+
+  // Reset page when filters change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(1); }, [filter, assignFilter]);
+
   const unassignedCount = enquiries.filter(e => !e.assigned_to).length;
 
   return (
@@ -165,7 +177,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
             <SheetTitle>Add Offline Enquiry</SheetTitle>
           </SheetHeader>
           <div className="space-y-4 mt-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Name *</Label>
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Client name" />
@@ -179,7 +191,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Optional" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Destination</Label>
                 <Input value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))} placeholder="e.g. Bali" />
@@ -189,7 +201,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                 <Input type="date" value={form.travel_date} onChange={e => setForm(f => ({ ...f, travel_date: e.target.value }))} />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-3 gap-3">
               <div>
                 <Label>Adults</Label>
                 <Input type="number" min="1" value={form.adults} onChange={e => setForm(f => ({ ...f, adults: e.target.value }))} />
@@ -211,7 +223,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
               </div>
             </div>
             {form.children_ages.length > 0 && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
                 {form.children_ages.map((age, i) => (
                   <div key={i}>
                     <Label>Child {i + 1} Age</Label>
@@ -273,7 +285,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
       </Sheet>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total</p>
@@ -301,8 +313,8 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
       </div>
 
       {/* Filters row */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
           {TABS.map(tab => (
             <Button
               key={tab}
@@ -356,7 +368,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                     No enquiries found
                   </TableCell>
                 </TableRow>
-              ) : filtered.map((e) => {
+              ) : pagedFiltered.map((e) => {
                 const phone = (e.phone as string || '').replace(/\D/g, '').replace(/^0+/, '');
                 const waPhone = phone.startsWith('91') ? phone : `91${phone}`;
                 const pri = PRIORITY_ICONS[(e.priority as string) || 'medium'];
@@ -430,6 +442,8 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
           </Table>
         </CardContent>
       </Card>
+
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </>
   );
 }

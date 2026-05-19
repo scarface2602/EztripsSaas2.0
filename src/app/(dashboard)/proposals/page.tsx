@@ -12,6 +12,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Search, Plus, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
+import { Pagination } from '@/components/pagination';
+import { SortableHead, useSort } from '@/components/sortable-head';
+
+const PAGE_SIZE = 20;
 
 const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
@@ -25,6 +29,9 @@ export default function ProposalsPage() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const { sortCol, sortDir, onSort } = useSort('created_at', 'desc');
   const router = useRouter();
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get('status');
@@ -32,18 +39,23 @@ export default function ProposalsPage() {
 
   const fetchProposals = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from('proposals').select('*, clients(full_name)').order('created_at', { ascending: false });
+    let q = supabase.from('proposals').select('*, clients(full_name)', { count: 'exact' }).order(sortCol, { ascending: sortDir === 'asc' });
     if (statusFilter) q = q.eq('status', statusFilter);
     if (search) q = q.or(`title.ilike.%${search}%,destination.ilike.%${search}%`);
-    const { data } = await q;
+    const { data, count } = await q.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     setProposals((data as Proposal[]) || []);
+    setTotalPages(Math.max(1, Math.ceil((count || 0) / PAGE_SIZE)));
     setLoading(false);
-  }, [supabase, statusFilter, search]);
+  }, [supabase, statusFilter, search, page, sortCol, sortDir]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchProposals(), 300);
     return () => clearTimeout(timer);
   }, [fetchProposals]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
 
   return (
     <div className="space-y-6">
@@ -70,12 +82,12 @@ export default function ProposalsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Destination</TableHead>
-              <TableHead>Status</TableHead>
+              <SortableHead label="Title" column="destination" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
+              <SortableHead label="Destination" column="destination" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
+              <SortableHead label="Status" column="status" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
               <TableHead>Version</TableHead>
               <TableHead>Pax</TableHead>
-              <TableHead>Created</TableHead>
+              <SortableHead label="Created" column="created_at" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -96,6 +108,7 @@ export default function ProposalsPage() {
           </TableBody>
         </Table>
       </Card>
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

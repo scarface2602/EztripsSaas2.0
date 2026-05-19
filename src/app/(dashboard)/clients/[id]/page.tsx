@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowLeft, Pencil, Save, Trash2, X } from 'lucide-react';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { format } from 'date-fns';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -85,9 +86,11 @@ export default function ClientDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Button variant="ghost" onClick={() => router.push('/clients')}>
-        <ArrowLeft className="h-4 w-4 mr-2" /> Back to Clients
-      </Button>
+      <Breadcrumbs items={[
+        { label: 'Dashboard', href: '/' },
+        { label: 'Clients', href: '/clients' },
+        { label: client.full_name },
+      ]} />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -114,7 +117,7 @@ export default function ClientDetailPage() {
         </CardHeader>
         <CardContent>
           {editing ? (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Full Name</Label>
                 <Input value={editData.full_name || ''} onChange={(e) => setEditData({ ...editData, full_name: e.target.value })} />
@@ -131,18 +134,18 @@ export default function ClientDetailPage() {
                 <Label>Nationality</Label>
                 <Input value={editData.nationality || ''} onChange={(e) => setEditData({ ...editData, nationality: e.target.value })} />
               </div>
-              <div className="col-span-2 space-y-2">
+              <div className="col-span-full space-y-2">
                 <Label>Notes</Label>
                 <Input value={editData.notes || ''} onChange={(e) => setEditData({ ...editData, notes: e.target.value })} />
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div><span className="text-muted-foreground">Phone:</span> {client.phone}</div>
               <div><span className="text-muted-foreground">Email:</span> {client.email || 'N/A'}</div>
               <div><span className="text-muted-foreground">Nationality:</span> {client.nationality || 'N/A'}</div>
               <div><span className="text-muted-foreground">Created:</span> {format(new Date(client.created_at), 'dd/MM/yyyy')}</div>
-              {client.notes && <div className="col-span-2"><span className="text-muted-foreground">Notes:</span> {client.notes}</div>}
+              {client.notes && <div className="col-span-full"><span className="text-muted-foreground">Notes:</span> {client.notes}</div>}
             </div>
           )}
         </CardContent>

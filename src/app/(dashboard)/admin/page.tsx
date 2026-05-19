@@ -56,7 +56,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* Status Cards */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
         {(Object.entries(statusCounts) as [string, number][]).map(([status, count]) => (
           <Card key={status}>
             <CardContent className="pt-6">

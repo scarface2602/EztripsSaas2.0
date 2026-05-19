@@ -161,7 +161,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
         return (
           <Card key={flight.id}>
             <CardContent className="pt-6 space-y-4">
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="col-span-2 space-y-2">
                   <Label>Flight Number</Label>
                   <div className="flex gap-1">

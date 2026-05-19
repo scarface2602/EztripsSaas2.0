@@ -35,7 +35,7 @@ export function PaymentTermsSection({ proposal, updateProposal, currentUser }: P
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Deposit Percentage</Label>
             <div className="flex items-center gap-2">

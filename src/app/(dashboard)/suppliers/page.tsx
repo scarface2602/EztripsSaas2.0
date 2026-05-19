@@ -11,6 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Search, Plus, X, Truck } from 'lucide-react';
+import { Pagination } from '@/components/pagination';
+import { SortableHead, useSort } from '@/components/sortable-head';
+
+const PAGE_SIZE = 20;
 
 const TYPE_COLORS: Record<string, string> = {
   DMC: 'bg-purple-100 text-purple-700',
@@ -26,26 +30,36 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const { sortCol, sortDir, onSort } = useSort('created_at', 'desc');
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
   const fetchSuppliers = useCallback(async (query: string) => {
     setLoading(true);
-    let q = supabase.from('suppliers').select('*').order('created_at', { ascending: false });
+    let q = supabase.from('suppliers').select('*', { count: 'exact' }).order(sortCol, { ascending: sortDir === 'asc' });
 
     if (query) {
       q = q.or(`name.ilike.%${query}%,type.ilike.%${query}%,country.ilike.%${query}%`);
     }
 
-    const { data } = await q;
+    q = q.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+
+    const { data, count } = await q;
     setSuppliers((data as Supplier[]) || []);
+    setTotalPages(Math.max(1, Math.ceil((count || 0) / PAGE_SIZE)));
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, page, sortCol, sortDir]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchSuppliers(search), 300);
     return () => clearTimeout(timer);
-  }, [search, fetchSuppliers]);
+  }, [search, fetchSuppliers, page]);
 
   async function handleAddSupplier(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -88,7 +102,7 @@ export default function SuppliersPage() {
         <Card>
           <CardHeader><CardTitle className="text-lg">New Supplier</CardTitle></CardHeader>
           <CardContent>
-            <form onSubmit={handleAddSupplier} className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleAddSupplier} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name *</Label>
                 <Input id="name" name="name" required />
@@ -126,7 +140,7 @@ export default function SuppliersPage() {
                 <Label htmlFor="notes">Notes</Label>
                 <Input id="notes" name="notes" />
               </div>
-              <div className="col-span-2"><Button type="submit">Create Supplier</Button></div>
+              <div className="col-span-full"><Button type="submit">Create Supplier</Button></div>
             </form>
           </CardContent>
         </Card>
@@ -141,8 +155,8 @@ export default function SuppliersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
+              <SortableHead label="Name" column="name" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
+              <SortableHead label="Type" column="type" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
               <TableHead>Destination</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead>Payment Terms</TableHead>
@@ -167,6 +181,8 @@ export default function SuppliersPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

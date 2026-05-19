@@ -493,7 +493,7 @@ export function ItinerarySection({
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Heading</Label>
                   <Input
@@ -557,7 +557,7 @@ export function ItinerarySection({
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                       <div className="space-y-1">
                         <Label className="text-xs">Start Time</Label>
                         <Input type="time" value={act.start_time || ''} onChange={(e) => updateActivity(act.id, { start_time: e.target.value })} className="h-8 text-sm" />
@@ -580,7 +580,7 @@ export function ItinerarySection({
                     </div>
 
                     {(act.option_mode === 'pvt_only' || act.option_mode === 'dual') && (
-                      <div className="grid grid-cols-4 gap-2 pl-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pl-4">
                         <span className="text-xs font-medium self-center">Private:</span>
                         <Input type="number" step="0.01" placeholder="CP" value={act.pvt_cp ?? ''} onChange={(e) => updateActivity(act.id, { pvt_cp: e.target.value ? Number(e.target.value) : null })} className="h-8 text-sm" />
                         <Input type="number" step="0.01" placeholder="SP" value={act.pvt_sp ?? ''} onChange={(e) => updateActivity(act.id, { pvt_sp: e.target.value ? Number(e.target.value) : null })} className="h-8 text-sm" />
@@ -588,7 +588,7 @@ export function ItinerarySection({
                       </div>
                     )}
                     {(act.option_mode === 'sic_only' || act.option_mode === 'dual') && (
-                      <div className="grid grid-cols-4 gap-2 pl-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pl-4">
                         <span className="text-xs font-medium self-center">SIC:</span>
                         <Input type="number" step="0.01" placeholder="CP" value={act.sic_cp ?? ''} onChange={(e) => updateActivity(act.id, { sic_cp: e.target.value ? Number(e.target.value) : null })} className="h-8 text-sm" />
                         <Input type="number" step="0.01" placeholder="SP" value={act.sic_sp ?? ''} onChange={(e) => updateActivity(act.id, { sic_sp: e.target.value ? Number(e.target.value) : null })} className="h-8 text-sm" />

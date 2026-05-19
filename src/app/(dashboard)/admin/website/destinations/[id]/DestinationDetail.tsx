@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -102,6 +103,10 @@ export default function DestinationDetail({
 
   return (
     <div className="space-y-6 max-w-4xl">
+      <Breadcrumbs items={[
+        { label: 'Destinations', href: '/admin/website/destinations' },
+        { label: title || 'New Destination' },
+      ]} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -127,7 +132,7 @@ export default function DestinationDetail({
       <Card>
         <CardHeader><CardTitle className="text-lg">Destination Details</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>Name *</Label>
               <Input
@@ -152,7 +157,7 @@ export default function DestinationDetail({
             <Label>Description</Label>
             <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Brief description of the destination..." />
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <Label>Country</Label>
               <Input value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. India" />

@@ -12,33 +12,45 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Search, Plus, X, Users } from 'lucide-react';
 import { format } from 'date-fns';
+import { Pagination } from '@/components/pagination';
+import { SortableHead, useSort } from '@/components/sortable-head';
+
+const PAGE_SIZE = 20;
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [formError, setFormError] = useState<string | null>(null);
+  const { sortCol, sortDir, onSort } = useSort('created_at', 'desc');
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
   const fetchClients = useCallback(async (query: string) => {
     setLoading(true);
-    let q = supabase.from('clients').select('*').order('created_at', { ascending: false });
+    let q = supabase.from('clients').select('*', { count: 'exact' }).order(sortCol, { ascending: sortDir === 'asc' });
 
     if (query) {
       q = q.or(`full_name.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`);
     }
 
-    const { data } = await q;
+    const { data, count } = await q.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     setClients((data as Client[]) || []);
+    setTotalPages(Math.max(1, Math.ceil((count || 0) / PAGE_SIZE)));
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, page, sortCol, sortDir]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchClients(search), 300);
     return () => clearTimeout(timer);
   }, [search, fetchClients]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   async function handleAddClient(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -87,9 +99,9 @@ export default function ClientsPage() {
             <CardTitle className="text-lg">New Client</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleAddClient} className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleAddClient} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {formError && (
-                <div className="col-span-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">{formError}</div>
+                <div className="col-span-full p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">{formError}</div>
               )}
               <div className="space-y-2">
                 <Label htmlFor="full_name">Full Name *</Label>
@@ -107,11 +119,11 @@ export default function ClientsPage() {
                 <Label htmlFor="nationality">Nationality</Label>
                 <Input id="nationality" name="nationality" />
               </div>
-              <div className="col-span-2 space-y-2">
+              <div className="col-span-full space-y-2">
                 <Label htmlFor="notes">Notes</Label>
                 <Input id="notes" name="notes" />
               </div>
-              <div className="col-span-2">
+              <div className="col-span-full">
                 <Button type="submit">Create Client</Button>
               </div>
             </form>
@@ -133,11 +145,11 @@ export default function ClientsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <SortableHead label="Name" column="full_name" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
               <TableHead>Phone</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Nationality</TableHead>
-              <TableHead>Created</TableHead>
+              <SortableHead label="Nationality" column="nationality" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
+              <SortableHead label="Created" column="created_at" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -173,6 +185,7 @@ export default function ClientsPage() {
           </TableBody>
         </Table>
       </Card>
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

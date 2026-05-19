@@ -16,6 +16,7 @@ import {
   CheckCircle2, Trash2, Save, Package, ChevronDown, ChevronUp,
   Hotel, Plane, Car, MapPin, UtensilsCrossed, Briefcase,
 } from 'lucide-react';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { format } from 'date-fns';
 import type { BookingItem, SupplierStatus } from '@/lib/types/booking-items';
 import {
@@ -186,8 +187,13 @@ export default function BookingDetailPage() {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[
+        { label: 'Dashboard', href: '/' },
+        { label: 'Bookings', href: '/bookings' },
+        { label: booking.title || 'Booking' },
+      ]} />
       {/* Header — buttons on top */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => router.push('/bookings')}>
             <ArrowLeft className="h-4 w-4" />
@@ -393,7 +399,7 @@ export default function BookingDetailPage() {
                 </Button>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Reference / Confirmation Number</Label>
                     <Input value={refNumber} onChange={(e) => setRefNumber(e.target.value)} placeholder="Supplier confirmation #" />
@@ -627,7 +633,7 @@ function ItemCard({
               <p className="text-sm font-semibold text-blue-800">
                 Update to: {SUPPLIER_STATUS_LABELS[pendingStatus]}
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {pendingStatus === 'confirmation_requested' && (
                   <>
                     <div className="space-y-1">
@@ -676,7 +682,7 @@ function ItemCard({
                     </div>
                   </>
                 )}
-                <div className="col-span-2 space-y-1">
+                <div className="col-span-full space-y-1">
                   <Label className="text-xs">Notes</Label>
                   <Input value={supplierNotes} onChange={(e) => setSupplierNotes(e.target.value)} placeholder="Any additional notes..." />
                 </div>

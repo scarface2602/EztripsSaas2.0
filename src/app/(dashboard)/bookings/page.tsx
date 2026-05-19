@@ -10,6 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Search, ClipboardList } from 'lucide-react';
 import { format } from 'date-fns';
+import { Pagination } from '@/components/pagination';
+import { SortableHead, useSort } from '@/components/sortable-head';
+
+const PAGE_SIZE = 20;
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
@@ -52,6 +56,9 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const { sortCol, sortDir, onSort } = useSort('created_at', 'desc');
   const router = useRouter();
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get('status');
@@ -62,20 +69,25 @@ export default function BookingsPage() {
     setLoading(true);
     let q = supabase
       .from('bookings')
-      .select('*, clients(full_name, phone, email), suppliers(name)')
-      .order('created_at', { ascending: false });
+      .select('*, clients(full_name, phone, email), suppliers(name)', { count: 'exact' })
+      .order(sortCol, { ascending: sortDir === 'asc' });
     if (statusFilter) q = q.eq('status', statusFilter);
     if (proposalFilter) q = q.eq('proposal_id', proposalFilter);
     if (search) q = q.or(`title.ilike.%${search}%,destination.ilike.%${search}%`);
-    const { data } = await q;
+    const { data, count } = await q.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     setBookings((data as Booking[]) || []);
+    setTotalPages(Math.max(1, Math.ceil((count || 0) / PAGE_SIZE)));
     setLoading(false);
-  }, [supabase, statusFilter, proposalFilter, search]);
+  }, [supabase, statusFilter, proposalFilter, search, page, sortCol, sortDir]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchBookings(), 300);
     return () => clearTimeout(timer);
   }, [fetchBookings]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
 
   const margin = (b: Booking) => b.sell_price - b.cost_price;
 
@@ -91,7 +103,7 @@ export default function BookingsPage() {
         </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search bookings..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
@@ -102,7 +114,7 @@ export default function BookingsPage() {
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         {statuses.map((s) => {
           const count = bookings.filter((b) => b.status === s).length;
           return (
@@ -118,16 +130,16 @@ export default function BookingsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Type</TableHead>
+              <SortableHead label="Title" column="title" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
+              <SortableHead label="Type" column="booking_type" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
               <TableHead>Client</TableHead>
               <TableHead>Supplier</TableHead>
-              <TableHead>Travel Dates</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Cost</TableHead>
-              <TableHead className="text-right">Sell</TableHead>
+              <SortableHead label="Travel Dates" column="travel_start" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
+              <SortableHead label="Status" column="status" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
+              <SortableHead label="Cost" column="cost_price" currentSort={sortCol} currentDir={sortDir} onSort={onSort} className="text-right" />
+              <SortableHead label="Sell" column="sell_price" currentSort={sortCol} currentDir={sortDir} onSort={onSort} className="text-right" />
               <TableHead className="text-right">Margin</TableHead>
-              <TableHead className="text-right">Paid</TableHead>
+              <SortableHead label="Paid" column="total_paid" currentSort={sortCol} currentDir={sortDir} onSort={onSort} className="text-right" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -157,6 +169,7 @@ export default function BookingsPage() {
           </TableBody>
         </Table>
       </Card>
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

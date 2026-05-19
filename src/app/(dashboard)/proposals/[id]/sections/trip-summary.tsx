@@ -131,7 +131,7 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
       <Card>
         <CardHeader><CardTitle>Trip Summary</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Destination(s)</Label>
               <Input value={proposal.destination || ''} onChange={(e) => updateProposal({ destination: e.target.value })} />
@@ -177,7 +177,7 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
           {proposal.pax_children > 0 && (
             <div className="space-y-2">
               <Label>Children Ages</Label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {Array.from({ length: proposal.pax_children }, (_, i) => (
                   <div key={i} className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Child {i + 1}</Label>

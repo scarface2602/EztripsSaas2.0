@@ -126,7 +126,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Total Users</p>

@@ -267,7 +267,7 @@ export default function PagesManager({ initialData }: { initialData: Page[] }) {
               </div>
             </div>
 
-            <div className="border-t pt-4 grid grid-cols-2 gap-4">
+            <div className="border-t pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Sort Order</Label>
                 <Input type="number" value={sortOrder} onChange={e => setSortOrder(Number(e.target.value))} />

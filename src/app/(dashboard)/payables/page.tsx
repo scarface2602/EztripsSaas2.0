@@ -19,6 +19,9 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { ArrowUpRight, Search } from 'lucide-react';
+import { Pagination, paginateArray } from '@/components/pagination';
+
+const PAGE_SIZE = 20;
 
 export default function PayablesPage() {
   const [payables, setPayables] = useState<(Payable & { supplier_name?: string; proposal_title?: string })[]>([]);
@@ -27,6 +30,7 @@ export default function PayablesPage() {
   const [supplierFilter, setSupplierFilter] = useState<string>('all');
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [markPaidId, setMarkPaidId] = useState<string | null>(null);
   const [reference, setReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
@@ -76,6 +80,15 @@ export default function PayablesPage() {
     fetchPayables();
   }, [fetchPayables]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, supplierFilter]);
+
+  const { data: pagedPayables, totalPages } = useMemo(
+    () => paginateArray(payables, page, PAGE_SIZE),
+    [payables, page]
+  );
+
   async function handleMarkPaid() {
     if (!markPaidId) return;
     await fetch(`/api/payables/${markPaidId}`, {
@@ -114,7 +127,7 @@ export default function PayablesPage() {
         <h1 className="text-2xl font-bold">Payables</h1>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="p-4">
           <p className="text-sm text-muted-foreground">Total Outstanding</p>
           <p className="text-2xl font-bold">{totalPending.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}</p>
@@ -129,7 +142,7 @@ export default function PayablesPage() {
         </Card>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -181,12 +194,12 @@ export default function PayablesPage() {
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
               </TableRow>
-            ) : payables.length === 0 ? (
+            ) : pagedPayables.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No payables found</TableCell>
               </TableRow>
             ) : (
-              payables.map((p) => (
+              pagedPayables.map((p) => (
                 <TableRow key={p.id} className={isOverdue(p) ? 'bg-red-50' : ''}>
                   <TableCell className="font-medium">{p.description}</TableCell>
                   <TableCell>{p.supplier_name || '-'}</TableCell>
@@ -214,6 +227,8 @@ export default function PayablesPage() {
           </TableBody>
         </Table>
       </Card>
+
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
 
       <Dialog open={!!markPaidId} onOpenChange={() => setMarkPaidId(null)}>
         <DialogContent>

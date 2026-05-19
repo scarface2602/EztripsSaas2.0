@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Breadcrumbs } from '@/components/breadcrumbs';
 import { createClient } from '@/lib/supabase/client';
 import type { Client, Supplier, ParsedQuote } from '@/lib/types/database';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -289,6 +290,10 @@ export default function NewProposalPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      <Breadcrumbs items={[
+        { label: 'Proposals', href: '/proposals' },
+        { label: 'New Proposal' },
+      ]} />
       <h1 className="text-2xl font-bold">New Proposal</h1>
 
       {enquiryId && enquiryName && (
@@ -310,7 +315,7 @@ export default function NewProposalPage() {
       {step === 'quote-type' && (
         <div className="space-y-4">
           <p className="text-muted-foreground">How is this trip priced?</p>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <Card
               className={`cursor-pointer hover:shadow-md transition-shadow ${quoteType === 'package' ? 'ring-2 ring-primary' : ''}`}
               onClick={() => setQuoteType('package')}
@@ -341,7 +346,7 @@ export default function NewProposalPage() {
       )}
 
       {step === 'choose' && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStep('import-setup')}>
             <CardContent className="pt-8 pb-8 text-center space-y-4">
               <Wand2 className="h-12 w-12 mx-auto text-primary" />
@@ -363,7 +368,7 @@ export default function NewProposalPage() {
         <Card>
           <CardHeader><CardTitle>Import Quote</CardTitle></CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Supplier</Label>
                 <SupplierSelect
@@ -493,7 +498,7 @@ export default function NewProposalPage() {
 
           <Card>
             <CardHeader><CardTitle>Trip Details</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Title</Label>
                 <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`Trip to ${destination}`} />
@@ -530,7 +535,7 @@ export default function NewProposalPage() {
           {paxChildren > 0 && (
             <Card>
               <CardHeader><CardTitle>Children Ages</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-4 gap-3">
+              <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {Array.from({ length: paxChildren }, (_, i) => (
                   <div key={i} className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Child {i + 1}</Label>
@@ -583,7 +588,7 @@ export default function NewProposalPage() {
           {(parsedData.inclusions.length > 0 || parsedData.exclusions.length > 0) && (
             <Card>
               <CardHeader><CardTitle>Inclusions / Exclusions</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-2 gap-4">
+              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="font-medium text-sm mb-2">Included</p>
                   {parsedData.inclusions.map((inc, i) => (
@@ -681,7 +686,7 @@ export default function NewProposalPage() {
         <Card>
           <CardHeader><CardTitle>Create Proposal Manually</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Client</Label>
                 <ClientSelect
@@ -714,7 +719,7 @@ export default function NewProposalPage() {
             {paxChildren > 0 && (
               <div className="space-y-2">
                 <Label>Children Ages</Label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   {Array.from({ length: paxChildren }, (_, i) => (
                     <div key={i} className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Child {i + 1}</Label>

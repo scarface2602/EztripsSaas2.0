@@ -93,6 +93,78 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: enquiryErr?.message || 'Failed to create enquiry' }, { status: 500, headers });
     }
 
+    // Auto-assign lead if enabled
+    try {
+      // Find any org with auto-assign enabled (single-tenant assumption)
+      const { data: org } = await supabase
+        .from('organisations')
+        .select('id, auto_assign_enabled, auto_assign_strategy, auto_assign_last_agent_id')
+        .eq('auto_assign_enabled', true)
+        .limit(1)
+        .single();
+
+      if (org) {
+        // Get all agents with capacity
+        const { data: agents } = await supabase
+          .from('users')
+          .select('id, max_active_leads')
+          .eq('role', 'agent')
+          .eq('org_id', org.id);
+
+        if (agents && agents.length > 0) {
+          // Count active leads per agent
+          const { data: leadCounts } = await supabase
+            .from('website_enquiries')
+            .select('assigned_to')
+            .not('assigned_to', 'is', null)
+            .in('status', ['new', 'contacted', 'qualified']);
+
+          const countMap: Record<string, number> = {};
+          (leadCounts || []).forEach(l => {
+            const aid = l.assigned_to as string;
+            countMap[aid] = (countMap[aid] || 0) + 1;
+          });
+
+          // Filter agents with capacity
+          const available = agents.filter(a => {
+            const current = countMap[a.id] || 0;
+            return current < (a.max_active_leads ?? 10);
+          });
+
+          if (available.length > 0) {
+            let chosen: typeof available[0];
+
+            if (org.auto_assign_strategy === 'least_loaded') {
+              // Pick agent with fewest active leads
+              chosen = available.reduce((min, a) =>
+                (countMap[a.id] || 0) < (countMap[min.id] || 0) ? a : min
+              );
+            } else {
+              // Round robin: pick next agent after last assigned
+              const lastIdx = org.auto_assign_last_agent_id
+                ? available.findIndex(a => a.id === org.auto_assign_last_agent_id)
+                : -1;
+              chosen = available[(lastIdx + 1) % available.length];
+            }
+
+            // Assign the enquiry
+            await supabase
+              .from('website_enquiries')
+              .update({ assigned_to: chosen.id })
+              .eq('id', enquiry.id);
+
+            // Update last assigned agent for round robin
+            await supabase
+              .from('organisations')
+              .update({ auto_assign_last_agent_id: chosen.id })
+              .eq('id', org.id);
+          }
+        }
+      }
+    } catch (autoAssignErr) {
+      console.error('Auto-assign failed (non-fatal):', autoAssignErr);
+    }
+
     // Send notification email
     if (process.env.GMAIL_USER) {
       const transporter = nodemailer.createTransport({

@@ -234,7 +234,7 @@ export default function BlogManager({ initialData }: { initialData: BlogPost[] }
               <Label>Tags (comma separated)</Label>
               <Input {...register('tags')} placeholder="travel, kashmir, tips" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>SEO Title</Label>
                 <Input {...register('seo_title')} />
