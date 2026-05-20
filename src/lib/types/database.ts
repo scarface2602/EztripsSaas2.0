@@ -8,6 +8,7 @@ export interface Organisation {
   address: string | null;
   email: string | null;
   website: string | null;
+  terms_and_conditions: string | null;
   created_at: string;
 }
 
