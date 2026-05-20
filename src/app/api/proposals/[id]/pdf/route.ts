@@ -50,6 +50,19 @@ function fmtTime(dt: string): string {
   } catch { return ''; }
 }
 
+/** Map meal plan codes to readable labels */
+function formatMealPlan(code: unknown): string {
+  const map: Record<string, string> = {
+    RO: 'Room Only', EP: 'Room Only',
+    BB: 'Bed & Breakfast', CP: 'Bed & Breakfast',
+    HB: 'Half Board', MAP: 'Half Board',
+    FB: 'Full Board', AP: 'Full Board',
+    AI: 'All Inclusive',
+  };
+  const s = String(code || '').toUpperCase().trim();
+  return map[s] || (s || 'N/A');
+}
+
 /** Format baggage allowance — append " kg" if value is a bare number. */
 function formatBaggage(val: unknown): string {
   if (!val) return '';
@@ -157,9 +170,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const tcsAmt         = proposal.tcs_enabled ? (afterDiscount + gstAmt) * (Number(proposal.tcs_rate) || 5) / 100 : 0;
   const grandTotal     = afterDiscount + gstAmt + tcsAmt;
 
-  const R = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
+  // Use HTML entity for rupee to ensure Puppeteer renders it
+  const curEntity = cur === '₹' ? '&#8377;' : cur;
+  const R = (n: number) => `${curEntity}${Math.round(n).toLocaleString('en-IN')}`;
   const hasBreakdown = (pricingLandSP > 0 && pricingFlightSP > 0) || discount > 0
     || !!proposal.gst_enabled || !!proposal.tcs_enabled;
+
+  // Pricing display mode: per_person, total, or both
+  const displayMode = (proposal.pricing_display_mode as string) || 'per_person';
+  const adultSP = Number(proposal.package_sp_per_person) || 0;
+  const paxAdults = Number(proposal.pax_adults) || 1;
 
   let pricingRows = '';
   if (hasBreakdown) {
@@ -176,7 +196,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (proposal.tcs_enabled)
       pricingRows += `<tr><td>TCS (${proposal.tcs_rate || 5}%)</td><td style="text-align:right;">${R(tcsAmt)}</td></tr>`;
   }
-  pricingRows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${R(grandTotal)}</strong></td></tr>`;
+
+  if (displayMode === 'per_person' && adultSP > 0) {
+    pricingRows += `<tr class="grand-total-row"><td><strong>Per Person</strong></td><td style="text-align:right;"><strong>${R(adultSP)}</strong></td></tr>`;
+  } else if (displayMode === 'both' && adultSP > 0) {
+    pricingRows += `<tr class="grand-total-row"><td><strong>Per Person</strong></td><td style="text-align:right;"><strong>${R(adultSP)}</strong></td></tr>`;
+    pricingRows += `<tr><td><strong>Grand Total (${paxAdults} pax)</strong></td><td style="text-align:right;"><strong>${R(grandTotal)}</strong></td></tr>`;
+  } else {
+    pricingRows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${R(grandTotal)}</strong></td></tr>`;
+  }
 
   // ── FIX 2: Flights — redesigned layout ───────────────────────────────────
   // FIX 1: IATA codes UPPERCASE, airline name Title Case, flight number UPPERCASE
@@ -284,8 +312,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           <span style="font-size:0.8rem;color:#555;">${toTitleCase(String(h.city || ''))}${Number(h.star_rating) > 0 ? ` &middot; ${'&#9733;'.repeat(Number(h.star_rating))}` : ''}</span><br/>
           <span class="badge ${h.is_non_refundable ? 'badge-nr' : 'badge-r'}" style="margin-top:3px;">${h.is_non_refundable ? 'Non-Refundable' : 'Refundable'}</span>
         </td>
-        <td>${toTitleCase(String(h.room_type || 'N/A'))}</td>
-        <td>${toTitleCase(String(h.meal_plan || 'N/A'))}</td>
+        <td>${toTitleCase(String(h.room_type || ''))}${h.room_view ? `<br/><span style="font-size:0.78rem;color:#666;">${toTitleCase(String(h.room_view))}</span>` : ''}</td>
+        <td>${formatMealPlan(h.meal_plan)}</td>
         <td>${h.check_in ? fmtDate(String(h.check_in)) : 'N/A'}</td>
         <td>${h.check_out ? fmtDate(String(h.check_out)) : 'N/A'}</td>
         <td style="text-align:center;font-weight:600;">${h.nights ?? '&#8212;'}</td>
