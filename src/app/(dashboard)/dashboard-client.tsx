@@ -9,7 +9,7 @@ import Link from 'next/link';
 import {
   FileText, Users, Clock, ArrowDownLeft, ArrowUpRight, Plus,
   TrendingUp, Search, Edit, Copy, ExternalLink, ChevronDown, ChevronRight,
-  Inbox, ArrowRight, CalendarCheck, CheckCircle2,
+  Inbox, ArrowRight, CalendarCheck, CheckCircle2, HelpCircle,
 } from 'lucide-react';
 import { differenceInHours, format } from 'date-fns';
 import { useRouter } from 'next/navigation';
@@ -426,6 +426,36 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
           className="pl-10"
         />
       </div>
+
+      {/* Status legend */}
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer inline-flex items-center gap-1.5 hover:text-foreground transition-colors">
+          <HelpCircle className="h-3.5 w-3.5" />
+          What do these statuses mean?
+        </summary>
+        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 pl-5">
+          <div className="flex items-start gap-2">
+            <Badge className={`${STATUS_COLORS.draft} text-xs shrink-0`}>Draft</Badge>
+            <span>Work-in-progress. Only you can see it.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <Badge className={`${STATUS_COLORS.sent} text-xs shrink-0`}>Sent</Badge>
+            <span>Published. Share link is live, client hasn&apos;t opened it yet.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <Badge className={`${STATUS_COLORS.viewed} text-xs shrink-0`}>Viewed</Badge>
+            <span>Client opened the share link. Follow up if no reply.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <Badge className={`${STATUS_COLORS.confirmed} text-xs shrink-0`}>Confirmed</Badge>
+            <span>Client accepted. Bookings &amp; payments tracked under Operations.</span>
+          </div>
+          <div className="flex items-start gap-2 md:col-span-2">
+            <Badge className={`${STATUS_COLORS.cancelled} text-xs shrink-0`}>Cancelled</Badge>
+            <span>Lost or withdrawn — kept for record.</span>
+          </div>
+        </div>
+      </details>
 
       {/* Grouped proposal lists */}
       {STATUS_ORDER.map(status => {

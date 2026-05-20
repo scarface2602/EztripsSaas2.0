@@ -187,11 +187,11 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
         </Button>
       </div>
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="overflow-y-auto p-6">
-          <SheetHeader>
+        <SheetContent className="p-0 flex flex-col">
+          <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <SheetTitle>Add Offline Enquiry</SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 mt-4">
+          <div className="space-y-4 px-6 py-4 overflow-y-auto flex-1">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Name *</Label>
@@ -292,7 +292,12 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
               <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Internal notes..." rows={2} />
             </div>
             {formError && <p className="text-sm text-red-500">{formError}</p>}
-            <Button onClick={handleCreate} disabled={saving} className="w-full">
+          </div>
+          <div className="border-t bg-background px-6 py-4 flex gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setSheetOpen(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button onClick={handleCreate} disabled={saving} className="flex-1">
               {saving ? 'Creating...' : 'Create Enquiry'}
             </Button>
           </div>

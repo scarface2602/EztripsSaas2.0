@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { cleanText } from '@/lib/utils/text-sanitise';
 import { getCurrencySymbol } from '@/lib/utils/pricing';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -14,6 +16,16 @@ async function urlToBase64DataUri(url: string): Promise<string> {
     const contentType = res.headers.get('content-type') || 'image/jpeg';
     const base64 = Buffer.from(buffer).toString('base64');
     return `data:${contentType};base64,${base64}`;
+  } catch {
+    return '';
+  }
+}
+
+/** Read bundled fallback logo from /public — used when no agency logo is uploaded. */
+async function getBundledLogo(): Promise<string> {
+  try {
+    const buf = await readFile(join(process.cwd(), 'public', 'logo.png'));
+    return `data:image/png;base64,${buf.toString('base64')}`;
   } catch {
     return '';
   }
@@ -126,10 +138,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const agentName   = (agentUser?.full_name || '') as string;
   const agentEmail  = (agentUser?.email || '') as string;
 
-  const [coverImageDataUri, orgLogoDataUri] = await Promise.all([
+  const [coverImageDataUri, fetchedLogoDataUri] = await Promise.all([
     proposal.cover_image_url ? urlToBase64DataUri(proposal.cover_image_url as string) : Promise.resolve(''),
     orgLogoUrl ? urlToBase64DataUri(orgLogoUrl) : Promise.resolve(''),
   ]);
+  // Fall back to bundled EzTrips logo if the org/user hasn't uploaded one,
+  // or if the upload URL failed to fetch (Supabase storage CORS, expired URL, etc.)
+  const orgLogoDataUri = fetchedLogoDataUri || await getBundledLogo();
 
   const optionalAddons = (activities || []).filter((a: Record<string, unknown>) => a.is_optional);
   const inclusions     = (lineItems || []).filter((li: Record<string, unknown>) => li.is_included && li.description);
