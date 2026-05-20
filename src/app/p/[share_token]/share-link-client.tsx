@@ -162,7 +162,7 @@ export function ShareLinkClient({
             </div>
           </div>
         )}
-        {flightCountdown !== null && flightCountdown > 0 && (
+        {flightCountdown !== null && flightCountdown > 0 && flights && flights.length > 0 && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-600 shrink-0" />
             <span className="text-sm text-amber-800">Flight prices valid for: <strong>{formatCountdown(flightCountdown)}</strong></span>
