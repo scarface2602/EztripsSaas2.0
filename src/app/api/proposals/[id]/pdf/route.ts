@@ -311,6 +311,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           <strong>${toTitleCase(String(h.name || ''))}</strong><br/>
           <span style="font-size:0.8rem;color:#555;">${toTitleCase(String(h.city || ''))}${Number(h.star_rating) > 0 ? ` &middot; ${'&#9733;'.repeat(Number(h.star_rating))}` : ''}</span><br/>
           <span class="badge ${h.is_non_refundable ? 'badge-nr' : 'badge-r'}" style="margin-top:3px;">${h.is_non_refundable ? 'Non-Refundable' : 'Refundable'}</span>
+          ${h.early_checkin_requested ? '<span class="badge" style="background:#e0e7ff;color:#3730a3;margin-left:4px;">Early Check-in</span>' : ''}
+          ${h.late_checkout_requested ? '<span class="badge" style="background:#e0e7ff;color:#3730a3;margin-left:4px;">Late Check-out</span>' : ''}
         </td>
         <td>${toTitleCase(String(h.room_type || ''))}${h.room_view ? `<br/><span style="font-size:0.78rem;color:#666;">${toTitleCase(String(h.room_view))}</span>` : ''}</td>
         <td>${formatMealPlan(h.meal_plan)}</td>
@@ -394,8 +396,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   <h2>Trip Summary</h2>
   <table>
     <tr><td><strong>Destination</strong></td><td>${toTitleCase(String(proposal.destination || 'N/A'))}</td></tr>
+    ${(() => {
+      if (proposal.travel_start && proposal.travel_end) {
+        const start = new Date(proposal.travel_start as string);
+        const end = new Date(proposal.travel_end as string);
+        const nights = Math.round((end.getTime() - start.getTime()) / 86400000);
+        const days = nights + 1;
+        return `<tr><td><strong>Duration</strong></td><td>${nights} Nights / ${days} Days</td></tr>`;
+      }
+      return '';
+    })()}
     <tr><td><strong>Travel Dates</strong></td><td>${proposal.travel_start ? fmtDate(String(proposal.travel_start)) : 'N/A'} to ${proposal.travel_end ? fmtDate(String(proposal.travel_end)) : 'N/A'}</td></tr>
-    <tr><td><strong>Travellers</strong></td><td>${proposal.pax_adults} Adults${(proposal.pax_children as number) > 0 ? `, ${proposal.pax_children} Children` : ''}</td></tr>
+    <tr><td><strong>Travellers</strong></td><td>${proposal.pax_adults} Adults${(proposal.pax_children as number) > 0 ? `, ${proposal.pax_children} Children${proposal.children_ages ? ` (Ages: ${(proposal.children_ages as number[]).join(', ')})` : ''}` : ''}</td></tr>
+    ${(proposal.trip_cities as Array<{city: string; nights: number}> || []).length > 0 ? `<tr><td><strong>Cities</strong></td><td>${(proposal.trip_cities as Array<{city: string; nights: number}>).map(c => `${toTitleCase(c.city)} (${c.nights}N)`).join(' &#8594; ')}</td></tr>` : ''}
+    <tr><td><strong>Trip ID</strong></td><td>${String(proposal.id).slice(0, 8).toUpperCase()}</td></tr>
     ${proposal.special_notes ? `<tr><td><strong>Special Occasions</strong></td><td>${cleanText(String(proposal.special_notes))}</td></tr>` : ''}
     ${proposal.dietary_notes ? `<tr><td><strong>Dietary Notes</strong></td><td>${cleanText(String(proposal.dietary_notes))}</td></tr>` : ''}
   </table>
@@ -539,6 +553,26 @@ ${showAncillaries && optionalAddons.length > 0 ? `
       </tbody>
     </table>
   </div>
+</div>
+` : ''}
+
+${(() => {
+  const draftData = (proposal.draft_data || {}) as Record<string, unknown>;
+  const importantNotes = draftData.important_notes as string || '';
+  if (!importantNotes) return '';
+  return `
+  <div class="section">
+    <h2>Important Notes</h2>
+    <div style="padding:12px 14px;background:#fffbeb;border-left:3px solid #f59e0b;font-size:0.85rem;white-space:pre-wrap;line-height:1.55;">${cleanText(importantNotes)}</div>
+  </div>`;
+})()}
+
+<!-- Company Contact -->
+${orgName ? `
+<div style="text-align:center;padding:32px 48px 24px;border-top:2px solid #e5e5e5;margin-top:16px;">
+  <p style="font-size:1.1rem;font-weight:700;color:#1e3a5f;margin-bottom:6px;">${orgName}</p>
+  ${[orgPhone, orgEmail, orgWebsite].filter(Boolean).length > 0 ? `<p style="font-size:0.85rem;color:#666;">${[orgPhone, orgEmail, orgWebsite].filter(Boolean).join(' &nbsp;&#8226;&nbsp; ')}</p>` : ''}
+  ${(org?.address as string) ? `<p style="font-size:0.8rem;color:#888;margin-top:4px;">${cleanText(org?.address as string)}</p>` : ''}
 </div>
 ` : ''}
 
