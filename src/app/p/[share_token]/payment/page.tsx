@@ -12,6 +12,7 @@ export default function PaymentPage() {
   const searchParams = useSearchParams();
   const shareToken = params.share_token as string;
   const total = Number(searchParams.get('total')) || 0;
+  const isDynamic = searchParams.get('dynamic') === '1';
   const [loading, setLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
 
@@ -65,8 +66,11 @@ export default function PaymentPage() {
         <CardHeader><CardTitle>Complete Your Booking</CardTitle></CardHeader>
         <CardContent className="space-y-6">
           <div className="text-center">
-            <p className="text-muted-foreground">Confirmed Total</p>
+            <p className="text-muted-foreground">{isDynamic ? 'Estimated Total' : 'Confirmed Total'}</p>
             <p className="text-3xl font-bold">₹{total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+            {isDynamic && (
+              <p className="text-xs text-amber-700 mt-2">Prices are subject to availability. Final price will be confirmed by your agent before payment is processed.</p>
+            )}
           </div>
 
           <Separator />

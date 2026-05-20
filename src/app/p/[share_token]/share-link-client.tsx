@@ -58,42 +58,32 @@ export function ShareLinkClient({
   const optionalActivities = activities.filter(a => a.is_optional);
   const allDualChosen = dualActivities.every(a => dualChoices[a.id as string]);
 
-  // Determine expiry message based on what's in the proposal
-  const getExpiryMessage = () => {
-    const now = new Date();
-    const hasFlights = flights && flights.length > 0;
-    const hasHotels = hotels && hotels.length > 0;
-    const hasActivities = activities && activities.length > 0;
+  const hasFlights = flights && flights.length > 0;
 
-    const flightExpired = !!proposal.flight_expires_at && new Date(proposal.flight_expires_at as string) < now;
-    const landExpired = !!proposal.land_expires_at && new Date(proposal.land_expires_at as string) < now;
+  // Pricing validity logic:
+  // - Has flights → always dynamic pricing (flight prices change constantly)
+  // - No flights + travel ≤ 7 days → dynamic pricing
+  // - No flights + travel > 7 days → 48hr countdown from published/updated_at
+  const travelStart = proposal.travel_start ? new Date(proposal.travel_start as string) : null;
+  const now = new Date();
+  const daysUntilTravel = travelStart ? Math.ceil((travelStart.getTime() - now.getTime()) / 86400000) : 999;
+  const isDynamicPricing = hasFlights || daysUntilTravel <= 7;
 
-    if (flightExpired && hasFlights && landExpired && (hasHotels || hasActivities)) {
-      return 'Prices have expired';
-    }
-
-    if (flightExpired && hasFlights) {
-      return 'Flight prices have expired';
-    }
-
-    if (landExpired && (hasHotels || hasActivities)) {
-      return 'Hotel & Activity prices have expired';
-    }
-
-    return null;
-  };
-
-  const expiryMsg = getExpiryMessage();
-  const flightExpired = !!proposal.flight_expires_at && new Date(proposal.flight_expires_at as string) < new Date();
+  // 48hr validity for land-only proposals with travel > 7 days
+  const publishedAt = proposal.published_at || proposal.updated_at;
+  const priceValidUntil = publishedAt
+    ? new Date(new Date(publishedAt as string).getTime() + 48 * 3600000)
+    : null;
+  const priceExpired = !isDynamicPricing && priceValidUntil && priceValidUntil < now;
 
   useEffect(() => {
-    if (!proposal.flight_expires_at) return;
+    if (isDynamicPricing || !priceValidUntil) return;
     const interval = setInterval(() => {
-      const diff = differenceInSeconds(new Date(proposal.flight_expires_at as string), new Date());
+      const diff = differenceInSeconds(priceValidUntil, new Date());
       setFlightCountdown(diff > 0 ? diff : 0);
     }, 1000);
     return () => clearInterval(interval);
-  }, [proposal.flight_expires_at]);
+  }, [isDynamicPricing, priceValidUntil]);
 
   function formatCountdown(seconds: number) {
     const h = Math.floor(seconds / 3600);
@@ -117,7 +107,7 @@ export function ShareLinkClient({
   const canAccept = tcAccepted
     && (!proposal.visa_section_enabled || visaAcknowledged)
     && (dualActivities.length === 0 || allDualChosen)
-    && !flightExpired;
+    && !priceExpired;
 
   async function handleAccept() {
     const shareToken = window.location.pathname.split('/p/')[1];
@@ -126,7 +116,7 @@ export function ShareLinkClient({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event_type: 'tc_accepted' }),
     }).catch(() => { });
-    router.push(`/p/${shareToken}/payment?total=${grandTotal}&addons=${Array.from(selectedAddons).join(',')}&choices=${JSON.stringify(dualChoices)}`);
+    router.push(`/p/${shareToken}/payment?total=${grandTotal}&addons=${Array.from(selectedAddons).join(',')}&choices=${JSON.stringify(dualChoices)}${isDynamicPricing ? '&dynamic=1' : ''}`);
   }
 
   return (
@@ -152,20 +142,26 @@ export function ShareLinkClient({
       {/* Single-column content, max-w constrained, responsive padding */}
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-4 -mt-6 relative z-10">
 
-        {/* TTL Warnings — Fixed to show specific expiry messages */}
-        {expiryMsg && (
+        {/* Pricing validity banners */}
+        {priceExpired && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
             <div>
-              <p className="font-medium text-red-800">{expiryMsg}</p>
+              <p className="font-medium text-red-800">Quote validity has expired</p>
               <p className="text-sm text-red-700">Please request a refreshed quote from your agent.</p>
             </div>
           </div>
         )}
-        {flightCountdown !== null && flightCountdown > 0 && flights && flights.length > 0 && (
+        {isDynamicPricing && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span className="text-sm text-amber-800">Prices are indicative and subject to availability at the time of booking confirmation.</span>
+          </div>
+        )}
+        {!isDynamicPricing && flightCountdown !== null && flightCountdown > 0 && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
             <Clock className="h-4 w-4 text-amber-600 shrink-0" />
-            <span className="text-sm text-amber-800">Flight prices valid for: <strong>{formatCountdown(flightCountdown)}</strong></span>
+            <span className="text-sm text-amber-800">Prices valid for: <strong>{formatCountdown(flightCountdown)}</strong></span>
           </div>
         )}
 
@@ -325,6 +321,9 @@ export function ShareLinkClient({
               <span>Grand Total</span>
               <span>{cur}{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
             </div>
+            {isDynamicPricing && (
+              <p className="text-xs text-amber-700 mt-2">* Final price valid at the time of booking confirmation</p>
+            )}
           </CardContent>
         </Card>
 
