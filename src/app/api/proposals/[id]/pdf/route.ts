@@ -83,6 +83,17 @@ function formatBaggage(val: unknown): string {
   return s;
 }
 
+/** Escape HTML in untrusted strings (org T&C, notes typed by users). */
+function escapeHtml(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { searchParams } = new URL(request.url);
@@ -217,8 +228,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   } else if (displayMode === 'both' && adultSP > 0) {
     pricingRows += `<tr class="grand-total-row"><td><strong>Per Person</strong></td><td style="text-align:right;"><strong>${R(adultSP)}</strong></td></tr>`;
     pricingRows += `<tr><td><strong>Grand Total (${paxAdults} pax)</strong></td><td style="text-align:right;"><strong>${R(grandTotal)}</strong></td></tr>`;
-  } else {
+  } else if (grandTotal > 0) {
     pricingRows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${R(grandTotal)}</strong></td></tr>`;
+  }
+  if (!pricingRows) {
+    pricingRows = `<tr><td colspan="2" style="text-align:center;color:#888;font-size:0.9rem;padding:18px;">Pricing to be updated</td></tr>`;
   }
 
   // ── FIX 2: Flights — redesigned layout ───────────────────────────────────
@@ -294,7 +308,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ${fLayovers.map((l) => `
           <div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f8f9fa;border-left:3px solid #94a3b8;margin:4px 0;font-size:0.83rem;">
             <span style="color:#64748b;">&#x23F1;</span>
-            <strong>Layover:</strong>&nbsp;${toTitleCase(l.city)}${l.airport_code ? ` (${l.airport_code.toUpperCase()})` : ''} &#8212; ${l.duration_hours}h${l.duration_minutes > 0 ? ` ${l.duration_minutes}m` : ''}
+            <strong>Layover:</strong>&nbsp;${toTitleCase(l.city)}${l.airport_code ? ` (${l.airport_code.toUpperCase()})` : ''} &#8212; ${Number(l.duration_hours) || 0}h${Number(l.duration_minutes) > 0 ? ` ${Number(l.duration_minutes)}m` : ''}
           </div>
         `).join('')}
       </div>
@@ -331,8 +345,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         </td>
         <td>${toTitleCase(String(h.room_type || ''))}${h.room_view ? `<br/><span style="font-size:0.78rem;color:#666;">${toTitleCase(String(h.room_view))}</span>` : ''}</td>
         <td>${formatMealPlan(h.meal_plan)}</td>
-        <td>${h.check_in ? fmtDate(String(h.check_in)) : 'N/A'}</td>
-        <td>${h.check_out ? fmtDate(String(h.check_out)) : 'N/A'}</td>
+        <td>${h.check_in ? fmtDate(String(h.check_in)) : '&#8212;'}</td>
+        <td>${h.check_out ? fmtDate(String(h.check_out)) : '&#8212;'}</td>
         <td style="text-align:center;font-weight:600;">${h.nights ?? '&#8212;'}</td>
       </tr>
       ${h.description ? `<tr><td colspan="6" style="padding:4px 12px 12px;color:#555;font-size:0.84rem;">${cleanText(h.description as string)}</td></tr>` : ''}
@@ -399,9 +413,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     <h1>${toTitleCase(String(proposal.title || 'Travel Proposal'))}</h1>
     <h2>${toTitleCase(String(proposal.destination || ''))}</h2>
     <p>Prepared for ${toTitleCase(String((client as Record<string, unknown>)?.full_name || 'Valued Client'))}</p>
-    <div class="agent-info">
+    ${agentName ? `<div class="agent-info">
       <p>Prepared by: ${toTitleCase(agentName)}${agentEmail ? ` | ${agentEmail}` : ''}</p>
-    </div>
+    </div>` : ''}
     ${pdfTypeLabel ? `<div class="type-label">${pdfTypeLabel}</div>` : ''}
   </div>
 </div>
@@ -410,7 +424,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 <div class="section">
   <h2>Trip Summary</h2>
   <table>
-    <tr><td><strong>Destination</strong></td><td>${toTitleCase(String(proposal.destination || 'N/A'))}</td></tr>
+    <tr><td><strong>Destination</strong></td><td>${proposal.destination ? toTitleCase(String(proposal.destination)) : '&#8212;'}</td></tr>
     ${(() => {
       if (proposal.travel_start && proposal.travel_end) {
         const start = new Date(proposal.travel_start as string);
@@ -421,7 +435,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
       return '';
     })()}
-    <tr><td><strong>Travel Dates</strong></td><td>${proposal.travel_start ? fmtDate(String(proposal.travel_start)) : 'N/A'} to ${proposal.travel_end ? fmtDate(String(proposal.travel_end)) : 'N/A'}</td></tr>
+    <tr><td><strong>Travel Dates</strong></td><td>${proposal.travel_start ? fmtDate(String(proposal.travel_start)) : '&#8212;'} to ${proposal.travel_end ? fmtDate(String(proposal.travel_end)) : '&#8212;'}</td></tr>
     <tr><td><strong>Travellers</strong></td><td>${proposal.pax_adults} Adults${(proposal.pax_children as number) > 0 ? `, ${proposal.pax_children} Children${proposal.children_ages ? ` (Ages: ${(proposal.children_ages as number[]).join(', ')})` : ''}` : ''}</td></tr>
     ${(proposal.trip_cities as Array<{city: string; nights: number}> || []).length > 0 ? `<tr><td><strong>Cities</strong></td><td>${(proposal.trip_cities as Array<{city: string; nights: number}>).map(c => `${toTitleCase(c.city)} (${c.nights}N)`).join(' &#8594; ')}</td></tr>` : ''}
     <tr><td><strong>Trip ID</strong></td><td>${String(proposal.id).slice(0, 8).toUpperCase()}</td></tr>
@@ -488,7 +502,7 @@ ${showCancellation ? `
     ${(flights || []).map((f: Record<string, unknown>) => `
       <tr>
         <td>${String(f.flight_number || '').toUpperCase()}${f.airline ? ` (${toTitleCase(String(f.airline))})` : ''}</td>
-        <td>${f.baggage_allowance ? formatBaggage(f.baggage_allowance) : 'N/A'}</td>
+        <td>${f.baggage_allowance ? formatBaggage(f.baggage_allowance) : '&#8212;'}</td>
         <td>${f.is_non_refundable ? 'Non-Refundable' : (f.refundable_status === 'partially_refundable' ? 'Partially Refundable' : 'Refundable')}</td>
         <td>${f.cancellation_policy_text ? cleanText(String(f.cancellation_policy_text)) : (f.is_non_refundable ? 'Non-refundable from date of ticketing' : 'Standard airline policy applies')}</td>
       </tr>
@@ -538,7 +552,7 @@ ${showCancellation ? `
   <p>${(proposal.payment_terms as Record<string, unknown>)?.deposit_pct || 25}% deposit upon booking confirmation</p>
   <p>Balance due ${(proposal.payment_terms as Record<string, unknown>)?.balance_days_before || 30} days before departure</p>
   ${(proposal.payment_terms as Record<string, unknown>)?.notes ? `<p style="margin-top:6px;">${cleanText(String((proposal.payment_terms as Record<string, unknown>).notes))}</p>` : ''}
-  ${orgTerms ? `<div style="margin-top:14px;padding:12px 14px;background:#f8fafc;border-left:3px solid #1e3a5f;font-size:0.82rem;white-space:pre-wrap;line-height:1.55;">${orgTerms}</div>` : ''}
+  ${orgTerms ? `<div style="margin-top:14px;padding:12px 14px;background:#f8fafc;border-left:3px solid #1e3a5f;font-size:0.82rem;white-space:pre-wrap;line-height:1.55;">${escapeHtml(cleanText(orgTerms))}</div>` : ''}
 </div>
 
 ${proposal.share_token ? `
@@ -562,7 +576,7 @@ ${showAncillaries && optionalAddons.length > 0 ? `
       ${optionalAddons.map((a: Record<string, unknown>) => `
         <tr>
           <td>${toTitleCase(cleanText(a.type as string))}: ${cleanText(String((a.details as Record<string, unknown>)?.title || a.location || ''))}</td>
-          <td style="text-align:right;">${cur}${Number(a.pvt_sp || a.sic_sp || 0).toLocaleString('en-IN')}</td>
+          <td style="text-align:right;">${curEntity}${Number(a.pvt_sp || a.sic_sp || 0).toLocaleString('en-IN')}</td>
         </tr>
       `).join('')}
       </tbody>
