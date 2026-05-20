@@ -7,6 +7,7 @@ import type { Proposal, Hotel, Flight, ItineraryDay, ItineraryActivity, LineItem
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Save, Upload, Undo2, Eye, ArrowLeft, AlertTriangle, History, ClipboardList } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { applyRounding } from '@/lib/utils/pricing';
 import { CoverPageSection } from './sections/cover-page';
@@ -314,7 +315,10 @@ export function ProposalEditor({
           </Button>
           {shareUrl && (
             <>
-              <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(shareUrl)}>
+              <Button variant="outline" size="sm" onClick={async () => {
+                await navigator.clipboard.writeText(shareUrl);
+                toast.success('Share link copied to clipboard');
+              }}>
                 <Eye className="h-4 w-4 mr-1" /> Copy Link
               </Button>
               <Button

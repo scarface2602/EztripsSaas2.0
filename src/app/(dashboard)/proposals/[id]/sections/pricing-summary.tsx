@@ -310,6 +310,9 @@ export function PricingSummarySection({
                 <span className="text-xs text-muted-foreground">(on land SP only)</span>
               )}
             </label>
+            <p className="text-xs text-muted-foreground pl-7">
+              Goods &amp; Services Tax on land arrangements (hotels, transfers, activities). Default 5% for tour operators. Excludes flights.
+            </p>
             {proposal.gst_enabled && (
               <div className="flex items-center gap-3 pl-7">
                 <Label className="text-sm">Rate:</Label>
@@ -340,6 +343,9 @@ export function PricingSummarySection({
                 <span className="text-xs text-muted-foreground">(on combined total)</span>
               )}
             </label>
+            <p className="text-xs text-muted-foreground pl-7">
+              Tax Collected at Source on outbound tour packages. 5% if PAN-linked; 20% otherwise. Client can claim it as TDS credit while filing returns.
+            </p>
             {proposal.tcs_enabled && (
               <div className="flex items-center gap-3 pl-7">
                 <Label className="text-sm">Rate:</Label>

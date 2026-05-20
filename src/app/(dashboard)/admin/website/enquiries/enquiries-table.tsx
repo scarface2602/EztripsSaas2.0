@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Flame, Thermometer, Snowflake, FileText } from 'lucide-react';
 import { Pagination, paginateArray } from '@/components/pagination';
+import { toast } from 'sonner';
 
 type Enquiry = Record<string, unknown>;
 
@@ -52,12 +53,13 @@ export default function EnquiriesTable({ initialData, agents = [] }: { initialDa
       });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || 'Failed to assign');
+        toast.error(data.error || 'Failed to assign enquiry');
         return;
       }
       setEnquiries(prev => prev.map(e => e.id === enquiryId ? { ...e, assigned_to: agentId || null } : e));
+      toast.success(agentId ? 'Enquiry assigned' : 'Enquiry unassigned');
     } catch {
-      alert('Failed to assign lead');
+      toast.error('Failed to assign enquiry');
     }
   }
   const filtered = filter === 'all' ? enquiries : enquiries.filter(e => e.status === filter);

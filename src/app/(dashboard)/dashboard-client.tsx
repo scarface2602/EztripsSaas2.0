@@ -14,6 +14,7 @@ import {
 import { differenceInHours, format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 import type { Proposal } from '@/lib/types/database';
 import type { DashboardEnquiry, FollowUpEnquiry } from './page';
 
@@ -100,6 +101,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
     const url = `${window.location.origin}/p/${p.share_token}`;
     await navigator.clipboard.writeText(url);
     setCopyFeedback(p.id);
+    toast.success('Share link copied to clipboard');
     setTimeout(() => setCopyFeedback(null), 1500);
   }
 
@@ -178,7 +180,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
       router.push(`/proposals/${newProposal.id}`);
     } catch (err) {
       console.error('Duplicate failed:', err);
-      alert('Failed to duplicate proposal.');
+      toast.error('Failed to duplicate proposal');
     } finally {
       setDuplicating(null);
     }

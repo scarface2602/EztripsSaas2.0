@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { Sidebar, MobileHeader } from './sidebar';
 import type { User } from '@/lib/types/database';
+import { Toaster } from '@/components/ui/sonner';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   let user: User | null = null;
@@ -82,6 +83,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         </main>
       </div>
+      <Toaster richColors position="top-right" />
     </div>
   );
 }

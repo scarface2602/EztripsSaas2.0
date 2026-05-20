@@ -401,7 +401,11 @@ export default function NewProposalPage() {
                   Tiered
                 </label>
               </div>
-              <p className="text-xs text-amber-600">Cannot change pricing mode after creation</p>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p><span className="font-medium">Standard</span> — one price for the whole package. Use this for most trips.</p>
+                <p><span className="font-medium">Tiered</span> — multiple price points (e.g. Standard / Deluxe / Luxury). Use when the client wants to compare hotel tiers.</p>
+                <p className="text-amber-600 font-medium">⚠ Cannot be changed after the proposal is created.</p>
+              </div>
             </div>
 
             <Separator />
@@ -480,8 +484,8 @@ export default function NewProposalPage() {
             <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
               <div>
-                <p className="font-medium text-yellow-800">Sanitisation Warnings</p>
-                <p className="text-sm text-yellow-700">The following fields contain potentially sensitive content: {sanitisationFlags.join(', ')}</p>
+                <p className="font-medium text-yellow-800">Sensitive Fields Removed</p>
+                <p className="text-sm text-yellow-700">We stripped these supplier-only fields before showing the parsed quote (so they don&apos;t leak into the client proposal): {sanitisationFlags.join(', ')}.</p>
               </div>
             </div>
           )}

@@ -62,12 +62,13 @@ export default function SupplierDetailPage() {
 
   async function handleDelete() {
     if (payables.length > 0) {
-      alert('Cannot delete a supplier with linked payables.');
+      toast.error('Cannot delete a supplier with linked payables');
       return;
     }
     if (!confirm('Delete this supplier?')) return;
     const { error } = await supabase.from('suppliers').delete().eq('id', supplierId);
     if (!error) router.push('/suppliers');
+    else toast.error('Failed to delete supplier');
   }
 
   async function handleAddSurcharge(e: React.FormEvent<HTMLFormElement>) {

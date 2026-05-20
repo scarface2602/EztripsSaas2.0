@@ -75,13 +75,14 @@ export default function ClientDetailPage() {
 
   async function handleDelete() {
     if (proposals.length > 0) {
-      alert('Cannot delete a client with linked proposals.');
+      toast.error('Cannot delete a client with linked proposals');
       return;
     }
     if (!confirm('Are you sure you want to delete this client?')) return;
 
     const { error } = await supabase.from('clients').delete().eq('id', clientId);
     if (!error) router.push('/clients');
+    else toast.error('Failed to delete client');
   }
 
   if (!client) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;

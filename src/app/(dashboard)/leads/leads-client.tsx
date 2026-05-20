@@ -141,12 +141,13 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
       });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || 'Failed to assign');
+        toast.error(data.error || 'Failed to assign enquiry');
         return;
       }
       setEnquiries(prev => prev.map(e => e.id === enquiryId ? { ...e, assigned_to: agentId || null } : e));
+      toast.success(agentId ? 'Enquiry assigned' : 'Enquiry unassigned');
     } catch {
-      alert('Failed to assign lead');
+      toast.error('Failed to assign enquiry');
     }
   }
 
@@ -512,16 +513,17 @@ function AgentView({
       });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || 'Failed to pick lead');
+        toast.error(data.error || 'Failed to pick enquiry');
         return;
       }
       const picked = await res.json();
       setUnassigned(prev => prev.filter(e => e.id !== enquiryId));
       setMyLeads(prev => [picked, ...prev]);
       setActiveCount(prev => prev + 1);
+      toast.success('Enquiry added to your queue');
       router.refresh();
     } catch {
-      alert('Failed to pick lead');
+      toast.error('Failed to pick enquiry');
     } finally {
       setPicking(null);
     }
@@ -533,7 +535,7 @@ function AgentView({
       <Card>
         <CardContent className="pt-6 flex items-center gap-4">
           <div>
-            <p className="text-sm text-muted-foreground">Active Leads</p>
+            <p className="text-sm text-muted-foreground">Active Enquiries</p>
             <p className="text-3xl font-bold">{activeCount} <span className="text-lg text-muted-foreground">/ {maxLeads}</span></p>
           </div>
           <div className="flex-1">
@@ -551,7 +553,7 @@ function AgentView({
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search leads by name, phone, destination..."
+          placeholder="Search enquiries by name, phone, destination..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-10 h-9"
@@ -561,7 +563,7 @@ function AgentView({
       {/* My Leads */}
       <Card>
         <CardHeader>
-          <CardTitle>My Assigned Leads ({filteredMyLeads.length})</CardTitle>
+          <CardTitle>My Assigned Enquiries ({filteredMyLeads.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -581,7 +583,7 @@ function AgentView({
               {filteredMyLeads.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                    {searchQuery ? 'No matching leads' : 'No leads assigned to you yet'}
+                    {searchQuery ? 'No matching enquiries' : 'No enquiries assigned to you yet'}
                   </TableCell>
                 </TableRow>
               ) : filteredMyLeads.map(e => {
@@ -628,7 +630,7 @@ function AgentView({
       {/* Unassigned Leads */}
       <Card>
         <CardHeader>
-          <CardTitle>Available Leads ({filteredUnassigned.length})</CardTitle>
+          <CardTitle>Available Enquiries ({filteredUnassigned.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -647,7 +649,7 @@ function AgentView({
               {filteredUnassigned.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    {searchQuery ? 'No matching leads' : 'No unassigned leads available'}
+                    {searchQuery ? 'No matching enquiries' : 'No unassigned enquiries available'}
                   </TableCell>
                 </TableRow>
               ) : filteredUnassigned.map(e => (
