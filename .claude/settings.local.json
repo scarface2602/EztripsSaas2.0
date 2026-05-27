@@ -109,7 +109,12 @@
       "Bash(killall Spotlight)",
       "Bash(sed 's/<SelectValue \\\\/>/<SelectValue placeholder=\"Unassigned\">\\\\n {e.assigned_to ? agents.find\\(a => a.id === e.assigned_to\\)?.full_name || \\(e.assigned_to as string\\) : \"Unassigned\"}\\\\n <\\\\/SelectValue>/')",
       "Bash(mv /tmp/leads-client-fixed.tsx src/app/\\\\\\(dashboard\\\\\\)/leads/leads-client.tsx)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(wc:*)",
+      "Bash(mkdir -p src/app/api/proposals/[id]/booking-items)",
+      "Bash(cp -r src/app/api/proposals/[proposalId]/booking-items/* src/app/api/proposals/[id]/booking-items/)",
+      "Bash(rm -rf src/app/api/proposals/[proposalId])",
+      "Bash(cp src/app/api/proposals/[proposalId]/booking-items/route.ts src/app/api/proposals/[id]/booking-items/route.ts)"
     ]
   }
 }

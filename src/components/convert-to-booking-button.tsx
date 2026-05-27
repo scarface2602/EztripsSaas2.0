@@ -6,8 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { OrganizePackagesDialog } from './organize-packages-dialog';
-import type { Proposal, BookingItem } from '@/lib/types/database';
-import type { BookingItem as BookingItemType } from '@/lib/types/booking-items';
+import type { Proposal } from '@/lib/types/database';
 
 interface ConvertToBookingButtonProps {
   proposal: Proposal;
@@ -17,6 +16,7 @@ interface ConvertToBookingButtonProps {
 export function ConvertToBookingButton({ proposal, clientId }: ConvertToBookingButtonProps) {
   const router = useRouter();
   const [showDialog, setShowDialog] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [bookingItems, setBookingItems] = useState<any[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [creatingBooking, setCreatingBooking] = useState(false);
@@ -38,6 +38,7 @@ export function ConvertToBookingButton({ proposal, clientId }: ConvertToBookingB
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function handleCreateBooking(packages: any[]) {
     setCreatingBooking(true);
     try {

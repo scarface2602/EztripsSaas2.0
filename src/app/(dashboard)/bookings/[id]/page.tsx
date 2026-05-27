@@ -18,8 +18,11 @@ import {
   Hotel, Plane, Car, MapPin, UtensilsCrossed, Briefcase,
 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { PaymentScheduleView } from '@/components/payment-schedule-view';
+import { PaymentScheduleEditor } from '@/components/payment-schedule-editor';
 import { format } from 'date-fns';
 import type { BookingItem, SupplierStatus } from '@/lib/types/booking-items';
+import type { PaymentAccount } from '@/lib/types/database';
 import {
   ITEM_TYPE_LABELS, SUPPLIER_STATUS_LABELS, SUPPLIER_STATUS_COLORS, STATUS_TRANSITIONS,
 } from '@/lib/types/booking-items';
@@ -86,6 +89,10 @@ export default function BookingDetailPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [emails, setEmails] = useState<Record<string, any>[]>([]);
   const [items, setItems] = useState<BookingItem[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [packages, setPackages] = useState<any[]>([]);
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
+  const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -120,6 +127,19 @@ export default function BookingDetailPage() {
     setLogs(lRes.data || []);
     setEmails(eRes.data || []);
     setItems((iRes.data || []) as BookingItem[]);
+
+    // Fetch packages and payment accounts (for new payment scheduling system)
+    try {
+      const detailsRes = await fetch(`/api/bookings/${id}/details`);
+      if (detailsRes.ok) {
+        const detailsData = await detailsRes.json();
+        setPackages(detailsData.packages || []);
+        setPaymentAccounts(detailsData.paymentAccounts || []);
+      }
+    } catch {
+      // Details endpoint might not exist for older bookings
+    }
+
     setLoading(false);
   }, [supabase, id]);
 
@@ -188,6 +208,45 @@ export default function BookingDetailPage() {
   const deletePayment = async (paymentId: string) => {
     await fetch(`/api/bookings/${id}/payments?payment_id=${paymentId}`, { method: 'DELETE' });
     fetchAll();
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handlePaymentsChange = async (packageId: string, payments: any[]) => {
+    setPackages((prev) =>
+      prev.map((pkg) =>
+        pkg.id === packageId ? { ...pkg, payments: payments.map((p, i) => ({ ...p, sequence: i + 1 })) } : pkg
+      )
+    );
+  };
+
+  const handleMarkPaid = async (paymentId: string) => {
+    setSaving(true);
+    try {
+      const payment = packages
+        .flatMap((p) => p.payments)
+        .find((p) => p.id === paymentId);
+      if (!payment) return;
+
+      const res = await fetch(`/api/booking-packages/${payment.package_id}/payments/${paymentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'paid',
+          amount_paid: payment.amount,
+          paid_date: new Date().toISOString().split('T')[0],
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to mark paid');
+
+      await fetchAll();
+      toast.success('Payment marked as paid');
+    } catch (error) {
+      toast.error('Failed to update payment');
+      console.error(error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading booking...</div>;
@@ -352,56 +411,138 @@ export default function BookingDetailPage() {
 
           {/* Payments */}
           {activeTab === 'payments' && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base">Payment Schedule</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>#</TableHead>
-                      <TableHead>Label</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Due Date</TableHead>
-                      <TableHead>Paid Date</TableHead>
-                      <TableHead>Mode</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments.length === 0 ? (
-                      <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">No payment installments</TableCell></TableRow>
-                    ) : payments.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell>{p.installment_number}</TableCell>
-                        <TableCell className="font-medium">{p.installment_label || '-'}</TableCell>
-                        <TableCell className="font-medium">{booking.currency} {Number(p.amount).toLocaleString()}</TableCell>
-                        <TableCell>{p.due_date ? format(new Date(p.due_date), 'dd MMM yyyy') : '-'}</TableCell>
-                        <TableCell>{p.paid_date ? format(new Date(p.paid_date), 'dd MMM yyyy') : '-'}</TableCell>
-                        <TableCell className="capitalize">{p.payment_mode?.replace('_', ' ') || '-'}</TableCell>
-                        <TableCell className="text-xs font-mono">{p.reference_number || '-'}</TableCell>
-                        <TableCell><Badge className={BOOKING_STATUS_COLORS[p.status] || ''}>{p.status}</Badge></TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            {p.status === 'pending' && (
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => markPayment(p.id, 'paid')} title="Mark paid">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => deletePayment(p.id)} title="Delete">
-                              <Trash2 className="h-3.5 w-3.5" />
+            packages.length > 0 ? (
+              <div className="space-y-4">
+                {packages.map((pkg, idx) => (
+                  <Card key={pkg.id}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base">
+                          Package {idx + 1}: {pkg.type === 'full_dmc' ? 'Full DMC' : pkg.type === 'partial_dmc' ? 'Partial DMC' : pkg.type}
+                        </CardTitle>
+                        <Badge variant="outline">₹{pkg.total_cost.toLocaleString()}</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* View Payment Schedule */}
+                      {pkg.payments.length > 0 && editingPackageId !== pkg.id && (
+                        <>
+                          <PaymentScheduleView
+                            payments={pkg.payments}
+                            packageTotal={pkg.total_cost}
+                            onEditClick={() => setEditingPackageId(pkg.id)}
+                            onMarkPaidClick={handleMarkPaid}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingPackageId(pkg.id)}
+                            className="w-full"
+                          >
+                            Edit Payment Schedule
+                          </Button>
+                        </>
+                      )}
+
+                      {/* Edit Payment Schedule */}
+                      {editingPackageId === pkg.id && (
+                        <>
+                          <PaymentScheduleEditor
+                            packageTotal={pkg.total_cost}
+                            initialPayments={pkg.payments}
+                            paymentAccounts={paymentAccounts}
+                            onPaymentsChange={(payments) => handlePaymentsChange(pkg.id, payments)}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => setEditingPackageId(null)}
+                              className="flex-1"
+                              disabled={saving}
+                            >
+                              Done
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEditingPackageId(null)}
+                            >
+                              Cancel
                             </Button>
                           </div>
-                        </TableCell>
+                        </>
+                      )}
+
+                      {/* Empty State */}
+                      {pkg.payments.length === 0 && editingPackageId !== pkg.id && (
+                        <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground">
+                          <p className="text-sm">No payment schedule set up yet.</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingPackageId(pkg.id)}
+                            className="mt-3"
+                          >
+                            Create Payment Schedule
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-base">Payment Schedule</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>#</TableHead>
+                        <TableHead>Label</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Due Date</TableHead>
+                        <TableHead>Paid Date</TableHead>
+                        <TableHead>Mode</TableHead>
+                        <TableHead>Reference</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {payments.length === 0 ? (
+                        <TableRow><TableCell colSpan={9} className="text-center py-6 text-muted-foreground">No payment installments</TableCell></TableRow>
+                      ) : payments.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell>{p.installment_number}</TableCell>
+                          <TableCell className="font-medium">{p.installment_label || '-'}</TableCell>
+                          <TableCell className="font-medium">{booking.currency} {Number(p.amount).toLocaleString()}</TableCell>
+                          <TableCell>{p.due_date ? format(new Date(p.due_date), 'dd MMM yyyy') : '-'}</TableCell>
+                          <TableCell>{p.paid_date ? format(new Date(p.paid_date), 'dd MMM yyyy') : '-'}</TableCell>
+                          <TableCell className="capitalize">{p.payment_mode?.replace('_', ' ') || '-'}</TableCell>
+                          <TableCell className="text-xs font-mono">{p.reference_number || '-'}</TableCell>
+                          <TableCell><Badge className={BOOKING_STATUS_COLORS[p.status] || ''}>{p.status}</Badge></TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              {p.status === 'pending' && (
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" onClick={() => markPayment(p.id, 'paid')} title="Mark paid">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => deletePayment(p.id)} title="Delete">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )
           )}
 
           {/* Details */}
