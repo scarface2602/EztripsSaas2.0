@@ -238,6 +238,41 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
         </CardContent>
       </Card>
 
+      {/* Booking Structure */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Booking Structure</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>How are you sourcing this trip? *</Label>
+            <Select value={proposal.booking_structure_type || ''} onValueChange={(v) => updateProposal({ booking_structure_type: v as ('full_dmc' | 'partial_dmc' | 'mixed' | 'undecided') || null })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select sourcing model..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="full_dmc">Full DMC</SelectItem>
+                <SelectItem value="partial_dmc">Partial DMC + Online Vendors</SelectItem>
+                <SelectItem value="mixed">Mixed / Separate Vendors</SelectItem>
+                <SelectItem value="undecided">Undecided (Decide at Booking)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              This determines how payment terms will be organized at booking confirmation.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>Sourcing Notes</Label>
+            <Textarea
+              value={proposal.booking_structure_notes || ''}
+              onChange={(e) => updateProposal({ booking_structure_notes: e.target.value })}
+              placeholder="e.g., DMC is Rajasthan Tours, hotels booked directly, flights via travel portal..."
+              rows={2}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Trip Structure — city-based builder */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -312,3 +347,4 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
     </div>
   );
 }
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

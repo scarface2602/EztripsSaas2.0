@@ -122,6 +122,10 @@ export interface Proposal {
   payment_terms: PaymentTerms | null;
   tc_version: number | null;
 
+  // Booking structure (Phase 3)
+  booking_structure_type: 'full_dmc' | 'partial_dmc' | 'mixed' | 'undecided' | null;
+  booking_structure_notes: string | null;
+
   visa_check_source: string;
   visa_section_enabled: boolean;
 
