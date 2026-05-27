@@ -21,6 +21,7 @@ import { PricingSummarySection } from './sections/pricing-summary';
 import { CancellationPolicySection } from './sections/cancellation-policy';
 import { PaymentTermsSection } from './sections/payment-terms';
 import { CommentsSection } from './sections/comments';
+import { ConvertToBookingButton } from '@/components/convert-to-booking-button';
 
 interface ProposalEditorProps {
   proposal: Proposal;
@@ -313,6 +314,7 @@ export function ProposalEditor({
           <Button variant="outline" size="sm" onClick={() => window.open(`/proposals/${proposal.id}/preview`, '_blank')}>
             <Eye className="h-4 w-4 mr-1" /> Preview
           </Button>
+          <ConvertToBookingButton proposal={proposal} clientId={proposal.client_id || ''} />
           {shareUrl && (
             <>
               <Button variant="outline" size="sm" onClick={async () => {
