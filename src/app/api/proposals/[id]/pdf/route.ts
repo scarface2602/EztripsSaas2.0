@@ -400,8 +400,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   .badge         { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
   .badge-nr      { background: #fee2e2; color: #991b1b; }
   .badge-r       { background: #dcfce7; color: #166534; }
-  ul             { padding-left: 18px; }
-  li             { margin-bottom: 3px; font-size: 0.88rem; }
+  ul             { padding-left: 18px; margin: 8px 0; }
+  li             { margin-bottom: 6px; font-size: 0.88rem; word-break: break-word; }
+  p              { word-break: break-word; white-space: pre-line; }
 </style>
 </head><body>
 
@@ -461,8 +462,8 @@ ${showItinerary ? `
     return `
       <div class="day-card">
         <h3><span class="day-number">${day.day_number}</span>${heading}${day.city ? ` &#8212; ${toTitleCase(String(day.city))}` : ''}</h3>
-        <p style="margin:6px 0 8px;color:#555;font-size:0.88rem;">${desc}</p>
-        ${dayActs.length > 0 ? `<ul>${dayActs.map((a: Record<string, unknown>) => `<li>${toTitleCase(cleanText(a.type as string))}: ${cleanText((a.details as Record<string, unknown>)?.title as string || (a.details as Record<string, unknown>)?.from_location as string || a.location as string || '')}</li>`).join('')}</ul>` : ''}
+        <p style="margin:8px 0 12px;color:#555;font-size:0.88rem;line-height:1.5;">${desc}</p>
+        ${dayActs.length > 0 ? `<div style="margin-top:8px;"><strong style="font-size:0.85rem;color:#1a1a1a;">Activities:</strong><ul style="margin:4px 0 0 0;">${dayActs.map((a: Record<string, unknown>) => `<li style="margin-bottom:4px;"><strong>${toTitleCase(cleanText(a.type as string))}</strong>: ${cleanText((a.details as Record<string, unknown>)?.title as string || (a.details as Record<string, unknown>)?.from_location as string || a.location as string || '')}</li>`).join('')}</ul></div>` : ''}
       </div>
     `;
   }).join('')}
@@ -475,12 +476,12 @@ ${showInclExcl ? `
   <h2>Inclusions &amp; Exclusions</h2>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
     <div>
-      <h3 style="color:#166534;">Included</h3>
-      ${inclusions.length > 0 ? `<ul>${inclusions.map((li: Record<string, unknown>) => `<li>${cleanText(li.description as string)}</li>`).join('')}</ul>` : '<p style="color:#888;font-size:0.85rem;">No inclusions specified</p>'}
+      <h3 style="color:#166534;border-bottom:1px solid #dcfce7;padding-bottom:6px;margin-bottom:8px;">Included</h3>
+      ${inclusions.length > 0 ? `<ul style="list-style:disc;margin:0 0 0 18px;">${inclusions.map((li: Record<string, unknown>) => `<li style="margin-bottom:6px;font-size:0.88rem;color:#555;">${cleanText(li.description as string)}</li>`).join('')}</ul>` : '<p style="color:#888;font-size:0.85rem;">No inclusions specified</p>'}
     </div>
     <div>
-      <h3 style="color:#991b1b;">Excluded</h3>
-      ${exclusions.length > 0 ? `<ul>${exclusions.map((li: Record<string, unknown>) => `<li>${cleanText(li.description as string)}</li>`).join('')}</ul>` : '<p style="color:#888;font-size:0.85rem;">No exclusions specified</p>'}
+      <h3 style="color:#991b1b;border-bottom:1px solid #fee2e2;padding-bottom:6px;margin-bottom:8px;">Excluded</h3>
+      ${exclusions.length > 0 ? `<ul style="list-style:disc;margin:0 0 0 18px;">${exclusions.map((li: Record<string, unknown>) => `<li style="margin-bottom:6px;font-size:0.88rem;color:#555;">${cleanText(li.description as string)}</li>`).join('')}</ul>` : '<p style="color:#888;font-size:0.85rem;">No exclusions specified</p>'}
     </div>
   </div>
 </div>

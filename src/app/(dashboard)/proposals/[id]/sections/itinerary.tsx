@@ -508,13 +508,20 @@ export function ItinerarySection({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Description</Label>
+                <Label>Description (AI Generated)</Label>
                 <Textarea
                   value={day.description || ''}
                   onChange={(e) => updateDay(index, { description: e.target.value })}
-                  rows={3}
+                  rows={5}
+                  className="font-mono text-sm"
                   placeholder={day.heading ? 'Click AI Generate to fill from heading, or write manually.' : 'Enter itinerary description or use AI Generate.'}
                 />
+                {day.description && (
+                  <div className="p-3 bg-muted/30 rounded text-sm text-muted-foreground border">
+                    <strong>Preview:</strong>
+                    <p className="mt-2 whitespace-pre-line">{day.description}</p>
+                  </div>
+                )}
               </div>
 
               {/* Activities */}
