@@ -60,13 +60,14 @@ export function PaymentTermsSection({ proposal, updateProposal, currentUser }: P
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Additional Notes</Label>
+          <Label>Supplier Payment Terms</Label>
           <Textarea
             value={terms.notes || ''}
             onChange={(e) => updateTerms({ notes: e.target.value })}
-            placeholder="Any additional payment terms..."
-            rows={3}
+            placeholder="Add payment terms by supplier:&#10;Hotels: Net 30 days&#10;Flights: Payment at booking&#10;Transfers: Net 15 days&#10;..."
+            rows={4}
           />
+          <p className="text-xs text-muted-foreground">Specify payment terms for different suppliers (hotels, flights, transfers, etc.). This will be included in the PDF.</p>
         </div>
         <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground">
           On confirmation, receivables will be auto-generated: {terms.deposit_pct}% deposit due immediately, {100 - terms.deposit_pct}% balance due {terms.balance_days_before} days before departure.

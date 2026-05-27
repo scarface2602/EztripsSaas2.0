@@ -24,9 +24,29 @@ export function HotelsSection({ proposal, hotels, setHotels, suppliers, setHasUn
   const supabase = createClient();
   const [generatingDesc, setGeneratingDesc] = useState<string | null>(null);
 
+  function calculateNights(checkIn: string, checkOut: string): number {
+    if (!checkIn || !checkOut) return 0;
+    try {
+      const start = new Date(checkIn);
+      const end = new Date(checkOut);
+      const nights = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      return Math.max(0, nights);
+    } catch {
+      return 0;
+    }
+  }
+
   function updateHotel(index: number, updates: Partial<Hotel>) {
     const updated = [...hotels];
-    updated[index] = { ...updated[index], ...updates };
+    const hotel = updated[index] = { ...updated[index], ...updates };
+    
+    // Auto-calculate nights if check_in or check_out changed
+    if (updates.check_in || updates.check_out) {
+      const checkIn = updates.check_in || hotel.check_in;
+      const checkOut = updates.check_out || hotel.check_out;
+      hotel.nights = calculateNights(checkIn, checkOut);
+    }
+    
     setHotels(updated);
     setHasUnsavedChanges(true);
   }
@@ -86,6 +106,7 @@ export function HotelsSection({ proposal, hotels, setHotels, suppliers, setHasUn
       city: hotel.city,
       check_in: hotel.check_in,
       check_out: hotel.check_out,
+      nights: hotel.nights,
       room_type: hotel.room_type,
       meal_plan: hotel.meal_plan,
       star_rating: hotel.star_rating,

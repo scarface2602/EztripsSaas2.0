@@ -443,7 +443,9 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                         onValueChange={v => { if (v) handleAssign(e.id as string, v === 'unassigned' ? '' : v); }}
                       >
                         <SelectTrigger className="w-[140px] h-8 text-xs">
-                          <SelectValue />
+                          <SelectValue>
+                            {e.assigned_to ? agents.find(a => a.id === e.assigned_to)?.full_name || (e.assigned_to as string) : 'Unassigned'}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unassigned">Unassigned</SelectItem>

@@ -210,11 +210,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   let pricingRows = '';
   if (hasBreakdown) {
     if (pricingLandSP > 0) {
-      const label = hotelSPTotal > 0 ? 'Hotels' : 'Land Package';
+      const label = hotelSPTotal > 0 ? 'Hotels & Land' : 'Land Package';
       pricingRows += `<tr><td>${label}</td><td style="text-align:right;">${R(pricingLandSP)}</td></tr>`;
     }
     if (pricingFlightSP > 0)
       pricingRows += `<tr><td>Flights</td><td style="text-align:right;">${R(pricingFlightSP)}</td></tr>`;
+    if (pricingLandSP > 0 && pricingFlightSP > 0)
+      pricingRows += `<tr><td style="font-weight:600;">Subtotal</td><td style="text-align:right;font-weight:600;">${R(subtotal)}</td></tr>`;
     if (discount > 0)
       pricingRows += `<tr><td>Discount${proposal.discount_note ? ` (${cleanText(String(proposal.discount_note))})` : ''}</td><td style="text-align:right;color:#dc2626;">-${R(discount)}</td></tr>`;
     if (proposal.gst_enabled)
@@ -552,8 +554,15 @@ ${showCancellation ? `
   <p>${(proposal.payment_terms as Record<string, unknown>)?.deposit_pct || 25}% deposit upon booking confirmation</p>
   <p>Balance due ${(proposal.payment_terms as Record<string, unknown>)?.balance_days_before || 30} days before departure</p>
   ${(proposal.payment_terms as Record<string, unknown>)?.notes ? `<p style="margin-top:6px;">${cleanText(String((proposal.payment_terms as Record<string, unknown>).notes))}</p>` : ''}
-  ${orgTerms ? `<div style="margin-top:14px;padding:12px 14px;background:#f8fafc;border-left:3px solid #1e3a5f;font-size:0.82rem;white-space:pre-wrap;line-height:1.55;">${escapeHtml(cleanText(orgTerms))}</div>` : ''}
 </div>
+
+${orgTerms ? `
+<!-- Terms & Conditions -->
+<div class="section">
+  <h2>Terms &amp; Conditions</h2>
+  <div style="padding:12px 14px;background:#f8fafc;border-left:3px solid #1e3a5f;font-size:0.82rem;white-space:pre-wrap;line-height:1.55;">${escapeHtml(cleanText(orgTerms))}</div>
+</div>
+` : ''}
 
 ${proposal.share_token ? `
 <!-- Confirm Button -->
@@ -599,9 +608,11 @@ ${(() => {
 <!-- Company Contact -->
 ${orgName ? `
 <div style="text-align:center;padding:32px 48px 24px;border-top:2px solid #e5e5e5;margin-top:16px;">
-  <p style="font-size:1.1rem;font-weight:700;color:#1e3a5f;margin-bottom:6px;">${orgName}</p>
-  ${[orgPhone, orgEmail, orgWebsite].filter(Boolean).length > 0 ? `<p style="font-size:0.85rem;color:#666;">${[orgPhone, orgEmail, orgWebsite].filter(Boolean).join(' &nbsp;&#8226;&nbsp; ')}</p>` : ''}
-  ${(org?.address as string) ? `<p style="font-size:0.8rem;color:#888;margin-top:4px;">${cleanText(org?.address as string)}</p>` : ''}
+  <p style="font-size:1.1rem;font-weight:700;color:#1e3a5f;margin-bottom:8px;">${orgName}</p>
+  ${orgPhone ? `<p style="font-size:0.85rem;color:#666;margin-bottom:2px;">Phone: ${orgPhone}</p>` : ''}
+  ${orgEmail ? `<p style="font-size:0.85rem;color:#666;margin-bottom:2px;">Email: ${orgEmail}</p>` : ''}
+  ${orgWebsite ? `<p style="font-size:0.85rem;color:#666;margin-bottom:2px;">Website: ${orgWebsite}</p>` : ''}
+  ${(org?.address as string) ? `<p style="font-size:0.8rem;color:#888;margin-top:6px;">${cleanText(org?.address as string)}</p>` : ''}
 </div>
 ` : ''}
 

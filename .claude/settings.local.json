@@ -84,7 +84,32 @@
       "Bash(cp /tmp/icon.png /Users/sudeepsharma/Desktop/EztripsSaas/src/app/icon.png)",
       "Bash(cp /tmp/apple-icon.png /Users/sudeepsharma/Desktop/EztripsSaas/src/app/apple-icon.png)",
       "Bash(cp /tmp/icon.png /Users/sudeepsharma/Desktop/EztripsWebsite/src/app/icon.png)",
-      "Bash(cp /tmp/apple-icon.png /Users/sudeepsharma/Desktop/EztripsWebsite/src/app/apple-icon.png)"
+      "Bash(cp /tmp/apple-icon.png /Users/sudeepsharma/Desktop/EztripsWebsite/src/app/apple-icon.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/sudeepsharma/Desktop/favicon.png)",
+      "Bash(cp /Users/sudeepsharma/Desktop/favicon.png src.png)",
+      "Bash(cp src.png icon-512.png)",
+      "Bash(sips -Z 512 icon-512.png)",
+      "Bash(sips --padToHeightWidth 512 512 --padColor FFFFFF icon-512.png)",
+      "Bash(cp src.png apple-180.png)",
+      "Bash(cp /tmp/icon-512.png /Users/sudeepsharma/Desktop/EztripsSaas/src/app/icon.png)",
+      "Bash(cp /tmp/apple-180.png /Users/sudeepsharma/Desktop/EztripsSaas/src/app/apple-icon.png)",
+      "Bash(cp /tmp/icon-512.png /Users/sudeepsharma/Desktop/EztripsWebsite/src/app/icon.png)",
+      "Bash(cp /tmp/apple-180.png /Users/sudeepsharma/Desktop/EztripsWebsite/src/app/apple-icon.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/sudeepsharma/Desktop/EztripsSaas/src/app/icon.png /Users/sudeepsharma/Desktop/EztripsSaas/src/app/apple-icon.png /Users/sudeepsharma/Desktop/EztripsWebsite/src/app/icon.png /Users/sudeepsharma/Desktop/EztripsWebsite/src/app/apple-icon.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/sudeepsharma/Desktop/EztripsSaas/public/logo.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/sudeepsharma/Desktop/EztripsWebsite/public/logo.png)",
+      "Bash(cp /tmp/logo-trimmed.png /Users/sudeepsharma/Desktop/EztripsWebsite/public/logo.png)",
+      "Bash(cp /tmp/logo-trimmed.png /Users/sudeepsharma/Desktop/EztripsSaas/public/logo.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/sudeepsharma/Desktop/EztripsWebsite/public/logo.png /Users/sudeepsharma/Desktop/EztripsSaas/public/logo.png)",
+      "Bash(mdutil -s /)",
+      "Bash(mdutil -s -a)",
+      "Bash(mdfind -name \"Safari\")",
+      "Bash(echo \"---exit: $?\")",
+      "Bash(defaults read:*)",
+      "Bash(killall Spotlight)",
+      "Bash(sed 's/<SelectValue \\\\/>/<SelectValue placeholder=\"Unassigned\">\\\\n {e.assigned_to ? agents.find\\(a => a.id === e.assigned_to\\)?.full_name || \\(e.assigned_to as string\\) : \"Unassigned\"}\\\\n <\\\\/SelectValue>/')",
+      "Bash(mv /tmp/leads-client-fixed.tsx src/app/\\\\\\(dashboard\\\\\\)/leads/leads-client.tsx)",
+      "Bash(git checkout:*)"
     ]
   }
 }
