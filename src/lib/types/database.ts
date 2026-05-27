@@ -560,3 +560,77 @@ export interface VoucherContent {
   vehicleType?: string;
   notes?: string;
 }
+
+// ============================================================
+// Payment Accounts & Schedules (Phase 1)
+// ============================================================
+
+export interface PaymentAccount {
+  id: string;
+  user_id: string;
+  account_name: string;
+  account_number: string | null;
+  account_type: 'bank' | 'payment_gateway' | 'wallet' | 'upi';
+  bank_name: string | null;
+  is_active: boolean;
+  sort_order: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentSchedulePayment {
+  sequence: number;
+  amount: number;
+  due_date: string; // ISO date
+  reference_number?: string;
+  paid_from_account_id?: string;
+}
+
+export interface PaymentSchedule {
+  id: string;
+  user_id: string;
+  name: string;
+  is_template: boolean;
+  payments: PaymentSchedulePayment[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
+// Booking Packages (Phase 1)
+// ============================================================
+
+export interface BookingPackage {
+  id: string;
+  booking_id: string;
+  type: 'full_dmc' | 'partial_dmc' | 'mixed' | 'individual';
+  supplier_id: string | null;
+  booking_items_ids: string[];
+  total_cost: number;
+  payment_schedule_id: string | null;
+  status: 'pending' | 'confirmed' | 'partial_paid' | 'paid' | 'cancelled';
+  generated_payable_ids: string[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BookingPackagePayment {
+  id: string;
+  package_id: string;
+  sequence: number;
+  amount: number;
+  due_date: string; // ISO date
+  reference_number: string | null;
+  paid_from_account_id: string | null;
+  received_in_account_id: string | null;
+  paid_from_account_snapshot: string | null;
+  received_in_account_snapshot: string | null;
+  status: 'pending' | 'due' | 'partial_paid' | 'paid' | 'overdue';
+  amount_paid: number;
+  paid_date: string | null; // ISO date
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}

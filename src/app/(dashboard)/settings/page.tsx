@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Settings, Save, Building2, Upload, Loader2, UserRoundCog } from 'lucide-react';
 import { toast } from 'sonner';
+import { PaymentAccountsSection } from './payment-accounts';
 
 interface OrgData {
   id?: string;
@@ -371,6 +372,9 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Payment Accounts (CMS) */}
+        <PaymentAccountsSection />
 
         {/* Pricing Settings */}
         <Card>
