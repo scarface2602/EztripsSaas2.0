@@ -30,7 +30,23 @@ export default function VehicleForm({
   onCostPriceChange,
   onSellPriceChange,
   onNotesChange,
-}: VehicleFormProps) {
+}: VehicleFormProps) {  const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>([]);
+  const supabase = useMemo(() => createClient(), []);
+
+  // Fetch suppliers on mount
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      const { data } = await supabase
+        .from('suppliers')
+        .select('id, name')
+        .eq('type', 'vehicle')
+        .order('name');
+      if (data) setSuppliers(data);
+    };
+    fetchSuppliers();
+  }, [supabase]);
+
+  
   const [assignDriverNow, setAssignDriverNow] = useState(false);
   const [showItinerary, setShowItinerary] = useState(false);
 
@@ -62,7 +78,7 @@ export default function VehicleForm({
   return (
     <div className="space-y-6">
       {/* Vehicle Information */}
-      <Card>
+      <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Vehicle Information</CardTitle>
           <CardDescription>Enter vehicle rental details</CardDescription>
@@ -70,7 +86,7 @@ export default function VehicleForm({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="vehicle_type">Vehicle Type *</Label>
+              <Label htmlFor="vehicle_type" className="dark:text-slate-200">Vehicle Type *</Label>
               <Select
                 value={(itemData.vehicle_type as string) || ''}
                 onValueChange={(value) => handleChange('vehicle_type', value)}
@@ -78,17 +94,23 @@ export default function VehicleForm({
                 <SelectTrigger id="vehicle_type">
                   <SelectValue placeholder="Select vehicle type" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="car">Car</SelectItem>
-                  <SelectItem value="suv">SUV</SelectItem>
-                  <SelectItem value="taxi">Taxi</SelectItem>
-                  <SelectItem value="coach">Coach</SelectItem>
-                </SelectContent>
+                <SelectContent className="dark:bg-slate-800 dark:border-slate-600">
+                <SelectItem key="hatchback" value="hatchback" className="dark:text-white">Hatchback</SelectItem>
+                <SelectItem key="sedan" value="sedan" className="dark:text-white">Sedan</SelectItem>
+                <SelectItem key="premium_sedan" value="premium_sedan" className="dark:text-white">Premium Sedan</SelectItem>
+                <SelectItem key="muv" value="muv" className="dark:text-white">MUV</SelectItem>
+                <SelectItem key="premium_muv" value="premium_muv" className="dark:text-white">Premium MUV</SelectItem>
+                <SelectItem key="suv" value="suv" className="dark:text-white">SUV</SelectItem>
+                <SelectItem key="van" value="van" className="dark:text-white">Van</SelectItem>
+                <SelectItem key="luxury_van" value="luxury_van" className="dark:text-white">Luxury Van</SelectItem>
+                <SelectItem key="coach" value="coach" className="dark:text-white">Coach</SelectItem>
+                <SelectItem key="luxury_coach" value="luxury_coach" className="dark:text-white">Luxury Coach</SelectItem>
+              </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="vehicle_brand">Vehicle Brand (Optional)</Label>
+              <Label htmlFor="vehicle_brand" className="dark:text-slate-200">Vehicle Brand (Optional)</Label>
               <Input
                 id="vehicle_brand"
                 placeholder="e.g., Toyota Camry"
@@ -98,7 +120,7 @@ export default function VehicleForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="pickup_location">Pickup Location *</Label>
+              <Label htmlFor="pickup_location" className="dark:text-slate-200">Pickup Location *</Label>
               <Input
                 id="pickup_location"
                 placeholder="e.g., Dubai Airport"
@@ -109,7 +131,7 @@ export default function VehicleForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="dropoff_location">Drop-off Location *</Label>
+              <Label htmlFor="dropoff_location" className="dark:text-slate-200">Drop-off Location *</Label>
               <Input
                 id="dropoff_location"
                 placeholder="e.g., Dubai City Center"
@@ -120,7 +142,7 @@ export default function VehicleForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="pickup_datetime">Pickup Date & Time *</Label>
+              <Label htmlFor="pickup_datetime" className="dark:text-slate-200">Pickup Date & Time *</Label>
               <Input
                 id="pickup_datetime"
                 type="datetime-local"
@@ -131,7 +153,7 @@ export default function VehicleForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="dropoff_datetime">Drop-off Date & Time *</Label>
+              <Label htmlFor="dropoff_datetime" className="dark:text-slate-200">Drop-off Date & Time *</Label>
               <Input
                 id="dropoff_datetime"
                 type="datetime-local"
@@ -145,7 +167,7 @@ export default function VehicleForm({
       </Card>
 
       {/* Availability Mode */}
-      <Card>
+      <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Availability Mode</CardTitle>
           <CardDescription>How will the vehicle be available?</CardDescription>
@@ -190,7 +212,7 @@ export default function VehicleForm({
           {(itemData.availability_type as string) === 'at_disposal' && (
             <div className="grid grid-cols-2 gap-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="space-y-2">
-                <Label htmlFor="daily_start_time">Daily Start Time</Label>
+                <Label htmlFor="daily_start_time" className="dark:text-slate-200">Daily Start Time</Label>
                 <Input
                   id="daily_start_time"
                   type="time"
@@ -200,7 +222,7 @@ export default function VehicleForm({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="daily_end_time">Daily End Time</Label>
+                <Label htmlFor="daily_end_time" className="dark:text-slate-200">Daily End Time</Label>
                 <Input
                   id="daily_end_time"
                   type="time"
@@ -214,7 +236,7 @@ export default function VehicleForm({
       </Card>
 
       {/* Driver Assignment */}
-      <Card>
+      <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Driver Assignment</CardTitle>
           <CardDescription>Assign driver now or add later</CardDescription>
@@ -234,7 +256,7 @@ export default function VehicleForm({
           {assignDriverNow ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-green-50 border border-green-200 rounded-lg">
               <div className="space-y-2">
-                <Label htmlFor="driver_name">Driver Name</Label>
+                <Label htmlFor="driver_name" className="dark:text-slate-200">Driver Name</Label>
                 <Input
                   id="driver_name"
                   placeholder="Full name"
@@ -244,7 +266,7 @@ export default function VehicleForm({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="driver_license">License Number</Label>
+                <Label htmlFor="driver_license" className="dark:text-slate-200">License Number</Label>
                 <Input
                   id="driver_license"
                   placeholder="License #"
@@ -254,7 +276,7 @@ export default function VehicleForm({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="driver_license_valid_until">License Valid Until</Label>
+                <Label htmlFor="driver_license_valid_until" className="dark:text-slate-200">License Valid Until</Label>
                 <Input
                   id="driver_license_valid_until"
                   type="date"
@@ -264,7 +286,7 @@ export default function VehicleForm({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="driver_insurance_type">Insurance Type</Label>
+                <Label htmlFor="driver_insurance_type" className="dark:text-slate-200">Insurance Type</Label>
                 <Select
                   value={(itemData.driver_insurance_type as string) || 'basic'}
                   onValueChange={(value) => handleChange('driver_insurance_type', value)}
@@ -272,7 +294,7 @@ export default function VehicleForm({
                   <SelectTrigger id="driver_insurance_type">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="dark:bg-slate-800 dark:border-slate-600">
                     <SelectItem value="basic">Basic</SelectItem>
                     <SelectItem value="premium">Premium (Damage Covered)</SelectItem>
                   </SelectContent>
@@ -288,7 +310,7 @@ export default function VehicleForm({
       </Card>
 
       {/* Itinerary (Optional) */}
-      <Card>
+      <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Itinerary (Optional)</CardTitle>
           <CardDescription>Add daily schedule for the trip</CardDescription>
@@ -369,9 +391,35 @@ export default function VehicleForm({
           )}
         </CardContent>
       </Card>
+      {/* Supplier */}
+      <Card className="dark:bg-slate-900 dark:border-slate-700">
+        <CardHeader>
+          <CardTitle>Supplier</CardTitle>
+          <CardDescription>Select supplier for internal tracking (optional)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select
+            value={((itemData.supplier_id as string) || '')}
+            onValueChange={(value) => handleChange('supplier_id', value || null)}
+          >
+            <SelectTrigger className="dark:bg-slate-800 dark:border-slate-600 dark:text-white">
+              <SelectValue placeholder="Select a supplier..." />
+            </SelectTrigger>
+            <SelectContent className="dark:bg-slate-800 dark:border-slate-600">
+              {suppliers.map((supplier) => (
+                <SelectItem key={supplier.id} value={supplier.id} className="dark:text-white">
+                  {supplier.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
+
+
 
       {/* Pricing */}
-      <Card>
+      <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Pricing</CardTitle>
           <CardDescription>Cost and selling prices</CardDescription>
@@ -379,7 +427,7 @@ export default function VehicleForm({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="cost_price">Cost Price (₹) *</Label>
+              <Label htmlFor="cost_price" className="dark:text-slate-200">Cost Price (₹) *</Label>
               <Input
                 id="cost_price"
                 type="number"
@@ -393,7 +441,7 @@ export default function VehicleForm({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="sell_price">Selling Price (₹) *</Label>
+              <Label htmlFor="sell_price" className="dark:text-slate-200">Selling Price (₹) *</Label>
               <Input
                 id="sell_price"
                 type="number"
@@ -421,7 +469,7 @@ export default function VehicleForm({
       </Card>
 
       {/* Notes */}
-      <Card>
+      <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Additional Notes</CardTitle>
         </CardHeader>

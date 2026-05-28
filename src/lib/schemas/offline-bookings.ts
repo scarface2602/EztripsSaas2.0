@@ -9,6 +9,7 @@ const commonOfflineItemSchema = z.object({
   cost_price: z.number().min(0, 'Cost price must be 0 or greater'),
   sell_price: z.number().min(0, 'Selling price must be 0 or greater'),
   notes: z.string().max(2000, 'Notes must be 2000 characters or less').optional(),
+  supplier_id: z.string().uuid('Supplier ID must be a valid UUID').optional().nullable(),
 });
 
 // Hotel offline schema
@@ -23,6 +24,8 @@ export const hotelOfflineSchema = commonOfflineItemSchema.extend({
     adults: z.number().int().min(1, 'At least 1 adult required'),
     children: z.number().int().min(0, 'Children count cannot be negative'),
   }),
+  extra_beds: z.number().int().min(0, 'Extra beds cannot be negative').optional(),
+  children_ages: z.array(z.number().int().min(0, 'Age must be 0 or greater').max(18, 'Age must be 18 or less')).optional(),
 });
 
 // Flight offline schema
@@ -43,7 +46,7 @@ export const flightOfflineSchema = commonOfflineItemSchema.extend({
 // Vehicle offline schema
 export const vehicleOfflineSchema = commonOfflineItemSchema.extend({
   item_type: z.literal('vehicle'),
-  vehicle_type: z.enum(['car', 'suv', 'taxi', 'coach']),
+  vehicle_type: z.enum(['hatchback', 'sedan', 'premium_sedan', 'muv', 'premium_muv', 'suv', 'van', 'luxury_van', 'coach', 'luxury_coach']),
   vehicle_brand: z.string().max(100, 'Vehicle brand max 100 characters').optional(),
   pickup_location: z.string().min(1, 'Pickup location is required').max(200),
   dropoff_location: z.string().min(1, 'Drop-off location is required').max(200),
