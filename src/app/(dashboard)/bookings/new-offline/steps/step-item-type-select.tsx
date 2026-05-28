@@ -1,6 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Hotel, Plane, Truck } from 'lucide-react';
 
 interface StepItemTypeSelectProps {
@@ -45,16 +46,17 @@ export default function StepItemTypeSelect({ selectedType, onSelect }: StepItemT
           const isSelected = selectedType === option.id;
 
           return (
-            <button
+            <Button
               key={option.id}
               onClick={() => onSelect(option.id as 'hotel' | 'flight' | 'vehicle')}
-              className={`text-left transition-all ${
+              variant="outline"
+              className={`h-auto justify-start p-0 ${
                 isSelected
-                  ? 'ring-2 ring-blue-500 border-blue-200'
-                  : 'border border-border hover:border-foreground/50'
+                  ? 'ring-2 ring-blue-500 border-blue-200 bg-blue-50'
+                  : ''
               }`}
             >
-              <Card className={isSelected ? 'border-blue-200 bg-blue-50' : ''}>
+              <Card className={`w-full cursor-pointer transition-all ${isSelected ? 'border-blue-200 bg-blue-50' : ''}`}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
@@ -74,7 +76,7 @@ export default function StepItemTypeSelect({ selectedType, onSelect }: StepItemT
                   />
                 </CardContent>
               </Card>
-            </button>
+            </Button>
           );
         })}
       </div>
