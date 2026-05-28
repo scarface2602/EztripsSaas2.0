@@ -60,8 +60,8 @@ export default function StepItemTypeSelect({ selectedType, onSelect }: StepItemT
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="text-lg">{option.label}</CardTitle>
-                      <CardDescription>{option.description}</CardDescription>
+                      <CardTitle className={`text-lg ${isSelected ? 'text-blue-900' : ''}`}>{option.label}</CardTitle>
+                      <CardDescription className={isSelected ? 'text-blue-700' : ''}>{option.description}</CardDescription>
                     </div>
                     <Icon className={`h-6 w-6 ${isSelected ? 'text-blue-600' : 'text-muted-foreground'}`} />
                   </div>

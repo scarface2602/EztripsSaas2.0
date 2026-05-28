@@ -54,8 +54,8 @@ function AddSupplierForm({ type, onSaved, onCancel }: AddSupplierFormProps) {
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="space-y-2">
         <div className="space-y-1">
-          <Label className="text-xs">Supplier Name <span className="text-red-500">*</span></Label>
-          <Input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Taj Hotels, Air India, Hertz" className="h-8 text-sm" />
+          <Label className="text-xs text-gray-700">Supplier Name <span className="text-red-500">*</span></Label>
+          <Input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Taj Hotels, Air India, Hertz" className="h-8 text-sm bg-white text-gray-900 placeholder-gray-500" />
         </div>
       </div>
       <div className="flex gap-2">
@@ -119,16 +119,16 @@ function AddClientForm({ onSaved, onCancel }: AddClientFormProps) {
       {error && <p className="text-xs text-red-600">{error}</p>}
       <div className="grid grid-cols-2 gap-2">
         <div className="col-span-2 space-y-1">
-          <Label className="text-xs">Name <span className="text-red-500">*</span></Label>
-          <Input ref={nameRef} value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Client full name" className="h-8 text-sm" />
+          <Label className="text-xs text-gray-700">Name <span className="text-red-500">*</span></Label>
+          <Input ref={nameRef} value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Client full name" className="h-8 text-sm bg-white text-gray-900 placeholder-gray-500" />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Phone</Label>
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." className="h-8 text-sm" />
+          <Label className="text-xs text-gray-700">Phone</Label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." className="h-8 text-sm bg-white text-gray-900 placeholder-gray-500" />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Email</Label>
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@example.com" className="h-8 text-sm" />
+          <Label className="text-xs text-gray-700">Email</Label>
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@example.com" className="h-8 text-sm bg-white text-gray-900 placeholder-gray-500" />
         </div>
       </div>
       <div className="flex gap-2">
