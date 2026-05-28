@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SupplierSelect } from '@/components/ui/inline-add-select';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 
 interface HotelFormProps {
   itemData: Record<string, unknown>;
@@ -229,21 +230,18 @@ export default function HotelForm({
           <CardDescription>Select supplier for internal tracking (optional)</CardDescription>
         </CardHeader>
         <CardContent>
-          <Select
+          <SupplierSelect
+            type="hotel"
+            suppliers={suppliers}
             value={((itemData.supplier_id as string) || '')}
-            onValueChange={(value) => handleChange('supplier_id', value || null)}
-          >
-            <SelectTrigger className="dark:bg-slate-800 dark:border-slate-600 dark:text-white">
-              <SelectValue placeholder="Select a supplier..." />
-            </SelectTrigger>
-            <SelectContent className="dark:bg-slate-800 dark:border-slate-600">
-              {suppliers.map((supplier) => (
-                <SelectItem key={supplier.id} value={supplier.id} className="dark:text-white">
-                  {supplier.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(id) => handleChange('supplier_id', id)}
+            onSupplierAdded={(supplier) => {
+              setSuppliers([...suppliers, supplier]);
+              handleChange('supplier_id', supplier.id);
+              toast.success(`Supplier ${supplier.name} added`);
+            }}
+            className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+          />
         </CardContent>
       </Card>
 

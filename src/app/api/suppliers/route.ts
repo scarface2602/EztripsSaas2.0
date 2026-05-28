@@ -1,32 +1,55 @@
+import { createServiceClient } from '@/lib/supabase/server';
+import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-
-export async function GET(request: NextRequest) {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const supabase = createServiceClient();
-  const search = request.nextUrl.searchParams.get('search') || '';
-  let query = supabase.from('suppliers').select('*').order('created_at', { ascending: false });
-
-  if (search) {
-    query = query.or(`name.ilike.%${search}%,type.ilike.%${search}%,country.ilike.%${search}%`);
-  }
-
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
-}
 
 export async function POST(request: NextRequest) {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const auth = await withAuth(request);
+    if (auth instanceof NextResponse) return auth;
 
-  const supabase = createServiceClient();
-  const body = await request.json();
-  const { data, error } = await supabase.from('suppliers').insert({ ...body, created_by: user.id }).select().single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
+    const { name, type } = await request.json();
+
+    if (!name || !type) {
+      return NextResponse.json(
+        { error: 'Name and type are required' },
+        { status: 400 }
+      );
+    }
+
+    if (!['hotel', 'flight', 'vehicle'].includes(type)) {
+      return NextResponse.json(
+        { error: 'Invalid supplier type' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createServiceClient();
+
+    // Create supplier
+    const { data, error } = await supabase
+      .from('suppliers')
+      .insert({
+        name,
+        type,
+        created_by: auth.user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supplier creation error:', error);
+      return NextResponse.json(
+        { error: 'Failed to create supplier' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(data, { status: 201 });
+  } catch (error) {
+    console.error('Error creating supplier:', error);
+    return NextResponse.json(
+      { error: 'Failed to create supplier' },
+      { status: 500 }
+    );
+  }
 }

@@ -9,15 +9,13 @@ import { Label } from '@/components/ui/label';
 // ─── Supplier inline form ────────────────────────────────────────────────────
 
 interface AddSupplierFormProps {
+  type: 'hotel' | 'flight' | 'vehicle';
   onSaved: (supplier: { id: string; name: string }) => void;
   onCancel: () => void;
 }
 
-function AddSupplierForm({ onSaved, onCancel }: AddSupplierFormProps) {
+function AddSupplierForm({ type, onSaved, onCancel }: AddSupplierFormProps) {
   const [name, setName] = useState('');
-  const [contactName, setContactName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -34,9 +32,7 @@ function AddSupplierForm({ onSaved, onCancel }: AddSupplierFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          contact_name: contactName.trim() || null,
-          contact_email: email.trim() || null,
-          contact_phone: phone.trim() || null,
+          type,
         }),
       });
       const data = await res.json();
@@ -50,28 +46,16 @@ function AddSupplierForm({ onSaved, onCancel }: AddSupplierFormProps) {
   return (
     <div className="mt-2 p-4 border border-blue-200 rounded-md bg-blue-50 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-blue-800">New Supplier</p>
+        <p className="text-sm font-medium text-blue-800">New {type.charAt(0).toUpperCase() + type.slice(1)} Supplier</p>
         <button onClick={onCancel} className="text-blue-400 hover:text-blue-600">
           <X className="h-4 w-4" />
         </button>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="col-span-2 space-y-1">
-          <Label className="text-xs">Name <span className="text-red-500">*</span></Label>
-          <Input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="Supplier name" className="h-8 text-sm" />
-        </div>
+      <div className="space-y-2">
         <div className="space-y-1">
-          <Label className="text-xs">Contact Person</Label>
-          <Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Contact name" className="h-8 text-sm" />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Phone</Label>
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." className="h-8 text-sm" />
-        </div>
-        <div className="col-span-2 space-y-1">
-          <Label className="text-xs">Email</Label>
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="supplier@example.com" className="h-8 text-sm" />
+          <Label className="text-xs">Supplier Name <span className="text-red-500">*</span></Label>
+          <Input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Taj Hotels, Air India, Hertz" className="h-8 text-sm" />
         </div>
       </div>
       <div className="flex gap-2">
@@ -161,6 +145,7 @@ function AddClientForm({ onSaved, onCancel }: AddClientFormProps) {
 // ─── Supplier select with inline add ────────────────────────────────────────
 
 interface SupplierSelectProps {
+  type: 'hotel' | 'flight' | 'vehicle';
   suppliers: Array<{ id: string; name: string }>;
   value: string;
   onChange: (id: string) => void;
@@ -168,7 +153,7 @@ interface SupplierSelectProps {
   className?: string;
 }
 
-export function SupplierSelect({ suppliers, value, onChange, onSupplierAdded, className }: SupplierSelectProps) {
+export function SupplierSelect({ type, suppliers, value, onChange, onSupplierAdded, className }: SupplierSelectProps) {
   const [showForm, setShowForm] = useState(false);
 
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -189,11 +174,11 @@ export function SupplierSelect({ suppliers, value, onChange, onSupplierAdded, cl
     <div>
       <div className="relative">
         <select
-          className={`w-full h-10 rounded-md border px-3 text-sm appearance-none pr-8 ${className || ''}`}
+          className={`w-full h-10 rounded-md border px-3 text-sm appearance-none pr-8 dark:bg-slate-800 dark:border-slate-600 dark:text-white ${className || ''}`}
           value={showForm ? '__add_new__' : value}
           onChange={handleChange}
         >
-          <option value="">Select supplier</option>
+          <option value="">Select supplier...</option>
           {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           <option value="__add_new__" className="text-blue-600 font-medium">＋ Add New Supplier</option>
         </select>
@@ -201,6 +186,7 @@ export function SupplierSelect({ suppliers, value, onChange, onSupplierAdded, cl
       </div>
       {showForm && (
         <AddSupplierForm
+          type={type}
           onSaved={handleSaved}
           onCancel={() => { setShowForm(false); }}
         />

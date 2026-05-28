@@ -9,7 +9,7 @@ const commonOfflineItemSchema = z.object({
   cost_price: z.number().min(0, 'Cost price must be 0 or greater'),
   sell_price: z.number().min(0, 'Selling price must be 0 or greater'),
   notes: z.string().max(2000, 'Notes must be 2000 characters or less').optional(),
-  supplier_id: z.string().uuid('Supplier ID must be a valid UUID').optional().nullable(),
+  supplier_id: z.string().uuid('Supplier ID must be a valid UUID'),
 });
 
 // Hotel offline schema

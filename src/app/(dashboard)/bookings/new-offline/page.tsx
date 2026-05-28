@@ -189,7 +189,7 @@ export default function NewOfflineBookingPage() {
             onClick={handleNextStep}
             disabled={
               (currentStep === 1 && !itemType) ||
-              (currentStep === 2 && Object.keys(itemData).length === 0) ||
+              (currentStep === 2 && (Object.keys(itemData).length === 0 || !itemData.supplier_id)) ||
               (currentStep === 3 && !clientId) ||
               isCreating
             }
@@ -199,7 +199,7 @@ export default function NewOfflineBookingPage() {
         ) : (
           <Button
             onClick={handleCreateBooking}
-            disabled={!clientId || Object.keys(itemData).length === 0 || isCreating}
+            disabled={!clientId || Object.keys(itemData).length === 0 || !itemData.supplier_id || isCreating}
             className="bg-green-600 hover:bg-green-700"
           >
             {isCreating ? 'Creating...' : 'Create Booking'}

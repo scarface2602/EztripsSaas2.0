@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SupplierSelect } from '@/components/ui/inline-add-select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -395,24 +396,21 @@ export default function VehicleForm({
       <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Supplier</CardTitle>
-          <CardDescription>Select supplier for internal tracking (optional)</CardDescription>
+          <CardDescription>Select or create supplier for payment tracking</CardDescription>
         </CardHeader>
         <CardContent>
-          <Select
+          <SupplierSelect
+            type="vehicle"
+            suppliers={suppliers}
             value={((itemData.supplier_id as string) || '')}
-            onValueChange={(value) => handleChange('supplier_id', value || null)}
-          >
-            <SelectTrigger className="dark:bg-slate-800 dark:border-slate-600 dark:text-white">
-              <SelectValue placeholder="Select a supplier..." />
-            </SelectTrigger>
-            <SelectContent className="dark:bg-slate-800 dark:border-slate-600">
-              {suppliers.map((supplier) => (
-                <SelectItem key={supplier.id} value={supplier.id} className="dark:text-white">
-                  {supplier.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(id) => handleChange('supplier_id', id)}
+            onSupplierAdded={(supplier) => {
+              setSuppliers([...suppliers, supplier]);
+              handleChange('supplier_id', supplier.id);
+              toast.success(`Supplier ${supplier.name} added`);
+            }}
+            className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+          />
         </CardContent>
       </Card>
 
