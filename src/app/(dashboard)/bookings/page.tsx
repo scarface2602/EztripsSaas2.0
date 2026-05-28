@@ -108,6 +108,9 @@ export default function BookingsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search bookings..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
+        <Button onClick={() => router.push('/bookings/new-offline')} className="bg-blue-600 hover:bg-blue-700">
+          Create Offline Booking
+        </Button>
         {statusFilter && (
           <Button variant="outline" onClick={() => router.push('/bookings')}>Clear Filter</Button>
         )}
