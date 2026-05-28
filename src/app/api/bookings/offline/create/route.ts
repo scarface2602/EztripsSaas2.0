@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
         end_date: (item_details.check_out as string) || (item_details.arrival_datetime as string)?.split('T')[0] || (item_details.dropoff_datetime as string)?.split('T')[0],
         cost_price,
         sell_price,
+        supplier_id: (item_details.supplier_id as string) || null,
         supplier_status: 'pending',
         supplier_notes: notes || null,
         details: item_details,
