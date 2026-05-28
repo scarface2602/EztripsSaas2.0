@@ -115,7 +115,8 @@
       "Bash(cp -r src/app/api/proposals/[proposalId]/booking-items/* src/app/api/proposals/[id]/booking-items/)",
       "Bash(rm -rf src/app/api/proposals/[proposalId])",
       "Bash(cp src/app/api/proposals/[proposalId]/booking-items/route.ts src/app/api/proposals/[id]/booking-items/route.ts)",
-      "Bash(pkill -f \"next dev\")"
+      "Bash(pkill -f \"next dev\")",
+      "Bash(pkill -9 -f \"next dev\")"
     ]
   }
 }

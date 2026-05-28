@@ -58,7 +58,7 @@ export default function HotelForm({
     
     // Reset children_ages if children count changes
     if (field === 'children' && value === 0) {
-      const { children_ages, ...rest } = itemData;
+      const { children_ages: _, ...rest } = itemData;
       onItemDataChange({ ...rest, occupancy: newOccupancy });
     } else {
       onItemDataChange({ ...itemData, occupancy: newOccupancy });
