@@ -9,6 +9,13 @@ export interface Organisation {
   email: string | null;
   website: string | null;
   terms_and_conditions: string | null;
+  // Voucher branding fields
+  footer_text: string | null;
+  company_phone: string | null;
+  company_email: string | null;
+  company_website: string | null;
+  cancellation_policy: string | null;
+  logo_file_path: string | null;
   created_at: string;
 }
 
@@ -635,6 +642,61 @@ export interface BookingPackagePayment {
   amount_paid: number;
   paid_date: string | null; // ISO date
   notes: string | null;
+  // Voucher visibility
+  include_in_voucher: boolean;
+  // Manager approval
+  approval_status: 'pending' | 'approved' | 'rejected';
+  approved_by: string | null;
+  approved_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface BookingVoucher {
+  id: string;
+  booking_id: string;
+  item_id: string;
+  voucher_number: string;
+  voucher_type: 'hotel' | 'flight' | 'vehicle';
+  status: 'draft' | 'generated' | 'sent' | 'downloaded' | 'used' | 'expired';
+  triggered_by: 'payment_received' | 'manager_approved' | 'driver_assigned' | 'manual' | null;
+  pdf_url: string | null;
+  pdf_generated_at: string | null;
+  download_count: number;
+  last_downloaded_at: string | null;
+  sent_to_email: string | null;
+  sent_at: string | null;
+  generation_notes: string | null;
+  data_snapshot: Record<string, unknown> | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VoucherConfig {
+  id: string;
+  org_id: string;
+  next_voucher_number: number;
+  voucher_number_format: string;
+  header_text: string | null;
+  footer_text: string | null;
+  terms_text: string | null;
+  logo_url: string | null;
+  logo_position: 'top-left' | 'top-center' | 'top-right';
+  email_subject_template: string | null;
+  email_body_template: string | null;
+  auto_generate_on_payment_received: boolean;
+  auto_generate_on_manager_approval: boolean;
+  auto_send_to_client: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VoucherAudit {
+  id: string;
+  voucher_id: string;
+  action: 'generated' | 'downloaded' | 'sent' | 'regenerated';
+  actor_id: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
 }

@@ -1,4 +1,4 @@
-export type ItemType = 'flight_segment' | 'hotel_room' | 'transfer' | 'activity' | 'meal_plan' | 'dmc_package';
+export type ItemType = 'flight_segment' | 'hotel_room' | 'transfer' | 'activity' | 'meal_plan' | 'dmc_package' | 'vehicle';
 
 export type SupplierStatus = 'pending' | 'confirmation_requested' | 'on_hold' | 'confirmed' | 'modified' | 'cancelled' | 'completed';
 
@@ -21,6 +21,22 @@ export interface BookingItem {
   payment_due_date: string | null;
   details: Record<string, unknown>;
   sort_order: number;
+  // Vehicle-specific fields
+  availability_type?: 'point_to_point' | 'at_disposal' | null;
+  daily_start_time?: string | null;
+  daily_end_time?: string | null;
+  driver_name?: string | null;
+  driver_license?: string | null;
+  driver_license_valid_until?: string | null;
+  driver_insurance_type?: 'basic' | 'premium' | null;
+  driver_notes?: string | null;
+  itinerary?: Array<{ date: string; time: string; location: string; notes?: string }> | null;
+  include_payment_in_voucher?: boolean;
+  // Manager approval fields
+  manager_approved?: boolean;
+  manager_approved_by?: string | null;
+  manager_approved_at?: string | null;
+  approval_notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -77,6 +93,25 @@ export interface MealPlanDetails {
   notes?: string;
 }
 
+export interface VehicleDetails {
+  vehicle_type?: string;
+  vehicle_brand?: string;
+  registration_number?: string;
+  pickup_location?: string;
+  dropoff_location?: string;
+  pickup_date?: string;
+  dropoff_date?: string;
+  availability_type?: 'point_to_point' | 'at_disposal';
+  daily_start_time?: string;
+  daily_end_time?: string;
+  driver_included?: boolean;
+  driver_name?: string;
+  driver_license?: string;
+  driver_license_valid_until?: string;
+  driver_insurance_type?: 'basic' | 'premium';
+  itinerary?: Array<{ date: string; time: string; location: string; notes?: string }>;
+}
+
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   flight_segment: 'Flight',
   hotel_room: 'Hotel',
@@ -84,6 +119,7 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   activity: 'Activity',
   meal_plan: 'Meal Plan',
   dmc_package: 'DMC Package',
+  vehicle: 'Vehicle',
 };
 
 export const SUPPLIER_STATUS_LABELS: Record<SupplierStatus, string> = {
