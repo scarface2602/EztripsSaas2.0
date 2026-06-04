@@ -14,10 +14,17 @@ export async function POST(request: NextRequest) {
     // Validate request body
     const parsed = createOfflineBookingSchema.safeParse(body);
     if (!parsed.success) {
+      const flatErrors = parsed.error.flatten();
+      console.error('Validation failed:', {
+        fieldErrors: flatErrors.fieldErrors,
+        formErrors: flatErrors.formErrors,
+        body: body
+      });
       return NextResponse.json(
         {
           error: 'Validation failed',
-          details: parsed.error.flatten(),
+          fieldErrors: flatErrors.fieldErrors,
+          formErrors: flatErrors.formErrors,
         },
         { status: 400 }
       );
@@ -27,17 +34,36 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Verify client exists and user has access (via RLS)
-    const { data: client, error: clientError } = await supabase
+    // Verify client exists and user has access (org-wide)
+    let clientQuery = supabase
       .from('clients')
       .select('id, full_name')
-      .eq('id', client_id)
-      .eq('created_by', auth.user.id)
-      .single();
+      .eq('id', client_id);
+
+    // Non-super_admin: verify client belongs to same org
+    if (auth.user.role !== 'super_admin' && auth.user.org_id) {
+      const { data: orgUsers } = await supabase.from('users').select('id').eq('org_id', auth.user.org_id);
+      const orgUserIds = (orgUsers || []).map((u: { id: string }) => u.id);
+      if (orgUserIds.length > 0) {
+        clientQuery = clientQuery.in('created_by', orgUserIds);
+      }
+    } else if (auth.user.role !== 'super_admin') {
+      clientQuery = clientQuery.eq('created_by', auth.user.id);
+    }
+
+    const { data: client, error: clientError } = await clientQuery.single();
 
     if (clientError || !client) {
-      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+      console.error('Client verification failed:', { clientError, clientId: auth.user.id });
+      return NextResponse.json({ error: 'Client not found or access denied' }, { status: 404 });
     }
+
+    // Map item_type to booking_type (hotel, flight, or vehicle -> land)
+    const bookingTypeMap: Record<string, string> = {
+      hotel: 'hotel',
+      flight: 'flight',
+      vehicle: 'land',
+    };
 
     // Create booking record
     const { data: booking, error: bookingError } = await supabase
@@ -46,7 +72,7 @@ export async function POST(request: NextRequest) {
         created_by: auth.user.id,
         client_id,
         title: `${item_type.charAt(0).toUpperCase() + item_type.slice(1)} Booking - ${client.full_name}`,
-        booking_type: 'offline',
+        booking_type: bookingTypeMap[item_type],
         destination: item_details.city || item_details.departure_city || item_details.pickup_location || '',
         travel_start: item_details.check_in || item_details.departure_datetime || item_details.pickup_datetime,
         travel_end: item_details.check_out || item_details.arrival_datetime || item_details.dropoff_datetime,
@@ -61,8 +87,17 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (bookingError || !booking) {
-      console.error('Booking creation error:', bookingError);
-      return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
+      console.error('Booking creation error:', {
+        error: bookingError?.message,
+        code: bookingError?.code,
+        hint: bookingError?.hint,
+        details: bookingError?.details,
+        fullError: JSON.stringify(bookingError)
+      });
+      return NextResponse.json({
+        error: 'Failed to create booking',
+        details: bookingError?.message || 'Unknown error'
+      }, { status: 500 });
     }
 
     // Map item_type names for database
@@ -117,10 +152,38 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (itemError || !bookingItem) {
-      console.error('Booking item creation error:', itemError);
+      console.error('Booking item creation error:', {
+        error: itemError?.message,
+        code: itemError?.code,
+        hint: itemError?.hint,
+        details: itemError?.details,
+        fullError: JSON.stringify(itemError),
+        item_type,
+        itemDetails: JSON.stringify(item_details)
+      });
       // Clean up booking if item creation fails
       await supabase.from('bookings').delete().eq('id', booking.id);
-      return NextResponse.json({ error: 'Failed to create booking item' }, { status: 500 });
+      return NextResponse.json({
+        error: 'Failed to create booking item',
+        details: itemError?.message || 'Unknown error'
+      }, { status: 500 });
+    }
+
+    // Auto-create booking package for payment schedule tracking
+    const { error: pkgError } = await supabase
+      .from('booking_packages')
+      .insert({
+        booking_id: booking.id,
+        type: 'individual',
+        supplier_id: (item_details.supplier_id as string) || null,
+        booking_items_ids: [bookingItem.id],
+        total_cost: cost_price,
+        status: 'pending',
+      });
+
+    if (pkgError) {
+      console.error('Package auto-creation error (non-fatal):', pkgError);
+      // Non-fatal — booking still created, user can set up payments manually
     }
 
     return NextResponse.json(

@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
     children_ages: body.children_ages || null,
     // Always default to INR — agent can change via currency selector after import
     currency: body.currency || 'INR',
+    num_nights: body.num_nights ?? null,
+    num_rooms: body.num_rooms ?? null,
+    extra_beds: body.extra_beds ?? null,
     status: 'draft',
     trip_cities: body.trip_cities || null,
   }).select().single();

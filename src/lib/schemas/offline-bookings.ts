@@ -9,7 +9,7 @@ const commonOfflineItemSchema = z.object({
   cost_price: z.number().min(0, 'Cost price must be 0 or greater'),
   sell_price: z.number().min(0, 'Selling price must be 0 or greater'),
   notes: z.string().max(2000, 'Notes must be 2000 characters or less').optional(),
-  supplier_id: z.string().uuid('Supplier ID must be a valid UUID'),
+  supplier_id: z.string().uuid('Supplier ID must be a valid UUID').optional().nullable(),
 });
 
 // Hotel offline schema
@@ -34,37 +34,37 @@ export const flightOfflineSchema = commonOfflineItemSchema.extend({
   airline: z.string().min(1, 'Airline is required').max(100),
   flight_number: z.string().min(1, 'Flight number is required').max(20),
   departure_city: z.string().min(1, 'Departure city is required').max(100),
-  departure_iata: z.string().length(3, 'IATA code must be 3 characters').optional(),
+  departure_iata: z.string().length(3, 'IATA code must be 3 characters').optional().or(z.literal('')),
   arrival_city: z.string().min(1, 'Arrival city is required').max(100),
-  arrival_iata: z.string().length(3, 'IATA code must be 3 characters').optional(),
-  departure_datetime: z.string().datetime('Departure must be a valid datetime'),
-  arrival_datetime: z.string().datetime('Arrival must be a valid datetime'),
-  passenger_name: z.string().min(1, 'Passenger name is required').max(200),
-  cabin_class: z.enum(['economy', 'business', 'first']).optional(),
+  arrival_iata: z.string().length(3, 'IATA code must be 3 characters').optional().or(z.literal('')),
+  departure_datetime: z.string().min(1, 'Departure datetime is required').regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/, 'Departure must be a valid datetime'),
+  arrival_datetime: z.string().min(1, 'Arrival datetime is required').regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/, 'Arrival must be a valid datetime'),
+  passenger_name: z.string().min(1, 'Passenger name is required').max(200).optional().or(z.literal('')),
+  cabin_class: z.enum(['economy', 'business', 'first']).optional().or(z.literal('')),
 });
 
 // Vehicle offline schema
 export const vehicleOfflineSchema = commonOfflineItemSchema.extend({
   item_type: z.literal('vehicle'),
   vehicle_type: z.enum(['hatchback', 'sedan', 'premium_sedan', 'muv', 'premium_muv', 'suv', 'van', 'luxury_van', 'coach', 'luxury_coach']),
-  vehicle_brand: z.string().max(100, 'Vehicle brand max 100 characters').optional(),
+  vehicle_brand: z.string().max(100, 'Vehicle brand max 100 characters').optional().or(z.literal('')),
   pickup_location: z.string().min(1, 'Pickup location is required').max(200),
   dropoff_location: z.string().min(1, 'Drop-off location is required').max(200),
-  pickup_datetime: z.string().datetime('Pickup must be a valid datetime'),
-  dropoff_datetime: z.string().datetime('Drop-off must be a valid datetime'),
+  pickup_datetime: z.string().min(1, 'Pickup datetime is required').regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/, 'Pickup must be a valid datetime'),
+  dropoff_datetime: z.string().min(1, 'Drop-off datetime is required').regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/, 'Drop-off must be a valid datetime'),
   availability_type: z.enum(['point_to_point', 'at_disposal']),
-  daily_start_time: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be HH:mm format').optional(),
-  daily_end_time: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be HH:mm format').optional(),
-  driver_name: z.string().max(200, 'Driver name max 200 characters').optional().nullable(),
-  driver_license: z.string().max(50, 'License number max 50 characters').optional().nullable(),
-  driver_license_valid_until: z.string().date('License expiry must be a valid date').optional().nullable(),
+  daily_start_time: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be HH:mm format').optional().or(z.literal('')),
+  daily_end_time: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be HH:mm format').optional().or(z.literal('')),
+  driver_name: z.string().max(200, 'Driver name max 200 characters').optional().nullable().or(z.literal('')),
+  driver_license: z.string().max(50, 'License number max 50 characters').optional().nullable().or(z.literal('')),
+  driver_license_valid_until: z.string().date('License expiry must be a valid date').optional().nullable().or(z.literal('')),
   driver_insurance_type: z.enum(['basic', 'premium']).optional().nullable(),
   itinerary: z.array(
     z.object({
-      date: z.string().date('Date must be valid'),
-      time: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:mm format'),
-      location: z.string().min(1, 'Location required').max(300),
-      notes: z.string().max(500, 'Notes max 500 characters').optional(),
+      date: z.string().optional().or(z.literal('')),
+      time: z.string().optional().or(z.literal('')),
+      location: z.string().max(300).optional().or(z.literal('')),
+      notes: z.string().max(500).optional().or(z.literal('')),
     })
   ).optional(),
 });
@@ -74,31 +74,41 @@ export const offlineItemDetailsSchema = z.union(
   [hotelOfflineSchema, flightOfflineSchema, vehicleOfflineSchema]
 );
 
+// Passthrough versions so extra form fields don't cause validation failures
+const hotelOfflinePassthrough = hotelOfflineSchema.passthrough();
+const flightOfflinePassthrough = flightOfflineSchema.passthrough();
+const vehicleOfflinePassthrough = vehicleOfflineSchema.passthrough();
+
 // Main create offline booking schema
 export const createOfflineBookingSchema = z.object({
   item_type: z.enum(['hotel', 'flight', 'vehicle']),
   client_id: z.string().uuid('Client ID must be a valid UUID'),
-  item_details: z.record(z.string(), z.unknown()), // Allow any object, will validate based on item_type
+  item_details: z.record(z.string(), z.unknown()),
   cost_price: z.number().min(0),
   sell_price: z.number().min(0),
   notes: z.string().max(2000).optional(),
-}).refine(
-  (data) => {
-    // Validate item_details based on item_type
-    if (data.item_type === 'hotel') {
-      return hotelOfflineSchema.safeParse({ ...data.item_details, item_type: 'hotel', cost_price: data.cost_price, sell_price: data.sell_price }).success;
-    } else if (data.item_type === 'flight') {
-      return flightOfflineSchema.safeParse({ ...data.item_details, item_type: 'flight', cost_price: data.cost_price, sell_price: data.sell_price }).success;
-    } else if (data.item_type === 'vehicle') {
-      return vehicleOfflineSchema.safeParse({ ...data.item_details, item_type: 'vehicle', cost_price: data.cost_price, sell_price: data.sell_price }).success;
+}).superRefine((data, ctx) => {
+  const schemaMap = {
+    hotel: hotelOfflinePassthrough,
+    flight: flightOfflinePassthrough,
+    vehicle: vehicleOfflinePassthrough,
+  };
+  const schema = schemaMap[data.item_type];
+  if (!schema) return;
+
+  const merged = { ...data.item_details, item_type: data.item_type, cost_price: data.cost_price, sell_price: data.sell_price };
+  const result = schema.safeParse(merged);
+
+  if (!result.success) {
+    console.error('Item details validation failed:', { item_type: data.item_type, errors: result.error.flatten(), item_details: data.item_details });
+    for (const issue of result.error.issues) {
+      ctx.addIssue({
+        ...issue,
+        path: ['item_details', ...issue.path],
+      });
     }
-    return true;
-  },
-  {
-    message: 'Item details do not match the selected item type',
-    path: ['item_details'],
   }
-);
+});
 
 // Type exports for form usage
 export type OfflineBookingFormData = z.infer<typeof createOfflineBookingSchema>;

@@ -146,10 +146,10 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
 
       if (error || !newProposal) throw error;
 
-      // Duplicate hotels
+      // Duplicate hotels (exclude `id`, `proposal_id`, and `nights` which is a GENERATED column)
       if (hotelsRes.data && hotelsRes.data.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const hotelRows = hotelsRes.data.map(({ id, proposal_id, ...rest }: Record<string, unknown>) => ({
+        const hotelRows = hotelsRes.data.map(({ id, proposal_id, nights, ...rest }: Record<string, unknown>) => ({
           ...rest,
           proposal_id: newProposal.id,
         }));

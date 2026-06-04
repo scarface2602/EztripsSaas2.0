@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SupplierSelect } from '@/components/ui/inline-add-select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Trash2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 
 interface VehicleFormProps {
   itemData: Record<string, unknown>;
@@ -34,13 +36,24 @@ export default function VehicleForm({
 }: VehicleFormProps) {  const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>([]);
   const supabase = useMemo(() => createClient(), []);
 
+  // Initialize availability_type on mount
+  useEffect(() => {
+    // Initialize availability_type if not set (only on first mount)
+    if (!itemData.availability_type) {
+      onItemDataChange({
+        ...itemData,
+        availability_type: 'point_to_point'
+      });
+    }
+  }, []); // Empty deps - only run once on mount
+
   // Fetch suppliers on mount
   useEffect(() => {
     const fetchSuppliers = async () => {
       const { data } = await supabase
         .from('suppliers')
         .select('id, name')
-        .eq('type', 'vehicle')
+        .eq('type', 'car')
         .order('name');
       if (data) setSuppliers(data);
     };
@@ -211,7 +224,7 @@ export default function VehicleForm({
           </div>
 
           {(itemData.availability_type as string) === 'at_disposal' && (
-            <div className="grid grid-cols-2 gap-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="grid grid-cols-2 gap-4 p-3 bg-blue-50 border border-blue-200 rounded-lg dark:bg-blue-950 dark:border-blue-800">
               <div className="space-y-2">
                 <Label htmlFor="daily_start_time" className="dark:text-slate-200">Daily Start Time</Label>
                 <Input
@@ -255,7 +268,7 @@ export default function VehicleForm({
           </div>
 
           {assignDriverNow ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-green-50 border border-green-200 rounded-lg dark:bg-green-950 dark:border-green-800">
               <div className="space-y-2">
                 <Label htmlFor="driver_name" className="dark:text-slate-200">Driver Name</Label>
                 <Input
@@ -303,7 +316,7 @@ export default function VehicleForm({
               </div>
             </div>
           ) : (
-            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-900">
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-900 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-200">
               Driver will be assigned after booking is created. You can add driver details anytime.
             </div>
           )}
@@ -400,7 +413,7 @@ export default function VehicleForm({
         </CardHeader>
         <CardContent>
           <SupplierSelect
-            type="vehicle"
+            type="car"
             suppliers={suppliers}
             value={((itemData.supplier_id as string) || '')}
             onChange={(id) => handleChange('supplier_id', id)}
@@ -454,7 +467,7 @@ export default function VehicleForm({
           </div>
 
           {costPrice > 0 && (
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm dark:bg-blue-950 dark:border-blue-800 dark:text-blue-200">
               <div className="space-y-1">
                 <div>Margin: ₹{(margin).toLocaleString()} ({marginPct}%)</div>
                 {margin < 0 && (

@@ -86,6 +86,9 @@ CREATE TABLE proposals (
   pax_children integer DEFAULT 0,
   children_ages integer[],
   currency text DEFAULT 'INR',
+  num_nights integer,
+  num_rooms integer DEFAULT 1,
+  extra_beds integer DEFAULT 0,
   special_notes text,
   dietary_notes text,
 

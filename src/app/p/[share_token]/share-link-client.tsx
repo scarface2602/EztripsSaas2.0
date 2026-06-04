@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { MessageCircle, Clock, Star, Check, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { MessageCircle, Star, Check, AlertTriangle, ChevronDown, ChevronUp, Tag, Loader2 } from 'lucide-react';
 import { getCurrencySymbol } from '@/lib/utils/pricing';
-import { differenceInSeconds, format, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { CheckoutDialog } from '@/components/proposals/CheckoutDialog';
 
 interface ShareLinkClientProps {
   proposal: Record<string, unknown>;
@@ -46,12 +47,10 @@ function fmtDT(dateStr: string | null | undefined): string {
 export function ShareLinkClient({
   proposal, hotels, flights, itineraryDays, activities, versions, client, agent,
 }: ShareLinkClientProps) {
-  const router = useRouter();
   const [tcAccepted, setTcAccepted] = useState(false);
   const [visaAcknowledged, setVisaAcknowledged] = useState(false);
   const [selectedAddons, setSelectedAddons] = useState<Set<string>>(new Set());
   const [dualChoices, setDualChoices] = useState<Record<string, 'pvt' | 'sic'>>({});
-  const [flightCountdown, setFlightCountdown] = useState<number | null>(null);
   const [showVersions, setShowVersions] = useState(false);
 
   const dualActivities = activities.filter(a => a.option_mode === 'dual');
@@ -76,21 +75,6 @@ export function ShareLinkClient({
     : null;
   const priceExpired = !isDynamicPricing && priceValidUntil && priceValidUntil < now;
 
-  useEffect(() => {
-    if (isDynamicPricing || !priceValidUntil) return;
-    const interval = setInterval(() => {
-      const diff = differenceInSeconds(priceValidUntil, new Date());
-      setFlightCountdown(diff > 0 ? diff : 0);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isDynamicPricing, priceValidUntil]);
-
-  function formatCountdown(seconds: number) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h}h ${m}m ${s}s`;
-  }
 
   // proposal.total_sp is the authoritative grand total computed by the agent's
   // pricing tab on every save. We read it directly so PDF and share link always
@@ -102,12 +86,60 @@ export function ShareLinkClient({
   }, 0);
   const grandTotal = baseTotal + addOnTotal;
 
+  // Discount code
+  const [couponCode, setCouponCode] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState('');
+  const [appliedDiscount, setAppliedDiscount] = useState<{
+    id: string; code: string; discount_type: string; discount_value: number;
+  } | null>(null);
+
+  const discountAmount = appliedDiscount
+    ? appliedDiscount.discount_type === 'percentage'
+      ? Math.round(grandTotal * appliedDiscount.discount_value / 100)
+      : Math.min(appliedDiscount.discount_value, grandTotal)
+    : 0;
+
+  const afterDiscount = grandTotal - discountAmount;
+
+  // TCS — flat 2% on international tour packages (Budget 2026, effective April 2026)
+  // Rate is editable per proposal via tcs_rate field (default 2%)
+  const tcsRate = Number(proposal.tcs_rate ?? 0); // 0 means TCS disabled for this proposal
+  const tcsAmount = tcsRate > 0 ? Math.round(afterDiscount * tcsRate / 100) : 0;
+
+  const finalTotal = afterDiscount + tcsAmount;
+
   const cur = getCurrencySymbol(proposal.currency as string);
+
+  const applyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setCouponLoading(true);
+    setCouponError('');
+    try {
+      const clientEmail = (client?.email as string) || '';
+      const clientIdParam = (client?.id as string) || '';
+      const res = await fetch(`/api/discount-codes?code=${encodeURIComponent(couponCode.trim())}${clientEmail ? `&client_email=${encodeURIComponent(clientEmail)}` : ''}${clientIdParam ? `&client_id=${encodeURIComponent(clientIdParam)}` : ''}`);
+      if (!res.ok) {
+        const err = await res.json();
+        setCouponError(err.error || 'Invalid code');
+        setAppliedDiscount(null);
+      } else {
+        const data = await res.json();
+        setAppliedDiscount(data);
+        setCouponError('');
+      }
+    } catch {
+      setCouponError('Failed to validate code');
+    }
+    setCouponLoading(false);
+  };
 
   const canAccept = tcAccepted
     && (!proposal.visa_section_enabled || visaAcknowledged)
     && (dualActivities.length === 0 || allDualChosen)
     && !priceExpired;
+
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   async function handleAccept() {
     const shareToken = window.location.pathname.split('/p/')[1];
@@ -116,7 +148,8 @@ export function ShareLinkClient({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event_type: 'tc_accepted' }),
     }).catch(() => { });
-    router.push(`/p/${shareToken}/payment?total=${grandTotal}&addons=${Array.from(selectedAddons).join(',')}&choices=${JSON.stringify(dualChoices)}${isDynamicPricing ? '&dynamic=1' : ''}`);
+    // Open inline checkout dialog instead of navigating away
+    setCheckoutOpen(true);
   }
 
   return (
@@ -158,10 +191,10 @@ export function ShareLinkClient({
             <span className="text-sm text-amber-800">Prices are indicative and subject to availability at the time of booking confirmation.</span>
           </div>
         )}
-        {!isDynamicPricing && flightCountdown !== null && flightCountdown > 0 && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
-            <Clock className="h-4 w-4 text-amber-600 shrink-0" />
-            <span className="text-sm text-amber-800">Prices valid for: <strong>{formatCountdown(flightCountdown)}</strong></span>
+        {!isDynamicPricing && priceExpired && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+            <span className="text-sm text-red-800">Prices may have changed since this proposal was shared. Please contact your travel advisor to confirm current pricing.</span>
           </div>
         )}
 
@@ -316,14 +349,62 @@ export function ShareLinkClient({
                 <span>+{cur}{addOnTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
               </div>
             )}
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-green-700">
+                <span>Discount ({appliedDiscount?.code})</span>
+                <span>-{cur}{discountAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              </div>
+            )}
+            {tcsAmount > 0 && (
+              <>
+                <Separator />
+                <div className="flex justify-between text-muted-foreground">
+                  <span>TCS @{tcsRate}%</span>
+                  <span>+{cur}{tcsAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                </div>
+              </>
+            )}
             <Separator />
             <div className="flex justify-between text-lg font-bold pt-1">
               <span>Grand Total</span>
-              <span>{cur}{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              <span>{cur}{finalTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
             </div>
             {isDynamicPricing && (
               <p className="text-xs text-amber-700 mt-2">* Final price valid at the time of booking confirmation</p>
             )}
+
+            {/* Coupon Code */}
+            <div className="pt-3">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    className="pl-9 h-9 text-sm uppercase"
+                    placeholder="Discount code"
+                    value={couponCode}
+                    onChange={e => { setCouponCode(e.target.value); setCouponError(''); }}
+                    disabled={!!appliedDiscount}
+                  />
+                </div>
+                {appliedDiscount ? (
+                  <Button size="sm" variant="outline" className="h-9" onClick={() => { setAppliedDiscount(null); setCouponCode(''); }}>
+                    Remove
+                  </Button>
+                ) : (
+                  <Button size="sm" className="h-9" onClick={applyCoupon} disabled={couponLoading || !couponCode.trim()}>
+                    {couponLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Apply'}
+                  </Button>
+                )}
+              </div>
+              {couponError && <p className="text-xs text-red-600 mt-1">{couponError}</p>}
+              {appliedDiscount && (
+                <p className="text-xs text-green-600 mt-1">
+                  {appliedDiscount.discount_type === 'percentage'
+                    ? `${appliedDiscount.discount_value}% discount applied`
+                    : `${cur}${appliedDiscount.discount_value.toLocaleString('en-IN')} discount applied`}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -392,6 +473,17 @@ export function ShareLinkClient({
           <MessageCircle className="h-6 w-6" />
         </a>
       )}
+
+      {/* Checkout Dialog */}
+      <CheckoutDialog
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        shareToken={window.location.pathname.split('/p/')[1]}
+        totalAmount={finalTotal}
+        currency={(proposal.currency as string) || 'INR'}
+        paxAdults={(proposal.pax_adults as number) || 2}
+        paxChildren={(proposal.pax_children as number) || 0}
+      />
     </div>
   );
 }

@@ -77,6 +77,8 @@ export async function POST(request: NextRequest) {
     const source = body.source || null;
     const number_of_nights = body.number_of_nights || body.numberOfNights || null;
     const hotel_category = body.hotel_category || body.hotelCategory || null;
+    const requirement_type = body.requirement_type || body.requirementType || 'package';
+    const requirement_details = body.requirement_details || body.requirementDetails || {};
 
     const supabase = createServiceClient();
 
@@ -128,6 +130,7 @@ export async function POST(request: NextRequest) {
         adults, children, children_ages, budget_range,
         budget_type, special_requirements, whatsapp_opted,
         source, number_of_nights, hotel_category,
+        requirement_type, requirement_details,
       })
       .select('id')
       .single();
@@ -236,6 +239,7 @@ export async function POST(request: NextRequest) {
         ['Hotel Category', hotel_category || '—'],
         ['Special Requirements', special_requirements || '—'],
         ['WhatsApp Opted', whatsapp_opted ? 'Yes' : 'No'],
+        ['Requirement Type', requirement_type],
         ['Source', source || '—'],
       ]
         .map(([label, val]) =>

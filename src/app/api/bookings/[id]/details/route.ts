@@ -5,10 +5,10 @@ import { NextRequest, NextResponse } from 'next/server';
 // GET: Fetch booking with packages and payments
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ bookingId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { bookingId } = await params;
+    const { id: bookingId } = await params;
     const auth = await withAuth(request);
     if (auth instanceof NextResponse) return auth;
 

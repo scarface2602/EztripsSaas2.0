@@ -12,8 +12,6 @@ import {
   FileText,
   Users,
   Truck,
-  ArrowDownLeft,
-  ArrowUpRight,
   Settings,
   Shield,
   LogOut,
@@ -26,6 +24,10 @@ import {
   Menu,
   Moon,
   Sun,
+  Headset,
+  CheckSquare,
+  Wallet,
+  IndianRupee,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -36,16 +38,27 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 
-const NAV_ITEMS = [
+// Core nav — visible to all roles
+const CORE_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/proposals', label: 'Proposals', icon: FileText },
   { href: '/bookings', label: 'Bookings', icon: ClipboardList },
   { href: '/leads', label: 'Enquiries', icon: Inbox },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Suppliers', icon: Truck },
-  { href: '/receivables', label: 'Receivables', icon: ArrowDownLeft },
-  { href: '/payables', label: 'Payables', icon: ArrowUpRight },
-  { href: '/settings', label: 'Settings', icon: Settings },
+];
+
+// Finance group — receivables, payables, accounts
+const FINANCE_ITEMS = [
+  { href: '/receivables', label: 'Receivables', icon: IndianRupee },
+  { href: '/payables', label: 'Payables', icon: IndianRupee },
+  { href: '/accounts/payments', label: 'Accounts', icon: Wallet, roles: ['accounts', 'manager', 'super_admin'] },
+];
+
+// Ops group — operations, approvals
+const OPS_ITEMS = [
+  { href: '/operations', label: 'Operations', icon: Headset, roles: ['operations', 'manager', 'super_admin'] },
+  { href: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['manager', 'super_admin'] },
 ];
 
 const ADMIN_ITEMS = [
@@ -78,77 +91,104 @@ function ThemeToggle() {
   );
 }
 
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles?: string[];
+}
+
+function NavLink({ item, pathname, onNavigate, badge }: { item: NavItem; pathname: string; onNavigate?: () => void; badge?: number }) {
+  const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      className={cn(
+        'flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+        isActive
+          ? 'bg-primary text-primary-foreground'
+          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {item.label}
+      {badge != null && badge > 0 && (
+        <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 flex items-center justify-center px-1">
+          {badge}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 function SidebarNav({ user, onNavigate, overdueFollowUps = 0 }: { user: User; onNavigate?: () => void; overdueFollowUps?: number }) {
   const pathname = usePathname();
+  const isAdmin = user.role === 'super_admin' || user.role === 'manager';
 
-  const items = (user.role === 'super_admin' || user.role === 'manager')
-    ? [...NAV_ITEMS, ...ADMIN_ITEMS]
-    : NAV_ITEMS;
+  const visibleOps = OPS_ITEMS.filter(i => !i.roles || i.roles.includes(user.role));
+  const visibleFinance = FINANCE_ITEMS.filter(i => !i.roles || i.roles.includes(user.role));
 
   return (
     <>
-      <nav className="flex-1 p-3 space-y-1">
-        {items.map((item) => {
-          const isActive = item.href === '/'
-            ? pathname === '/'
-            : pathname.startsWith(item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-              {item.href === '/leads' && overdueFollowUps > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 flex items-center justify-center px-1">
-                  {overdueFollowUps}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-        {(user.role === 'super_admin' || user.role === 'manager') && (
+      <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
+        {CORE_ITEMS.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            pathname={pathname}
+            onNavigate={onNavigate}
+            badge={item.href === '/leads' ? overdueFollowUps : undefined}
+          />
+        ))}
+
+        {visibleFinance.length > 0 && (
           <>
-            <p className="text-xs text-muted-foreground px-3 py-1 mt-4">Website CMS</p>
-            {WEBSITE_ITEMS.map((item) => {
-              const isActive = item.href === '/admin/website'
-                ? pathname === '/admin/website'
-                : pathname.startsWith(item.href);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavigate}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
+            <p className="text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider">Finance</p>
+            {visibleFinance.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+            ))}
           </>
         )}
+
+        {visibleOps.length > 0 && (
+          <>
+            <p className="text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider">Ops</p>
+            {visibleOps.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+            ))}
+          </>
+        )}
+
+        {isAdmin && (
+          <>
+            <p className="text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider">Admin</p>
+            {ADMIN_ITEMS.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+            ))}
+          </>
+        )}
+
+        {isAdmin && (
+          <>
+            <p className="text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider">Website CMS</p>
+            {WEBSITE_ITEMS.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+            ))}
+          </>
+        )}
+
+        {/* Settings at the bottom of nav */}
+        <div className="pt-2">
+          <NavLink item={{ href: '/settings', label: 'Settings', icon: Settings }} pathname={pathname} onNavigate={onNavigate} />
+        </div>
       </nav>
       <Separator />
-      <div className="p-4 space-y-3">
+      <div className="p-3 space-y-2 shrink-0">
         <div className="text-sm">
           <p className="font-medium truncate">{user.full_name}</p>
           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-          <p className="text-xs text-muted-foreground capitalize">{user.role.replace('_', ' ')}</p>
         </div>
         <div className="flex gap-2">
           <form action={signOut} className="flex-1">
@@ -166,8 +206,8 @@ function SidebarNav({ user, onNavigate, overdueFollowUps = 0 }: { user: User; on
 
 export function Sidebar({ user, overdueFollowUps = 0 }: { user: User; overdueFollowUps?: number }) {
   return (
-    <aside className="hidden md:flex w-64 bg-background border-r flex-col h-full">
-      <div className="p-4">
+    <aside className="hidden md:flex w-64 bg-background border-r flex-col h-full overflow-hidden">
+      <div className="p-4 shrink-0">
         <Link href="/"><EzTripsLogo /></Link>
       </div>
       <Separator />

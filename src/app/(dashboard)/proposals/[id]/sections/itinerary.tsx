@@ -124,6 +124,7 @@ export function ItinerarySection({
 }: ItinerarySectionProps) {
   const supabase = createClient();
   const [generatingDay, setGeneratingDay] = useState<string | null>(null);
+  const [curatingDay, setCuratingDay] = useState<string | null>(null);
   const [generatingDays, setGeneratingDays] = useState(false);
   const [savingItinerary, setSavingItinerary] = useState(false);
   const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null);
@@ -298,8 +299,8 @@ export function ItinerarySection({
         city: day.city || getCityForDate(day.date),
         hotel: hotels.find(h => h.check_in <= day.date && h.check_out > day.date)?.name,
         activities: dayActivities.map(a => a.details),
-        raw_description: day.raw_description || null,
-        day_type: day.day_type || null,
+        raw_description: day.raw_description || undefined,
+        day_type: day.day_type || undefined,
       };
       // If heading already exists, pass it as seed for the AI
       if (day.heading && !day.raw_description) {
@@ -310,22 +311,67 @@ export function ItinerarySection({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`AI Generate failed: ${err.error || res.statusText}`);
+        return;
+      }
       const data = await res.json();
+      if (data.error) {
+        alert(`AI Generate failed: ${data.error}`);
+        return;
+      }
       const isTourWithHeading = day.day_type === 'tour' && day.heading && !day.raw_description;
       if (isTourWithHeading) {
-        // Tour day: update both description and the corrected/formatted heading
         updateDay(index, {
           heading: data.heading || day.heading,
           description: data.description,
         });
       } else if (day.heading && !day.raw_description) {
-        // Non-tour days with heading — only update description, preserve heading
         updateDay(index, { description: data.description });
       } else {
         updateDay(index, { heading: data.heading, description: data.description });
       }
+    } catch (e) {
+      alert(`AI Generate error: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
       setGeneratingDay(null);
+    }
+  }
+
+  async function curateDayContent(index: number) {
+    const day = itineraryDays[index];
+    if (!day.description) return;
+    setCuratingDay(day.id);
+    try {
+      const res = await fetch('/api/ai/itinerary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          day_number: day.day_number,
+          destination: proposal.destination,
+          city: day.city || getCityForDate(day.date),
+          raw_description: day.description,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Curate failed: ${err.error || res.statusText}`);
+        return;
+      }
+      const data = await res.json();
+      if (data.error) {
+        alert(`Curate failed: ${data.error}`);
+        return;
+      }
+      updateDay(index, {
+        heading: data.heading || day.heading,
+        description: data.description,
+      });
+    } catch (e) {
+      alert(`Curate error: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    } finally {
+      setCuratingDay(null);
     }
   }
 
@@ -508,7 +554,15 @@ export function ItinerarySection({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Description (AI Generated)</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Description</Label>
+                  {day.description && (
+                    <Button size="sm" variant="outline" onClick={() => curateDayContent(index)} disabled={curatingDay === day.id}>
+                      {curatingDay === day.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wand2 className="h-3 w-3 mr-1" />}
+                      Curate
+                    </Button>
+                  )}
+                </div>
                 <Textarea
                   value={day.description || ''}
                   onChange={(e) => updateDay(index, { description: e.target.value })}
@@ -609,6 +663,23 @@ export function ItinerarySection({
           </Card>
         );
       })}
+
+      {/* Save Itinerary at bottom for easy access */}
+      {itineraryDays.length > 0 && (
+        <div className="flex justify-end pt-2">
+          <Button onClick={saveAllDays} disabled={savingItinerary}>
+            {savingItinerary
+              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : saveResult === 'success'
+                ? <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
+                : saveResult === 'error'
+                  ? <XCircle className="h-4 w-4 mr-2 text-red-500" />
+                  : <Save className="h-4 w-4 mr-2" />
+            }
+            {saveResult === 'success' ? 'Saved!' : saveResult === 'error' ? 'Error' : 'Save Itinerary'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

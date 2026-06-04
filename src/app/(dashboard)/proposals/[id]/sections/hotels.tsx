@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, Wand2, Check, Loader2, Star, AlertTriangle, Info } from 'lucide-react';
+import { toast } from 'sonner';
 import type { TripCity } from '@/lib/types/database';
 
 interface HotelsSectionProps {
@@ -101,12 +102,12 @@ export function HotelsSection({ proposal, hotels, setHotels, suppliers, setHasUn
 
   async function saveHotel(index: number) {
     const hotel = hotels[index];
-    await supabase.from('hotels').update({
+    // nights is a GENERATED column — never include it in updates
+    const { error } = await supabase.from('hotels').update({
       name: hotel.name,
       city: hotel.city,
       check_in: hotel.check_in,
       check_out: hotel.check_out,
-      nights: hotel.nights,
       room_type: hotel.room_type,
       meal_plan: hotel.meal_plan,
       star_rating: hotel.star_rating,
@@ -125,6 +126,12 @@ export function HotelsSection({ proposal, hotels, setHotels, suppliers, setHasUn
       early_checkin_requested: hotel.early_checkin_requested,
       late_checkout_requested: hotel.late_checkout_requested,
     }).eq('id', hotel.id);
+    if (error) {
+      console.error('Hotel save error:', error);
+      toast.error(`Failed to save hotel: ${error.message}`);
+    } else {
+      toast.success(`${hotel.name} saved`);
+    }
   }
 
   const tripCities: TripCity[] = proposal.trip_cities || [];

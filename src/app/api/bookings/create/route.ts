@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 interface CreateBookingRequest {
   proposal_id: string;
   client_id: string;
+  sell_price?: number;
   packages: Array<{
     type: 'full_dmc' | 'partial_dmc' | 'mixed' | 'individual';
     supplier_id?: string;
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const body: CreateBookingRequest = await request.json();
-    const { proposal_id, client_id, packages } = body;
+    const { proposal_id, client_id, packages, sell_price: clientSellPrice } = body;
 
     if (!proposal_id || !client_id || !Array.isArray(packages) || packages.length === 0) {
       return NextResponse.json(
@@ -62,8 +63,8 @@ export async function POST(request: NextRequest) {
           pax_adults: proposal.pax_adults,
           pax_children: proposal.pax_children,
           currency: proposal.currency,
-          cost_price: 0,
-          sell_price: totalBookingCost,
+          cost_price: totalBookingCost,
+          sell_price: clientSellPrice || totalBookingCost,
           status: 'pending',
         },
       ])

@@ -238,7 +238,7 @@ export default function StepReview({
             </div>
             <div className="border-t pt-2 flex justify-between font-semibold">
               <span>Margin:</span>
-              <span className={margin < 0 ? 'text-red-600' : 'text-green-600'}>
+              <span className={margin < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}>
                 ₹{margin.toLocaleString()} ({marginPct}%)
               </span>
             </div>
@@ -246,7 +246,7 @@ export default function StepReview({
         </CardContent>
       </Card>
 
-      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
+      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-200">
         ✓ All details are ready. Click &quot;Create Booking&quot; to proceed. You&apos;ll be able to add a payment schedule on the next page.
       </div>
     </div>

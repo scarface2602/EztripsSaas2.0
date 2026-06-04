@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { createClient } from '@/lib/supabase/server';
 import { createLogger } from '@/lib/logger';
+import { validateStatusTransition } from '@/lib/api/validate-status-transition';
+import { deriveBookingStatus } from '@/lib/api/booking-status';
+import type { SupplierStatus } from '@/lib/types/booking-items';
 
 const logger = createLogger('api:booking-items');
 
@@ -99,9 +102,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data: old } = await supabase.from('booking_items').select('supplier_status, label').eq('id', item_id).single();
 
+  // Server-side status transition validation
+  if (updates.supplier_status && old?.supplier_status && updates.supplier_status !== old.supplier_status) {
+    const transition = validateStatusTransition(
+      old.supplier_status as SupplierStatus,
+      updates.supplier_status as SupplierStatus
+    );
+    if (!transition.valid) {
+      return NextResponse.json({ error: transition.error }, { status: 400 });
+    }
+  }
+
   // If marking as confirmed, auto-set confirmed_at
   if (updates.supplier_status === 'confirmed' && old?.supplier_status !== 'confirmed') {
     updates.supplier_confirmed_at = new Date().toISOString();
+  }
+
+  // If cancelling, auto-set cancelled_at and refund_status
+  if (updates.supplier_status === 'cancelled' && old?.supplier_status !== 'cancelled') {
+    updates.cancelled_at = new Date().toISOString();
+    // If cancellation_charge or refund_amount provided, set refund_status to pending for manager review
+    if (updates.refund_amount && Number(updates.refund_amount) > 0) {
+      updates.refund_status = 'pending';
+    }
   }
 
   const { data, error } = await supabase
@@ -121,13 +144,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     logDetails.old_status = old?.supplier_status;
     logDetails.new_status = updates.supplier_status;
   }
+  if (updates.cancellation_reason) logDetails.cancellation_reason = updates.cancellation_reason;
+  if (updates.cancellation_charge) logDetails.cancellation_charge = updates.cancellation_charge;
+  if (updates.refund_amount) logDetails.refund_amount = updates.refund_amount;
+
+  const logAction = updates.supplier_status === 'cancelled' ? 'item_cancelled' : 'item_updated';
 
   await supabase.from('booking_logs').insert({
     booking_id: id,
     user_id: user.id,
-    action: 'item_updated',
+    action: logAction,
     details: logDetails,
   });
+
+  // Auto-derive booking status from all items
+  if (updates.supplier_status) {
+    const { data: allItems } = await supabase
+      .from('booking_items')
+      .select('supplier_status')
+      .eq('booking_id', id);
+
+    if (allItems && allItems.length > 0) {
+      const newBookingStatus = deriveBookingStatus(
+        allItems.map(i => i.supplier_status as SupplierStatus)
+      );
+      await supabase.from('bookings').update({ status: newBookingStatus }).eq('id', id);
+    }
+  }
 
   return NextResponse.json(data);
 }

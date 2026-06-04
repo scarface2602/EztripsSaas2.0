@@ -48,6 +48,7 @@ export function ConvertToBookingButton({ proposal, clientId }: ConvertToBookingB
         body: JSON.stringify({
           proposal_id: proposal.id,
           client_id: clientId,
+          sell_price: proposal.total_sp || undefined,
           packages,
         }),
       });

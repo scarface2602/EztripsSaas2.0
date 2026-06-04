@@ -47,10 +47,43 @@ export default function NewProposalPage() {
   const [paxChildren, setPaxChildren] = useState(0);
   const [childrenAges, setChildrenAges] = useState<number[]>([]);
   const [currency, setCurrency] = useState('INR');
+  const [numNights, setNumNights] = useState<number | ''>('');
+  const [numRooms, setNumRooms] = useState<number | ''>(1);
+  const [extraBeds, setExtraBeds] = useState<number | ''>(0);
   const [tripCities, setTripCities] = useState<TripCity[]>([]);
   const [prevStep, setPrevStep] = useState<'manual' | 'review'>('manual');
   const [enquiryName, setEnquiryName] = useState('');
   const [parseError, setParseError] = useState('');
+
+  // Auto-calculate nights from dates
+  useEffect(() => {
+    if (travelStart && travelEnd) {
+      const diff = Math.round((new Date(travelEnd).getTime() - new Date(travelStart).getTime()) / 86400000);
+      if (diff >= 0) setNumNights(diff);
+    }
+  }, [travelStart, travelEnd]);
+
+  function handleTravelStartChange(val: string) {
+    setTravelStart(val);
+    if (val && numNights && typeof numNights === 'number' && numNights > 0) {
+      const d = new Date(val);
+      d.setDate(d.getDate() + numNights);
+      setTravelEnd(d.toISOString().split('T')[0]);
+    }
+  }
+
+  function handleTravelEndChange(val: string) {
+    setTravelEnd(val);
+  }
+
+  function handleNumNightsChange(val: number | '') {
+    setNumNights(val);
+    if (travelStart && typeof val === 'number' && val >= 0) {
+      const d = new Date(travelStart);
+      d.setDate(d.getDate() + val);
+      setTravelEnd(d.toISOString().split('T')[0]);
+    }
+  }
 
   useEffect(() => {
     async function fetchData() {
@@ -87,7 +120,32 @@ export default function NewProposalPage() {
             const ages = String(enq.children_ages).split(',').map(Number).filter(n => !isNaN(n));
             if (ages.length > 0) setChildrenAges(ages);
           }
-          if (enq.client_id) setSelectedClient(enq.client_id);
+          if (enq.client_id) {
+            setSelectedClient(enq.client_id);
+          } else {
+            // Try to match existing client by name or phone
+            const clientsList = (c.data as Client[]) || [];
+            const matched = clientsList.find(cl =>
+              cl.full_name?.toLowerCase() === (enq.name || '').toLowerCase() ||
+              (enq.phone && cl.phone && cl.phone.replace(/\D/g, '') === (enq.phone || '').replace(/\D/g, ''))
+            );
+            if (matched) {
+              setSelectedClient(matched.id);
+            } else if (enq.name) {
+              // Auto-create client from enquiry data
+              const { data: newClient } = await supabase
+                .from('clients')
+                .insert({ full_name: enq.name, phone: enq.phone || null, email: enq.email || null })
+                .select()
+                .single();
+              if (newClient) {
+                setClients(prev => [...prev, newClient as Client]);
+                setSelectedClient(newClient.id);
+                // Link client back to the enquiry
+                await supabase.from('website_enquiries').update({ client_id: newClient.id }).eq('id', enquiryId);
+              }
+            }
+          }
         }
       }
     }
@@ -192,6 +250,9 @@ export default function NewProposalPage() {
           pax_children: paxChildren,
           children_ages: paxChildren > 0 && childrenAges.length > 0 ? childrenAges : null,
           currency,
+          num_nights: typeof numNights === 'number' ? numNights : null,
+          num_rooms: typeof numRooms === 'number' ? numRooms : null,
+          extra_beds: typeof extraBeds === 'number' ? extraBeds : null,
           quote_type: quoteType,
           parsed_data: parsedData,
           trip_cities: tripCities.length > 0 ? tripCities : null,
@@ -218,25 +279,36 @@ export default function NewProposalPage() {
   async function handleCreateManual() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) { setLoading(false); return; }
 
-    const { data } = await supabase.from('proposals').insert({
-      created_by: user.id,
-      client_id: selectedClient || null,
-      enquiry_id: enquiryId || null,
-      pricing_mode: pricingMode,
-      quote_type: quoteType,
-      title: title || 'New Proposal',
-      destination: destination || null,
-      travel_start: travelStart || null,
-      travel_end: travelEnd || null,
-      pax_adults: paxAdults,
-      pax_children: paxChildren,
-      children_ages: paxChildren > 0 && childrenAges.length > 0 ? childrenAges : null,
-      currency,
-      status: 'draft',
-      trip_cities: tripCities.length > 0 ? tripCities : null,
-    }).select().single();
+    try {
+      const { data, error } = await supabase.from('proposals').insert({
+        created_by: user.id,
+        client_id: selectedClient || null,
+        supplier_id: selectedSupplier || null,
+        enquiry_id: enquiryId || null,
+        pricing_mode: pricingMode,
+        quote_type: quoteType,
+        title: title || 'New Proposal',
+        destination: destination || null,
+        travel_start: travelStart || null,
+        travel_end: travelEnd || null,
+        pax_adults: paxAdults,
+        pax_children: paxChildren,
+        children_ages: paxChildren > 0 && childrenAges.length > 0 ? childrenAges : null,
+        currency,
+        num_nights: typeof numNights === 'number' ? numNights : null,
+        num_rooms: typeof numRooms === 'number' ? numRooms : null,
+        extra_beds: typeof extraBeds === 'number' ? extraBeds : null,
+        status: 'draft',
+        trip_cities: tripCities.length > 0 ? tripCities : null,
+      }).select().single();
+
+      if (error) {
+        console.error('Proposal creation failed:', error);
+        setLoading(false);
+        return;
+      }
 
     if (data) {
       // Mark enquiry as in_progress (proposal_sent happens only on publish)
@@ -285,7 +357,9 @@ export default function NewProposalPage() {
       }
       router.push(`/proposals/${data.id}`);
     }
-    setLoading(false);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -372,6 +446,7 @@ export default function NewProposalPage() {
               <div className="space-y-2">
                 <Label>Supplier</Label>
                 <SupplierSelect
+                  type="DMC"
                   suppliers={suppliers}
                   value={selectedSupplier}
                   onChange={setSelectedSupplier}
@@ -513,11 +588,15 @@ export default function NewProposalPage() {
               </div>
               <div className="space-y-2">
                 <Label>Travel Start</Label>
-                <Input type="date" value={travelStart} onChange={(e) => setTravelStart(e.target.value)} className={missingFields.includes('travel_start') ? 'border-red-500' : ''} />
+                <Input type="date" value={travelStart} onChange={(e) => handleTravelStartChange(e.target.value)} className={missingFields.includes('travel_start') ? 'border-red-500' : ''} />
+              </div>
+              <div className="space-y-2">
+                <Label>No. of Nights</Label>
+                <Input type="number" min={0} value={numNights} onChange={(e) => handleNumNightsChange(e.target.value ? Number(e.target.value) : '')} placeholder="Auto-calculated" />
               </div>
               <div className="space-y-2">
                 <Label>Travel End</Label>
-                <Input type="date" value={travelEnd} onChange={(e) => setTravelEnd(e.target.value)} className={missingFields.includes('travel_end') ? 'border-red-500' : ''} />
+                <Input type="date" value={travelEnd} onChange={(e) => handleTravelEndChange(e.target.value)} className={missingFields.includes('travel_end') ? 'border-red-500' : ''} />
               </div>
               <div className="space-y-2">
                 <Label>Adults</Label>
@@ -526,6 +605,14 @@ export default function NewProposalPage() {
               <div className="space-y-2">
                 <Label>Children</Label>
                 <Input type="number" min={0} value={paxChildren} onChange={(e) => { setPaxChildren(Number(e.target.value)); setChildrenAges([]); }} />
+              </div>
+              <div className="space-y-2">
+                <Label>No. of Rooms</Label>
+                <Input type="number" min={1} value={numRooms} onChange={(e) => setNumRooms(e.target.value ? Number(e.target.value) : '')} placeholder="1" />
+              </div>
+              <div className="space-y-2">
+                <Label>Extra Beds</Label>
+                <Input type="number" min={0} value={extraBeds} onChange={(e) => setExtraBeds(e.target.value ? Number(e.target.value) : '')} placeholder="0" />
               </div>
               <div className="space-y-2">
                 <Label>Currency</Label>
@@ -701,6 +788,16 @@ export default function NewProposalPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label>Supplier</Label>
+                <SupplierSelect
+                  type="DMC"
+                  suppliers={suppliers}
+                  value={selectedSupplier}
+                  onChange={setSelectedSupplier}
+                  onSupplierAdded={handleSupplierAdded}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label>Pricing Mode</Label>
                 <div className="flex gap-4 h-10 items-center">
                   <label className="flex items-center gap-2"><input type="radio" checked={pricingMode === 'standard'} onChange={() => setPricingMode('standard')} /> Standard</label>
@@ -709,10 +806,13 @@ export default function NewProposalPage() {
               </div>
               <div className="space-y-2"><Label>Title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Trip to..." /></div>
               <div className="space-y-2"><Label>Destination</Label><Input value={destination} onChange={(e) => setDestination(e.target.value)} /></div>
-              <div className="space-y-2"><Label>Travel Start</Label><Input type="date" value={travelStart} onChange={(e) => setTravelStart(e.target.value)} /></div>
-              <div className="space-y-2"><Label>Travel End</Label><Input type="date" value={travelEnd} onChange={(e) => setTravelEnd(e.target.value)} /></div>
+              <div className="space-y-2"><Label>Travel Start</Label><Input type="date" value={travelStart} onChange={(e) => handleTravelStartChange(e.target.value)} /></div>
+              <div className="space-y-2"><Label>No. of Nights</Label><Input type="number" min={0} value={numNights} onChange={(e) => handleNumNightsChange(e.target.value ? Number(e.target.value) : '')} placeholder="Auto-calculated" /></div>
+              <div className="space-y-2"><Label>Travel End</Label><Input type="date" value={travelEnd} onChange={(e) => handleTravelEndChange(e.target.value)} /></div>
               <div className="space-y-2"><Label>Adults</Label><Input type="number" min={1} value={paxAdults} onChange={(e) => setPaxAdults(Number(e.target.value))} /></div>
               <div className="space-y-2"><Label>Children</Label><Input type="number" min={0} value={paxChildren} onChange={(e) => { setPaxChildren(Number(e.target.value)); setChildrenAges([]); }} /></div>
+              <div className="space-y-2"><Label>No. of Rooms</Label><Input type="number" min={1} value={numRooms} onChange={(e) => setNumRooms(e.target.value ? Number(e.target.value) : '')} placeholder="1" /></div>
+              <div className="space-y-2"><Label>Extra Beds</Label><Input type="number" min={0} value={extraBeds} onChange={(e) => setExtraBeds(e.target.value ? Number(e.target.value) : '')} placeholder="0" /></div>
               <div className="col-span-2 space-y-2">
                 <Label>Currency</Label>
                 <select className="w-full h-10 rounded-md border px-3 text-sm" value={currency} onChange={(e) => setCurrency(e.target.value)}>

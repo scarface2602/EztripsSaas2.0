@@ -73,7 +73,7 @@ export function PricingSummarySection({
 
   // TCS on full total after discount + GST
   const tcsBase = afterDiscount + gstAmount;
-  const tcsAmount = proposal.tcs_enabled ? tcsBase * ((proposal.tcs_rate || 5) / 100) : 0;
+  const tcsAmount = proposal.tcs_enabled ? tcsBase * ((proposal.tcs_rate || 2) / 100) : 0;
 
   const grandTotalRaw = afterDiscount + gstAmount + tcsAmount;
   const grandTotal = applyRounding(grandTotalRaw, proposal.rounding_unit || currentUser.rounding_unit || 0);
@@ -208,7 +208,21 @@ export function PricingSummarySection({
                   <input
                     type="radio"
                     checked={displayMode === mode}
-                    onChange={() => updateProposal({ pricing_display_mode: mode })}
+                    onChange={() => {
+                      const updates: Partial<Proposal> = { pricing_display_mode: mode };
+                      // Auto-populate prices from internal SP when switching modes
+                      if (totalSPBeforeTaxes > 0) {
+                        if (mode === 'total' || mode === 'both') {
+                          if (!proposal.total_sp) updates.total_sp = totalSPBeforeTaxes;
+                        }
+                        if (mode === 'per_person' || mode === 'both') {
+                          if (!proposal.package_sp_per_person && proposal.pax_adults > 0) {
+                            updates.package_sp_per_person = Math.round(totalSPBeforeTaxes / proposal.pax_adults);
+                          }
+                        }
+                      }
+                      updateProposal(updates);
+                    }}
                   />
                   {mode === 'per_person' ? 'Per Person' : mode === 'total' ? 'Total Group' : 'Both'}
                 </label>
@@ -344,7 +358,7 @@ export function PricingSummarySection({
               )}
             </label>
             <p className="text-xs text-muted-foreground pl-7">
-              Tax Collected at Source on outbound tour packages. 5% if PAN-linked; 20% otherwise. Client can claim it as TDS credit while filing returns.
+              Tax Collected at Source on outbound tour packages. Flat 2% per Budget 2026 (effective April 2026). No minimum threshold. Client can claim credit while filing ITR.
             </p>
             {proposal.tcs_enabled && (
               <div className="flex items-center gap-3 pl-7">
@@ -353,7 +367,7 @@ export function PricingSummarySection({
                   type="number"
                   className="w-20 h-8"
                   min={0} max={100} step="0.1"
-                  value={proposal.tcs_rate ?? 5}
+                  value={proposal.tcs_rate ?? 2}
                   onChange={(e) => updateProposal({ tcs_rate: Number(e.target.value) })}
                 />
                 <span className="text-sm">%</span>

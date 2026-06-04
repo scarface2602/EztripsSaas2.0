@@ -47,23 +47,52 @@ export default function NewOfflineBookingPage() {
     }
 
     setIsCreating(true);
+    const payload = {
+      item_type: itemType,
+      client_id: clientId,
+      item_details: itemData,
+      cost_price: costPrice,
+      sell_price: sellPrice,
+      notes: notes || undefined,
+    };
+
+    console.log('Creating booking with payload:', {
+      ...payload,
+      item_details: JSON.stringify(payload.item_details)
+    });
+
     try {
       const res = await fetch('/api/bookings/offline/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          item_type: itemType,
-          client_id: clientId,
-          item_details: itemData,
-          cost_price: costPrice,
-          sell_price: sellPrice,
-          notes: notes || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.error || 'Failed to create booking');
+        let errorMessage = error.error || 'Failed to create booking';
+
+        // Show validation field errors if present
+        if (error.fieldErrors) {
+          const fieldErrors = Object.entries(error.fieldErrors)
+            .map(([field, msgs]: [string, unknown]) => {
+              const msgStr = Array.isArray(msgs) ? msgs.join(', ') : String(msgs);
+              return `${field}: ${msgStr}`;
+            })
+            .join('; ');
+          errorMessage = `${errorMessage} - ${fieldErrors}`;
+        }
+
+        if (error.formErrors && Array.isArray(error.formErrors)) {
+          errorMessage += ` - ${error.formErrors.join('; ')}`;
+        }
+
+        if (error.details) {
+          errorMessage += ` — ${error.details}`;
+        }
+
+        console.error('API Error Details:', { status: res.status, error, errorMessage });
+        throw new Error(errorMessage);
       }
 
       const data = await res.json();

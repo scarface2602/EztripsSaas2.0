@@ -33,7 +33,17 @@ export default function HotelForm({
   const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>([]);
   const supabase = useMemo(() => createClient(), []);
 
-  // Fetch suppliers on mount
+  // Initialize occupancy and fetch suppliers on mount
+  useEffect(() => {
+    // Initialize occupancy if not set (only on first mount)
+    if (!itemData.occupancy) {
+      onItemDataChange({
+        ...itemData,
+        occupancy: { adults: 1, children: 0 }
+      });
+    }
+  }, []); // Empty deps - only run once on mount
+
   useEffect(() => {
     const fetchSuppliers = async () => {
       const { data } = await supabase
@@ -58,8 +68,7 @@ export default function HotelForm({
     
     // Reset children_ages if children count changes
     if (field === 'children' && value === 0) {
-      const { children_ages: _, ...rest } = itemData;
-      onItemDataChange({ ...rest, occupancy: newOccupancy });
+      onItemDataChange({ ...itemData, occupancy: newOccupancy, children_ages: undefined });
     } else {
       onItemDataChange({ ...itemData, occupancy: newOccupancy });
     }
@@ -227,7 +236,7 @@ export default function HotelForm({
       <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Supplier</CardTitle>
-          <CardDescription>Select supplier for internal tracking (optional)</CardDescription>
+          <CardDescription>Select supplier for internal tracking</CardDescription>
         </CardHeader>
         <CardContent>
           <SupplierSelect

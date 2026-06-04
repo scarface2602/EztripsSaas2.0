@@ -14,6 +14,8 @@ import { Switch } from '@/components/ui/switch';
 import { Settings, Save, Building2, Upload, Loader2, UserRoundCog } from 'lucide-react';
 import { toast } from 'sonner';
 import { PaymentAccountsSection } from './payment-accounts';
+import { DiscountCodesSection } from './discount-codes';
+import { LookupListsSection } from './lookup-lists';
 
 interface OrgData {
   id?: string;
@@ -375,6 +377,12 @@ export default function SettingsPage() {
 
         {/* Payment Accounts (CMS) */}
         <PaymentAccountsSection />
+
+        {/* Discount Codes */}
+        <DiscountCodesSection />
+
+        {/* Lookup Lists */}
+        <LookupListsSection />
 
         {/* Pricing Settings */}
         <Card>

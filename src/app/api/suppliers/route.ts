@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!['hotel', 'flight', 'vehicle'].includes(type)) {
+    if (!['DMC', 'hotel', 'airline', 'car', 'activity', 'other'].includes(type)) {
       return NextResponse.json(
         { error: 'Invalid supplier type' },
         { status: 400 }

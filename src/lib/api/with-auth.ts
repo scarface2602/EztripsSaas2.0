@@ -18,6 +18,7 @@ export async function withAuth(
   _request?: unknown,
   options?: {
     requiredRole?: 'agent' | 'super_admin';
+    allowedRoles?: Array<User['role']>;
     checkOwnership?: {
       table: string;
       id: string;
@@ -55,8 +56,12 @@ export async function withAuth(
     created_at: new Date().toISOString(),
   } as User);
 
-  // Role check
-  if (options?.requiredRole) {
+  // Role check — allowedRoles takes precedence over requiredRole
+  if (options?.allowedRoles) {
+    if (!options.allowedRoles.includes(user.role) && user.role !== 'super_admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+  } else if (options?.requiredRole) {
     if (user.role !== options.requiredRole && user.role !== 'super_admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }

@@ -14,9 +14,23 @@ export async function GET(request: NextRequest) {
 
     let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
 
-    // Ownership filter: agents only see their own clients
+    // Org-wide visibility: show clients created by anyone in the same org
     if (auth.user.role !== 'super_admin') {
-      query = query.eq('created_by', auth.authUser.id);
+      if (auth.user.org_id) {
+        // Get all user IDs in the same org
+        const { data: orgUsers } = await supabase
+          .from('users')
+          .select('id')
+          .eq('org_id', auth.user.org_id);
+        const orgUserIds = (orgUsers || []).map((u: { id: string }) => u.id);
+        if (orgUserIds.length > 0) {
+          query = query.in('created_by', orgUserIds);
+        } else {
+          query = query.eq('created_by', auth.authUser.id);
+        }
+      } else {
+        query = query.eq('created_by', auth.authUser.id);
+      }
     }
 
     if (search) {

@@ -8,8 +8,10 @@ import { Label } from '@/components/ui/label';
 
 // ─── Supplier inline form ────────────────────────────────────────────────────
 
+type SupplierType = 'DMC' | 'hotel' | 'airline' | 'car' | 'activity' | 'other';
+
 interface AddSupplierFormProps {
-  type: 'hotel' | 'flight' | 'vehicle';
+  type: SupplierType;
   onSaved: (supplier: { id: string; name: string }) => void;
   onCancel: () => void;
 }
@@ -145,7 +147,7 @@ function AddClientForm({ onSaved, onCancel }: AddClientFormProps) {
 // ─── Supplier select with inline add ────────────────────────────────────────
 
 interface SupplierSelectProps {
-  type: 'hotel' | 'flight' | 'vehicle';
+  type?: SupplierType;
   suppliers: Array<{ id: string; name: string }>;
   value: string;
   onChange: (id: string) => void;
@@ -178,13 +180,13 @@ export function SupplierSelect({ type, suppliers, value, onChange, onSupplierAdd
           value={showForm ? '__add_new__' : value}
           onChange={handleChange}
         >
-          <option value="">Select supplier...</option>
-          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          <option value="__add_new__" className="text-blue-600 font-medium">＋ Add New Supplier</option>
+          <option value="" className="bg-white text-gray-900">Select supplier...</option>
+          {suppliers.map(s => <option key={s.id} value={s.id} className="bg-white text-gray-900">{s.name}</option>)}
+          {type && <option value="__add_new__" className="bg-white text-blue-600 font-medium">＋ Add New Supplier</option>}
         </select>
         <ChevronDown className="pointer-events-none absolute right-2 top-3 h-4 w-4 text-muted-foreground" />
       </div>
-      {showForm && (
+      {showForm && type && (
         <AddSupplierForm
           type={type}
           onSaved={handleSaved}
@@ -226,13 +228,13 @@ export function ClientSelect({ clients, value, onChange, onClientAdded, classNam
     <div>
       <div className="relative">
         <select
-          className={`w-full h-10 rounded-md border px-3 text-sm appearance-none pr-8 ${className || ''}`}
+          className={`w-full h-10 rounded-md border px-3 text-sm appearance-none pr-8 dark:bg-slate-800 dark:border-slate-600 dark:text-white ${className || ''}`}
           value={showForm ? '__add_new__' : value}
           onChange={handleChange}
         >
-          <option value="">Select client</option>
-          {clients.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-          <option value="__add_new__" className="text-blue-600 font-medium">＋ Add New Client</option>
+          <option value="" className="bg-white text-gray-900">Select client</option>
+          {clients.map(c => <option key={c.id} value={c.id} className="bg-white text-gray-900">{c.full_name}</option>)}
+          <option value="__add_new__" className="bg-white text-blue-600 font-medium">＋ Add New Client</option>
         </select>
         <ChevronDown className="pointer-events-none absolute right-2 top-3 h-4 w-4 text-muted-foreground" />
       </div>

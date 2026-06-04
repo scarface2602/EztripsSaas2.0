@@ -26,10 +26,11 @@ export default function StepClientSelect({
         const res = await fetch('/api/clients');
         if (!res.ok) throw new Error('Failed to load clients');
         const data = await res.json();
-        setClients(data.clients || []);
+        console.log('Clients loaded:', data);
+        setClients(Array.isArray(data) ? data : []);
       } catch (error) {
         toast.error('Failed to load clients');
-        console.error(error);
+        console.error('Client fetch error:', error);
       } finally {
         setLoading(false);
       }
@@ -83,13 +84,13 @@ export default function StepClientSelect({
       </Card>
 
       {selectedClientId && selectedClientName && (
-        <Card className="border-green-200 bg-green-50">
+        <Card className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <CheckCircle2 className="h-5 w-5 text-green-600" />
               <div>
-                <p className="font-medium text-green-900">{selectedClientName}</p>
-                <p className="text-sm text-green-700">Selected as booking client</p>
+                <p className="font-medium text-green-900 dark:text-green-200">{selectedClientName}</p>
+                <p className="text-sm text-green-700 dark:text-green-300">Selected as booking client</p>
               </div>
             </div>
           </CardContent>
@@ -97,13 +98,13 @@ export default function StepClientSelect({
       )}
 
       {!selectedClientId && !loading && (
-        <Card className="border-yellow-200 bg-yellow-50">
+        <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-600" />
               <div>
-                <p className="font-medium text-yellow-900">Client required</p>
-                <p className="text-sm text-yellow-700">
+                <p className="font-medium text-yellow-900 dark:text-yellow-200">Client required</p>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
                   Please select or create a client to proceed
                 </p>
               </div>

@@ -39,6 +39,13 @@ export async function createBookingsFromProposal(
   if (proposal.quote_type === 'package') {
     const supplierId = hotelsAll?.[0]?.supplier_id || null;
 
+    // Look up DMC/supplier name for package quotes
+    let packageSupplierName = '';
+    if (supplierId) {
+      const { data: supplier } = await supabase.from('suppliers').select('name').eq('id', supplierId).single();
+      packageSupplierName = supplier?.name || '';
+    }
+
     let totalCost = 0;
     (hotelsAll || []).forEach(h => { totalCost += (Number(h.cp_per_night) || 0) * (Number(h.nights) || 0); });
     (flightsAll || []).forEach(f => { totalCost += Number(f.cp_total) || 0; });
@@ -71,7 +78,7 @@ export async function createBookingsFromProposal(
         flights: flightsAll || [],
         activities: activitiesAll || [],
         lineItems: lineItemsAll || [],
-      });
+      }, packageSupplierName);
     }
   } else {
     // Itemised: multiple bookings
@@ -266,6 +273,7 @@ async function createItemsFromProposal(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     lineItems: any[];
   },
+  packageSupplierName?: string,
 ) {
   const items: Record<string, unknown>[] = [];
   let sortOrder = 0;
@@ -384,6 +392,13 @@ async function createItemsFromProposal(
       },
       sort_order: sortOrder++,
     });
+  }
+
+  // For package quotes, set the DMC/supplier name on all items
+  if (packageSupplierName) {
+    for (const item of items) {
+      item.vendor_name = packageSupplierName;
+    }
   }
 
   if (items.length > 0) {

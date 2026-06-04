@@ -246,6 +246,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Auto-create ops bookings (one per supplier)
   const createdBookings = await createBookingsFromProposal(supabase, proposal, proposal.created_by || '');
 
+  // Copy passenger details from proposal to booking_passenger_details
+  const passengerDetails = proposal.passenger_details as Array<Record<string, unknown>> | null;
+  if (passengerDetails && passengerDetails.length > 0 && createdBookings.length > 0) {
+    for (const booking of createdBookings) {
+      const records = passengerDetails.map((p, i) => ({
+        booking_id: booking.id as string,
+        pax_index: i,
+        first_name: (p.firstName as string) || '',
+        last_name: (p.lastName as string) || '',
+        gender: (p.gender as string) || null,
+        date_of_birth: (p.dateOfBirth as string) || null,
+        passport_urls: (p.passportFiles as string[]) || null,
+        pan_urls: (p.panFiles as string[]) || null,
+        is_child: (p.isChild as boolean) || false,
+      }));
+      await supabase.from('booking_passenger_details').insert(records);
+      await supabase.from('bookings').update({
+        passenger_details_completed: true,
+        passenger_details_completed_at: now,
+      }).eq('id', booking.id as string);
+    }
+  }
+
   // Log to proposal_acceptance_log
   await supabase.from('proposal_acceptance_log').insert({
     proposal_id: proposalId,

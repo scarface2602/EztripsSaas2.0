@@ -1,5 +1,43 @@
 import { z } from 'zod';
 
+// Source-of-truth schema for a proposal/booking item
+export const ProposalItemSchema = z.object({
+  id: z.string().uuid().optional(),
+  type: z.enum(['hotel', 'flight', 'activity', 'transfer', 'visa', 'insurance', 'other']),
+  service_name: z.string().min(1).max(300),
+  description: z.string().max(5000).optional().nullable(),
+  supplier_id: z.string().uuid().optional().nullable(),
+  cost_price: z.number().min(0).default(0),
+  markup_amount: z.number().min(0).default(0),
+  tax_amount: z.number().min(0).default(0),
+  selling_price: z.number().min(0).default(0),
+  ops_status: z.enum(['pending', 'confirmed', 'on_hold', 'cancelled']).default('pending'),
+  currency: z.string().length(3).default('INR'),
+  property_contact_email: z.string().email().optional().nullable(),
+  portal_confirmation_id: z.string().max(200).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+});
+
+export type ProposalItem = z.infer<typeof ProposalItemSchema>;
+
+// Master proposal schema
+export const ProposalSchema = z.object({
+  lead_id: z.string().uuid().optional().nullable(),
+  title: z.string().min(1).max(300),
+  destination: z.string().max(300).optional(),
+  travel_start: z.string().max(30).optional(),
+  travel_end: z.string().max(30).optional(),
+  pax_adults: z.number().int().min(0).max(100).default(2),
+  pax_children: z.number().int().min(0).max(100).default(0),
+  children_ages: z.array(z.number()).optional(),
+  currency: z.string().length(3).default('INR'),
+  items: z.array(ProposalItemSchema).default([]),
+  special_notes: z.string().max(5000).optional().nullable(),
+  dietary_notes: z.string().max(2000).optional().nullable(),
+});
+
+export type Proposal = z.infer<typeof ProposalSchema>;
+
 export const updateProposalSchema = z.object({
   title: z.string().min(1).max(300).optional(),
   destination: z.string().max(300).optional(),

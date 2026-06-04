@@ -18,7 +18,7 @@ export default async function LeadsPage() {
       supabase
         .from('users')
         .select('id, full_name, role, max_active_leads')
-        .in('role', ['agent', 'manager']),
+        .in('role', ['agent', 'manager', 'super_admin']),
       supabase
         .from('proposals')
         .select('enquiry_id')

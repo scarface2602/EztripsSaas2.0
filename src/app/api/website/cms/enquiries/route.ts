@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const body = await request.json();
-  const { name, phone, email, destination, travel_date, adults, children, children_ages, budget_range, number_of_nights, hotel_category, special_requirements, notes, source } = body;
+  const { name, phone, email, destination, travel_date, adults, children, children_ages, budget_range, number_of_nights, hotel_category, special_requirements, notes, source, requirement_type, requirement_details } = body;
 
   if (!name || !phone) {
     return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 });
@@ -64,6 +64,8 @@ export async function POST(request: NextRequest) {
       special_requirements: special_requirements || null,
       notes: notes || null,
       source: source || 'offline',
+      requirement_type: requirement_type || 'package',
+      requirement_details: requirement_details || {},
       status: 'new',
       priority: 'medium',
       lead_temperature: 'warm',

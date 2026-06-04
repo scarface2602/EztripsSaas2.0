@@ -183,7 +183,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     .reduce((s, h) => s + (Number(h.sp_per_night) || 0) * (Number(h.nights) || 1), 0);
   const flightSPTotal = (flights || [])
     .reduce((s, f) => s + (Number(f.sp_total) || 0), 0);
-  const effectiveLandSP = hotelSPTotal > 0 ? hotelSPTotal : Number(proposal.land_sp) || 0;
+
+  // For package proposals, use the client-facing pricing fields (total_sp or per-person * pax)
+  const isPackage = proposal.quote_type === 'package';
+  const packageTotal = isPackage
+    ? (Number(proposal.total_sp) || (Number(proposal.package_sp_per_person) || 0) * (Number(proposal.pax_adults) || 1) + (Number(proposal.package_cwb_sp) || 0) * (Number(proposal.pax_children) || 0))
+    : 0;
+  const effectiveLandSP = isPackage
+    ? (packageTotal > 0 ? packageTotal : Number(proposal.land_sp) || 0)
+    : (hotelSPTotal > 0 ? hotelSPTotal + (Number(proposal.land_sp) || 0) : Number(proposal.land_sp) || 0);
 
   // Per-type totals
   const pricingLandSP   = pdfType === 'flight_only' ? 0 : effectiveLandSP;

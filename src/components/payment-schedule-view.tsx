@@ -13,6 +13,10 @@ interface PaymentScheduleViewProps {
   onEditClick?: () => void;
   onMarkPaidClick?: (paymentId: string) => void;
   onAddNoteClick?: (paymentId: string) => void;
+  /** Whether all booking items are confirmed — required before final payment */
+  isBookingConfirmed?: boolean;
+  /** Render a custom action node per unpaid payment (e.g. Send Reminder button) */
+  renderUnpaidAction?: (payment: BookingPackagePayment) => React.ReactNode;
 }
 
 export function PaymentScheduleView({
@@ -21,6 +25,8 @@ export function PaymentScheduleView({
   onEditClick,
   onMarkPaidClick,
   onAddNoteClick,
+  isBookingConfirmed = false,
+  renderUnpaidAction,
 }: PaymentScheduleViewProps) {
   const sortedPayments = useMemo(
     () => [...payments].sort((a, b) => a.sequence - b.sequence),
@@ -36,6 +42,19 @@ export function PaymentScheduleView({
     () => sortedPayments.find((p) => p.status === 'pending' || p.status === 'due' || p.status === 'overdue'),
     [sortedPayments]
   );
+
+  // Only the next sequential unpaid payment can be marked paid
+  // Final payment (last in sequence) also requires booking to be confirmed
+  const canMarkPaid = useMemo(() => {
+    const payableId = nextDuePayment?.id;
+    if (!payableId) return new Set<string>();
+
+    const isLastPayment = nextDuePayment.sequence === Math.max(...sortedPayments.map(p => p.sequence));
+    // Final payment requires confirmed booking
+    if (isLastPayment && !isBookingConfirmed) return new Set<string>();
+
+    return new Set([payableId]);
+  }, [nextDuePayment, sortedPayments, isBookingConfirmed]);
 
   function getStatusColor(status: string) {
     switch (status) {
@@ -110,21 +129,26 @@ export function PaymentScheduleView({
 
         {/* Next Due Highlight */}
         {nextDuePayment && (
-          <div className="p-3 border-l-4 border-orange-500 bg-orange-50 rounded">
-            <div className="text-xs font-semibold text-orange-900">NEXT DUE</div>
+          <div className="p-3 border-l-4 border-orange-500 bg-orange-50 dark:bg-orange-950/30 rounded">
+            <div className="text-xs font-semibold text-orange-900 dark:text-orange-300">NEXT DUE</div>
             <div className="flex items-center justify-between mt-1">
               <div>
-                <div className="font-semibold text-orange-900">
+                <div className="font-semibold text-orange-900 dark:text-orange-200">
                   Payment #{nextDuePayment.sequence}: ₹{nextDuePayment.amount.toLocaleString()}
                 </div>
-                <div className="text-xs text-orange-800 mt-1">
+                <div className="text-xs text-orange-800 dark:text-orange-400 mt-1">
                   Due: {new Date(nextDuePayment.due_date).toLocaleDateString()}
                   {nextDuePayment.status === 'overdue'
                     ? ` (OVERDUE - ${Math.abs(getDaysUntilDue(nextDuePayment.due_date))} days)`
                     : ` (In ${getDaysUntilDue(nextDuePayment.due_date)} days)`}
                 </div>
+                {!canMarkPaid.has(nextDuePayment.id) && (
+                  <div className="text-xs text-amber-700 dark:text-amber-400 mt-1 font-medium">
+                    Booking must be confirmed before final payment
+                  </div>
+                )}
               </div>
-              {onMarkPaidClick && (
+              {onMarkPaidClick && canMarkPaid.has(nextDuePayment.id) && (
                 <Button
                   size="sm"
                   onClick={() => onMarkPaidClick(nextDuePayment.id)}
@@ -205,9 +229,10 @@ export function PaymentScheduleView({
               )}
 
               {/* Action Buttons */}
-              {(onMarkPaidClick || onAddNoteClick) && (
+              {(onMarkPaidClick || onAddNoteClick || renderUnpaidAction) && (
                 <div className="flex gap-2 pt-2">
-                  {payment.status !== 'paid' && onMarkPaidClick && (
+                  {payment.status !== 'paid' && renderUnpaidAction && renderUnpaidAction(payment)}
+                  {payment.status !== 'paid' && onMarkPaidClick && canMarkPaid.has(payment.id) && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -215,6 +240,16 @@ export function PaymentScheduleView({
                     >
                       Mark Paid
                     </Button>
+                  )}
+                  {payment.status !== 'paid' && !canMarkPaid.has(payment.id) && payment.id !== nextDuePayment?.id && (
+                    <span className="text-xs text-muted-foreground italic">
+                      Pay earlier installments first
+                    </span>
+                  )}
+                  {payment.status !== 'paid' && !canMarkPaid.has(payment.id) && payment.id === nextDuePayment?.id && (
+                    <span className="text-xs text-amber-600 dark:text-amber-400 italic">
+                      Confirm booking before final payment
+                    </span>
                   )}
                   {onAddNoteClick && (
                     <Button

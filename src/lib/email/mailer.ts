@@ -102,3 +102,37 @@ export async function sendConfirmationToAgent({
     html: emailLayout('Booking Confirmed!', body, { headerBg: BRAND.green }),
   });
 }
+
+/** Generic send — used by ops actions, reminders, etc. */
+export async function sendEmail(to: string, subject: string, html: string) {
+  const transporter = createTransport();
+  await transporter.sendMail({
+    from: `EzTrips <${process.env.GMAIL_USER}>`,
+    to,
+    subject,
+    html,
+  });
+}
+
+/** Send with attachments — used by email composer */
+export async function sendEmailWithAttachments(opts: {
+  to: string;
+  cc?: string;
+  subject: string;
+  html: string;
+  attachments?: Array<{ filename: string; content: Buffer | string; contentType?: string }>;
+}) {
+  const transporter = createTransport();
+  await transporter.sendMail({
+    from: `EzTrips <${process.env.GMAIL_USER}>`,
+    to: opts.to,
+    cc: opts.cc || undefined,
+    subject: opts.subject,
+    html: opts.html,
+    attachments: opts.attachments?.map(a => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType,
+    })),
+  });
+}

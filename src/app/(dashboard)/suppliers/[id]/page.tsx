@@ -3,14 +3,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { Supplier, SupplierSurcharge, Payable } from '@/lib/types/database';
+import type { Supplier, SupplierSurcharge } from '@/lib/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Pencil, Save, Trash2, X, Plus } from 'lucide-react';
+import { Pencil, Save, Trash2, X, Plus, IndianRupee, Loader2 } from 'lucide-react';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { toast } from 'sonner';
 
@@ -22,16 +22,14 @@ export default function SupplierDetailPage() {
 
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [surcharges, setSurcharges] = useState<SupplierSurcharge[]>([]);
-  const [payables, setPayables] = useState<Payable[]>([]);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Supplier>>({});
   const [showSurchargeForm, setShowSurchargeForm] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const [supplierRes, surchargesRes, payablesRes] = await Promise.all([
+    const [supplierRes, surchargesRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('id', supplierId).single(),
       supabase.from('supplier_surcharges').select('*').eq('supplier_id', supplierId).order('start_date'),
-      supabase.from('payables').select('*').eq('supplier_id', supplierId).order('due_date', { ascending: false }),
     ]);
 
     if (supplierRes.data) {
@@ -39,7 +37,6 @@ export default function SupplierDetailPage() {
       setEditData(supplierRes.data);
     }
     setSurcharges((surchargesRes.data as SupplierSurcharge[]) || []);
-    setPayables((payablesRes.data as Payable[]) || []);
   }, [supplierId, supabase]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -61,7 +58,9 @@ export default function SupplierDetailPage() {
   }
 
   async function handleDelete() {
-    if (payables.length > 0) {
+    // Check if supplier has any payables before deleting
+    const { count } = await supabase.from('payables').select('id', { count: 'exact', head: true }).eq('supplier_id', supplierId);
+    if (count && count > 0) {
       toast.error('Cannot delete a supplier with linked payables');
       return;
     }
@@ -207,12 +206,80 @@ export default function SupplierDetailPage() {
         </CardContent>
       </Card>
 
+      <SupplierLedger supplierId={supplierId} />
+    </div>
+  );
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function SupplierLedger({ supplierId }: { supplierId: string }) {
+  const [ledger, setLedger] = useState<{
+    summary: { total_owed: number; total_paid: number; outstanding: number };
+    paid_history: any[];
+    upcoming_dues: any[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/suppliers/${supplierId}/ledger`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setLedger(data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [supplierId]);
+
+  if (loading) {
+    return (
       <Card>
-        <CardHeader><CardTitle className="text-lg">Payables</CardTitle></CardHeader>
-        <CardContent>
-          {payables.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No payables</p>
-          ) : (
+        <CardContent className="py-8 text-center">
+          <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!ledger) return null;
+
+  const { summary, paid_history, upcoming_dues } = ledger;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <IndianRupee className="h-4 w-4" />
+            <span className="text-xs">Total Owed</span>
+          </div>
+          <p className="text-2xl font-bold mt-1">
+            {summary.total_owed.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-green-600">
+            <IndianRupee className="h-4 w-4" />
+            <span className="text-xs">Total Paid</span>
+          </div>
+          <p className="text-2xl font-bold mt-1 text-green-700 dark:text-green-400">
+            {summary.total_paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-red-600">
+            <IndianRupee className="h-4 w-4" />
+            <span className="text-xs">Outstanding</span>
+          </div>
+          <p className="text-2xl font-bold mt-1 text-red-700 dark:text-red-400">
+            {summary.outstanding.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
+          </p>
+        </Card>
+      </div>
+
+      {/* Upcoming Dues */}
+      {upcoming_dues.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-lg">Upcoming Dues</CardTitle></CardHeader>
+          <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -223,16 +290,57 @@ export default function SupplierDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {payables.map((p) => (
+                {upcoming_dues.map((p: any) => (
                   <TableRow key={p.id}>
-                    <TableCell>{p.description}</TableCell>
-                    <TableCell className="font-medium">{p.amount.toLocaleString()}</TableCell>
-                    <TableCell>{p.due_date}</TableCell>
+                    <TableCell className="text-sm">{p.description}</TableCell>
+                    <TableCell className="font-medium">
+                      {Number(p.amount).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
+                    </TableCell>
+                    <TableCell className="text-sm">{p.due_date || 'No date'}</TableCell>
                     <TableCell>
-                      <Badge className={p.status === 'paid' ? 'bg-green-100 text-green-700' : p.status === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}>
+                      <Badge className={
+                        p.status === 'overdue' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                        p.status === 'partial' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                        'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                      }>
                         {p.status}
                       </Badge>
                     </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Payment History */}
+      <Card>
+        <CardHeader><CardTitle className="text-lg">Payment History</CardTitle></CardHeader>
+        <CardContent>
+          {paid_history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No payments recorded yet</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Paid Date</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Reference</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paid_history.map((p: any) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-sm">{p.description}</TableCell>
+                    <TableCell className="font-medium">
+                      {Number(p.amount).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
+                    </TableCell>
+                    <TableCell className="text-sm">{p.paid_date || 'N/A'}</TableCell>
+                    <TableCell className="text-sm">{p.payment_mode || 'N/A'}</TableCell>
+                    <TableCell className="text-sm font-mono">{p.reference || 'N/A'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -61,7 +61,7 @@ export function OrganizePackagesDialog({
 
     if (proposal.booking_structure_type === 'full_dmc') {
       // Group all items together
-      const totalCost = bookingItems.reduce((sum, item) => sum + (item.sell_price || 0), 0);
+      const totalCost = bookingItems.reduce((sum, item) => sum + (item.cost_price || item.sell_price || 0), 0);
       organized.push({
         type: 'full_dmc',
         supplier_id: undefined,
@@ -74,7 +74,7 @@ export function OrganizePackagesDialog({
       const otherItems = bookingItems.filter((item) => !item.vendor_name?.toLowerCase().includes('dmc'));
 
       if (dmcItems.length > 0) {
-        const dmcCost = dmcItems.reduce((sum, item) => sum + (item.sell_price || 0), 0);
+        const dmcCost = dmcItems.reduce((sum, item) => sum + (item.cost_price || item.sell_price || 0), 0);
         organized.push({
           type: 'partial_dmc',
           supplier_id: undefined,
@@ -84,7 +84,7 @@ export function OrganizePackagesDialog({
       }
 
       if (otherItems.length > 0) {
-        const otherCost = otherItems.reduce((sum, item) => sum + (item.sell_price || 0), 0);
+        const otherCost = otherItems.reduce((sum, item) => sum + (item.cost_price || item.sell_price || 0), 0);
         organized.push({
           type: 'mixed',
           supplier_id: undefined,
@@ -104,7 +104,7 @@ export function OrganizePackagesDialog({
       });
 
       byVendor.forEach((items) => {
-        const cost = items.reduce((sum, item) => sum + (item.sell_price || 0), 0);
+        const cost = items.reduce((sum, item) => sum + (item.cost_price || item.sell_price || 0), 0);
         organized.push({
           type: 'individual',
           supplier_id: undefined,

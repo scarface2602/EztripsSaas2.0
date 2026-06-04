@@ -1,16 +1,307 @@
-import { requireSuperAdmin } from '@/lib/auth/require-role';
-import { createServiceClient } from '@/lib/supabase/server';
-import type { User } from '@/lib/types/database';
-import { UsersManager } from './users-manager';
+'use client';
 
-export default async function AdminUsersPage() {
-  await requireSuperAdmin();
-  const supabase = createServiceClient();
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowLeft, Save, Loader2, Plus, X } from 'lucide-react';
+import Link from 'next/link';
+import { toast } from 'sonner';
 
-  const { data: users } = await supabase
-    .from('users')
-    .select('*')
-    .order('created_at', { ascending: false });
+interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  role: 'agent' | 'manager' | 'accounts' | 'operations' | 'super_admin';
+  manager_id: string | null;
+  created_at: string;
+}
 
-  return <UsersManager initialUsers={(users || []) as User[]} />;
+type UserRole = 'agent' | 'manager' | 'accounts' | 'operations' | 'super_admin';
+
+export default function UsersManagementPage() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [managers, setManagers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<Partial<User>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<UserRole>('agent');
+  const [newUserManager, setNewUserManager] = useState('');
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/users');
+      if (!res.ok) throw new Error('Failed to load users');
+      const data = await res.json();
+      setUsers(data);
+      setManagers(data.filter((u: User) => u.role === 'manager'));
+    } catch (error) {
+      toast.error('Failed to load users');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (user: User) => {
+    setEditingId(user.id);
+    setEditData({ ...user });
+  };
+
+  const handleSave = async () => {
+    if (!editingId) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/users/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: editData.role,
+          manager_id: editData.role === 'agent' ? editData.manager_id : null,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to update user');
+
+      toast.success('User updated successfully');
+      setEditingId(null);
+      await fetchUsers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update user');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (!newUserEmail || !newUserName) {
+      toast.error('Email and name are required');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newUserEmail,
+          full_name: newUserName,
+          role: newUserRole,
+          manager_id: newUserRole === 'agent' ? newUserManager : null,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to create user');
+      }
+
+      toast.success('User created successfully');
+      setShowAddForm(false);
+      setNewUserEmail('');
+      setNewUserName('');
+      setNewUserRole('agent');
+      setNewUserManager('');
+      await fetchUsers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create user');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold">User Management</h1>
+          <p className="text-muted-foreground">Manage user roles and manager assignments</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setShowAddForm(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add User
+          </Button>
+          <Link href="/admin" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Link>
+        </div>
+      </div>
+
+      {showAddForm && (
+        <Card className="border-blue-200 bg-blue-50 dark:bg-slate-900 dark:border-slate-700">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Create New User</CardTitle>
+              <button onClick={() => setShowAddForm(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="dark:text-slate-200">Email *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="user@example.com"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="full_name" className="dark:text-slate-200">Full Name *</Label>
+                <Input
+                  id="full_name"
+                  placeholder="John Doe"
+                  value={newUserName}
+                  onChange={(e) => setNewUserName(e.target.value)}
+                  className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="role" className="dark:text-slate-200">Role *</Label>
+                <Select value={newUserRole} onValueChange={(value) => { setNewUserRole(value as UserRole); setNewUserManager(''); }}>
+                  <SelectTrigger className="dark:bg-slate-800 dark:border-slate-600 dark:text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="agent">Agent</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="accounts">Accounts</SelectItem>
+                    <SelectItem value="operations">Operations</SelectItem>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {newUserRole === 'agent' && (
+                <div className="space-y-2">
+                  <Label htmlFor="manager" className="dark:text-slate-200">Manager (Optional)</Label>
+                  <Select value={newUserManager} onValueChange={(v) => setNewUserManager(v || '')}>
+                    <SelectTrigger className="dark:bg-slate-800 dark:border-slate-600 dark:text-white">
+                      <SelectValue placeholder="Select manager" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">No manager</SelectItem>
+                      {managers.map((mgr) => (
+                        <SelectItem key={mgr.id} value={mgr.id}>{mgr.full_name || mgr.email}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowAddForm(false)} className="h-9">Cancel</Button>
+              <Button onClick={handleAddUser} disabled={saving} className="h-9">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                Create User
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="dark:bg-slate-900 dark:border-slate-700">
+        <CardHeader>
+          <CardTitle>All Users</CardTitle>
+          <CardDescription>Assign roles and managers to users</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b dark:border-slate-700">
+                <tr>
+                  <th className="text-left py-3 px-4 font-semibold">Name</th>
+                  <th className="text-left py-3 px-4 font-semibold">Email</th>
+                  <th className="text-left py-3 px-4 font-semibold">Role</th>
+                  <th className="text-left py-3 px-4 font-semibold">Manager</th>
+                  <th className="text-left py-3 px-4 font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id} className="border-b dark:border-slate-700 hover:bg-muted/50 dark:hover:bg-slate-800">
+                    <td className="py-3 px-4">{user.full_name || 'N/A'}</td>
+                    <td className="py-3 px-4 text-muted-foreground">{user.email}</td>
+                    <td className="py-3 px-4">
+                      {editingId === user.id ? (
+                        <Select value={editData.role || ''} onValueChange={(value) => setEditData({ ...editData, role: value as UserRole, manager_id: value !== 'agent' ? null : editData.manager_id })}>
+                          <SelectTrigger className="w-32 dark:bg-slate-800 dark:border-slate-600 dark:text-white"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="agent">Agent</SelectItem>
+                            <SelectItem value="manager">Manager</SelectItem>
+                            <SelectItem value="accounts">Accounts</SelectItem>
+                            <SelectItem value="operations">Operations</SelectItem>
+                            <SelectItem value="super_admin">Super Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">{user.role}</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {editingId === user.id && editData.role === 'agent' ? (
+                        <Select value={editData.manager_id ?? ''} onValueChange={(value) => setEditData({ ...editData, manager_id: value })}>
+                          <SelectTrigger className="w-40 dark:bg-slate-800 dark:border-slate-600 dark:text-white"><SelectValue placeholder="Select manager" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">No manager</SelectItem>
+                            {managers.map((mgr) => (
+                              <SelectItem key={mgr.id} value={mgr.id}>{mgr.full_name || mgr.email}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : user.role === 'agent' ? (
+                        <span className="text-muted-foreground">{users.find((u) => u.id === user.manager_id)?.full_name || 'Unassigned'}</span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {editingId === user.id ? (
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={handleSave} disabled={saving} className="h-8">
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <>
+                              <Save className="h-4 w-4 mr-1" />
+                              Save
+                            </>}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditingId(null)} className="h-8">Cancel</Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="ghost" onClick={() => handleEdit(user)} className="h-8">Edit</Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }

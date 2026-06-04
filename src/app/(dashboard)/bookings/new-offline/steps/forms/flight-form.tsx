@@ -40,7 +40,7 @@ export default function FlightForm({
       const { data } = await supabase
         .from('suppliers')
         .select('id, name')
-        .eq('type', 'flight')
+        .eq('type', 'airline')
         .order('name');
       if (data) setSuppliers(data);
     };
@@ -203,11 +203,11 @@ export default function FlightForm({
       <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Supplier</CardTitle>
-          <CardDescription>Select supplier for internal tracking (optional)</CardDescription>
+          <CardDescription>Select supplier for internal tracking</CardDescription>
         </CardHeader>
         <CardContent>
           <SupplierSelect
-            type="flight"
+            type="airline"
             suppliers={suppliers}
             value={((itemData.supplier_id as string) || '')}
             onChange={(id) => handleChange('supplier_id', id)}

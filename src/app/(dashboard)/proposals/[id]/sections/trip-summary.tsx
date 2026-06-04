@@ -16,9 +16,10 @@ import { CURRENCY_OPTIONS } from '@/lib/utils/pricing';
 interface TripSummarySectionProps {
   proposal: Proposal;
   updateProposal: (updates: Partial<Proposal>) => void;
+  setHotels?: (hotels: Hotel[]) => void;
 }
 
-export function TripSummarySection({ proposal, updateProposal }: TripSummarySectionProps) {
+export function TripSummarySection({ proposal, updateProposal, setHotels }: TripSummarySectionProps) {
   const router = useRouter();
   const supabase = createClient();
   const [naFields, setNaFields] = useState<Record<string, boolean>>({});
@@ -89,18 +90,23 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
       // Fetch existing hotels for this proposal
       const { data: existingHotels } = await supabase
         .from('hotels')
-        .select('id, city, sort_order')
+        .select('id, name, city, sort_order')
         .eq('proposal_id', proposal.id);
-      const existing = (existingHotels || []) as Pick<Hotel, 'id' | 'city' | 'sort_order'>[];
+      const existing = (existingHotels || []) as Pick<Hotel, 'id' | 'name' | 'city' | 'sort_order'>[];
 
       let created = 0;
       let updated = 0;
       let nextSort = existing.reduce((m, h) => Math.max(m, h.sort_order ?? 0), -1) + 1;
+      const matched = new Set<string>(); // track matched hotel IDs to avoid double-matching
 
       for (const c of dated) {
         if (!c.city.trim()) continue;
-        const match = existing.find(h => (h.city || '').trim().toLowerCase() === c.city.trim().toLowerCase());
+        const match = existing.find(h =>
+          !matched.has(h.id) &&
+          (h.city || '').trim().toLowerCase() === c.city.trim().toLowerCase()
+        );
         if (match) {
+          matched.add(match.id);
           await supabase
             .from('hotels')
             .update({ check_in: c.check_in, check_out: c.check_out })
@@ -109,7 +115,7 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
         } else {
           await supabase.from('hotels').insert({
             proposal_id: proposal.id,
-            name: 'New Hotel',
+            name: `Hotel in ${c.city}`,
             city: c.city,
             check_in: c.check_in,
             check_out: c.check_out,
@@ -119,7 +125,29 @@ export function TripSummarySection({ proposal, updateProposal }: TripSummarySect
         }
       }
 
-      setApplyMsg(`Applied to hotels: ${created} created, ${updated} updated`);
+      // Clean up unmatched placeholder hotels (duplicates from previous runs)
+      const unmatched = existing.filter(h => !matched.has(h.id));
+      let deleted = 0;
+      for (const h of unmatched) {
+        const isPlaceholder = h.name === 'New Hotel' || (h.name || '').startsWith('Hotel in ');
+        const cityInStructure = dated.some(c => c.city.trim().toLowerCase() === (h.city || '').trim().toLowerCase());
+        if (isPlaceholder || !cityInStructure) {
+          await supabase.from('hotels').delete().eq('id', h.id);
+          deleted++;
+        }
+      }
+
+      setApplyMsg(`Applied to hotels: ${created} created, ${updated} updated${deleted > 0 ? `, ${deleted} duplicates removed` : ''}`);
+
+      // Re-fetch hotels and update client state directly
+      const { data: freshHotels } = await supabase
+        .from('hotels')
+        .select('*')
+        .eq('proposal_id', proposal.id)
+        .order('sort_order');
+      if (freshHotels && setHotels) {
+        setHotels(freshHotels as Hotel[]);
+      }
       router.refresh();
     } finally {
       setApplying(false);

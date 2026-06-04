@@ -116,7 +116,16 @@
       "Bash(rm -rf src/app/api/proposals/[proposalId])",
       "Bash(cp src/app/api/proposals/[proposalId]/booking-items/route.ts src/app/api/proposals/[id]/booking-items/route.ts)",
       "Bash(pkill -f \"next dev\")",
-      "Bash(pkill -9 -f \"next dev\")"
+      "Bash(pkill -9 -f \"next dev\")",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(xargs -0 sed -i '' 's/{mgr\\\\.full_name}/{mgr.full_name || mgr.email || '\"'\"'Manager'\"'\"'}/g')",
+      "Bash(xargs -0 sed -i '' 's/{mgr\\\\.full_name || mgr\\\\.email || '\"'\"'Manager'\"'\"'}/{mgr.full_name || mgr.email}/g')",
+      "Bash(git diff:*)",
+      "WebSearch",
+      "Bash(npx supabase:*)",
+      "Read(//Users/sudeepsharma/Desktop/EztripsWebsite/src/**)",
+      "Read(//Users/sudeepsharma/Desktop/eztripswebsite/src/**)",
+      "Read(//Users/sudeepsharma/Desktop/**)"
     ]
   }
 }

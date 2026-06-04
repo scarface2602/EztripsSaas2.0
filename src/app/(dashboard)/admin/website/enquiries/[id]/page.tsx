@@ -13,12 +13,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import {
-  ArrowLeft, Phone, PhoneIncoming, PhoneMissed, Mail, MessageSquare,
+  ArrowLeft, Phone, PhoneIncoming, PhoneMissed, Mail, MessageSquare, Send,
   Calendar, FileText, Plus, CheckCircle2, Flame, Thermometer,
   Snowflake, AlertCircle, Users,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+import { SendToSupplierModal } from '@/components/send-to-supplier-modal';
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'New', color: 'bg-blue-100 text-blue-700' },
@@ -104,6 +105,11 @@ export default function EnquiryDetailPage() {
   const [actFollowUpDate, setActFollowUpDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Send to supplier
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [supplierRequests, setSupplierRequests] = useState<any[]>([]);
+
   // Loss reason
   const [showLossDialog, setShowLossDialog] = useState(false);
   const [lossReason, setLossReason] = useState('');
@@ -111,16 +117,18 @@ export default function EnquiryDetailPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [eRes, aRes, pRes, uRes] = await Promise.all([
+    const [eRes, aRes, pRes, uRes, srRes] = await Promise.all([
       supabase.from('website_enquiries').select('*').eq('id', id).single(),
       fetch(`/api/website/cms/enquiries/${id}/activities`).then(r => r.json()),
       supabase.from('proposals').select('id, title, status, destination, created_at').eq('enquiry_id', id).order('created_at', { ascending: false }),
       supabase.from('users').select('id, full_name, email'),
+      fetch(`/api/enquiries/send-to-supplier?enquiry_id=${id}`).then(r => r.json()),
     ]);
     setEnquiry(eRes.data);
     setActivities(Array.isArray(aRes) ? aRes : []);
     setProposals(pRes.data || []);
     setTeamMembers(uRes.data || []);
+    setSupplierRequests(Array.isArray(srRes) ? srRes : []);
     setLoading(false);
   }, [supabase, id]);
 
@@ -228,9 +236,14 @@ export default function EnquiryDetailPage() {
             </p>
           </div>
         </div>
-        <Button onClick={() => router.push(`/proposals/new?client_id=${enquiry.client_id}&enquiry_id=${id}`)}>
-          <FileText className="h-4 w-4 mr-2" /> Create Proposal
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowSupplierModal(true)}>
+            <Send className="h-4 w-4 mr-2" /> Send to Supplier
+          </Button>
+          <Button onClick={() => router.push(`/proposals/new?client_id=${enquiry.client_id}&enquiry_id=${id}`)}>
+            <FileText className="h-4 w-4 mr-2" /> Create Proposal
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
@@ -399,6 +412,54 @@ export default function EnquiryDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Contacted Suppliers */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Contacted Suppliers ({supplierRequests.length})</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => setShowSupplierModal(true)}>
+                  <Send className="h-3.5 w-3.5 mr-1" /> Send
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {supplierRequests.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No suppliers contacted yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {supplierRequests.map((sr: { id: string; suppliers?: { name: string }; email_to: string; response_status: string; sent_at: string }) => (
+                    <div key={sr.id} className="flex items-center justify-between p-2 border rounded text-sm">
+                      <div>
+                        <p className="font-medium">{sr.suppliers?.name || 'Unknown'}</p>
+                        <p className="text-xs text-muted-foreground">{sr.email_to} &bull; {format(new Date(sr.sent_at), 'dd MMM HH:mm')}</p>
+                      </div>
+                      <Select
+                        value={sr.response_status}
+                        onValueChange={async (v) => {
+                          if (!v) return;
+                          await fetch('/api/enquiries/send-to-supplier', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: sr.id, response_status: v }),
+                          });
+                          fetchAll();
+                        }}
+                      >
+                        <SelectTrigger className="w-[120px] h-7 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="responded">Responded</SelectItem>
+                          <SelectItem value="declined">Declined</SelectItem>
+                          <SelectItem value="no_response">No Response</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Right Column: Activity Timeline */}
@@ -542,6 +603,15 @@ export default function EnquiryDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Send to Supplier Modal */}
+      <SendToSupplierModal
+        open={showSupplierModal}
+        onOpenChange={setShowSupplierModal}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        enquiry={{ id, ...enquiry } as any}
+        onSuccess={fetchAll}
+      />
 
       {/* Loss Reason Dialog */}
       {showLossDialog && (

@@ -216,6 +216,19 @@ export function ProposalEditor({
       headers: { 'Content-Type': 'application/json' },
     });
 
+    // Re-fetch proposal to update client state (router.refresh alone won't update useState)
+    const { data: freshProposal } = await supabase
+      .from('proposals')
+      .select('*')
+      .eq('id', proposal.id)
+      .single();
+    if (freshProposal) {
+      setProposal(freshProposal as Proposal);
+      if (freshProposal.share_token) {
+        setShareUrl(`${window.location.origin}/p/${freshProposal.share_token}`);
+      }
+    }
+    setHasUnsavedChanges(false);
     router.refresh();
     setSaving(false);
   }
@@ -412,7 +425,7 @@ export function ProposalEditor({
             <CoverPageSection proposal={proposal} updateProposal={updateProposal} />
           )}
           {activeTab === 'summary' && (
-            <TripSummarySection proposal={proposal} updateProposal={updateProposal} />
+            <TripSummarySection proposal={proposal} updateProposal={updateProposal} setHotels={setHotels} />
           )}
           {activeTab === 'hotels' && (
             <HotelsSection

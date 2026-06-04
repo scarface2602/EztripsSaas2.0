@@ -23,7 +23,8 @@ export interface User {
   id: string;
   email: string;
   full_name: string;
-  role: 'agent' | 'manager' | 'super_admin';
+  role: 'agent' | 'manager' | 'accounts' | 'operations' | 'super_admin';
+  manager_id: string | null;
   agency_name: string | null;
   logo_url: string | null;
   whatsapp_number: string | null;

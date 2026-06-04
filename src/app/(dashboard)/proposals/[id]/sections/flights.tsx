@@ -223,7 +223,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
               </div>
 
               {/* Layover section */}
-              <div className="space-y-3 p-3 border rounded-md bg-slate-50">
+              <div className="space-y-3 p-3 border rounded-md bg-slate-50 dark:bg-slate-800/50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Switch
@@ -236,7 +236,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                         }
                       }}
                     />
-                    <Label className="text-sm font-medium">Has Layover?</Label>
+                    <Label className="text-sm font-medium dark:text-slate-200">Has Layover?</Label>
                   </div>
                   {hasLayovers && (
                     <Button size="sm" variant="outline" onClick={() => addLayover(index)}>
@@ -245,9 +245,9 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                   )}
                 </div>
                 {hasLayovers && layovers.map((layover, li) => (
-                  <div key={li} className="grid grid-cols-5 gap-2 items-end p-2 bg-white border rounded">
+                  <div key={li} className="grid grid-cols-5 gap-2 items-end p-2 bg-white dark:bg-slate-800 border rounded">
                     <div className="space-y-1">
-                      <Label className="text-xs">Layover City</Label>
+                      <Label className="text-xs dark:text-slate-300">Layover City</Label>
                       <Input
                         value={layover.city}
                         onChange={(e) => updateLayover(index, li, { city: e.target.value })}
@@ -256,7 +256,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Airport Code</Label>
+                      <Label className="text-xs dark:text-slate-300">Airport Code</Label>
                       <Input
                         value={layover.airport_code}
                         onChange={(e) => updateLayover(index, li, { airport_code: e.target.value.toUpperCase() })}
@@ -266,7 +266,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Hours</Label>
+                      <Label className="text-xs dark:text-slate-300">Hours</Label>
                       <Input
                         type="number"
                         min={0}
@@ -277,7 +277,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Minutes</Label>
+                      <Label className="text-xs dark:text-slate-300">Minutes</Label>
                       <Input
                         type="number"
                         min={0}
