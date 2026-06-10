@@ -96,13 +96,22 @@ export function parseTripId(tripId: string): {
   date: string;
   sequence: string;
 } | null {
-  const match = tripId.match(/^[A-Za-z]{2,10}[-/]?(PKG|HTL|FLT|VSA|TRF|MISC|[A-Za-z]{1,5})[-/]?(\d{6,8})[-/]?(\d{2,})$/);
+  const compact = tripId.replace(/[-/]/g, '');
+  const match = compact.match(/^([A-Za-z]+)(\d+)$/);
   if (!match) return null;
-  return {
-    serviceType: match[1],
-    date: match[2],
-    sequence: match[3],
-  };
+  const [, letters, digits] = match;
+
+  // Date is YYMMDD (6) or YYYYMMDD (8) followed by a sequence of >= 2 digits.
+  const dateLen = digits.length >= 10 ? 8 : 6;
+  if (digits.length < dateLen + 2) return null;
+  const date = digits.slice(0, dateLen);
+  const sequence = digits.slice(dateLen);
+
+  const upper = letters.toUpperCase();
+  const knownTypes = ['MISC', 'PKG', 'HTL', 'FLT', 'VSA', 'TRF'];
+  const serviceType = knownTypes.find(t => upper.endsWith(t)) ?? upper.slice(-3);
+
+  return { serviceType, date, sequence };
 }
 
 /**

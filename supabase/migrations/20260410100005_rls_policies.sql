@@ -223,20 +223,20 @@ CREATE POLICY "content_blocks_all" ON proposal_content_blocks
   WITH CHECK (is_super_admin() OR EXISTS (SELECT 1 FROM public.proposals WHERE proposals.id = proposal_content_blocks.proposal_id AND proposals.created_by = auth.uid()));
 
 -- 15. receivables
-ALTER TABLE receivables ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "receivables_all" ON receivables;
-CREATE POLICY "receivables_all" ON receivables
-  FOR ALL TO authenticated
-  USING (is_super_admin() OR EXISTS (SELECT 1 FROM public.proposals WHERE proposals.id = receivables.proposal_id AND proposals.created_by = auth.uid()))
-  WITH CHECK (is_super_admin() OR EXISTS (SELECT 1 FROM public.proposals WHERE proposals.id = receivables.proposal_id AND proposals.created_by = auth.uid()));
+-- ALTER TABLE receivables ENABLE ROW LEVEL SECURITY;
+-- DROP POLICY IF EXISTS "receivables_all" ON receivables;
+-- CREATE POLICY "receivables_all" ON receivables
+--   FOR ALL TO authenticated
+--   USING (is_super_admin() OR EXISTS (SELECT 1 FROM public.proposals WHERE proposals.id = receivables.proposal_id AND proposals.created_by = auth.uid()))
+--   WITH CHECK (is_super_admin() OR EXISTS (SELECT 1 FROM public.proposals WHERE proposals.id = receivables.proposal_id AND proposals.created_by = auth.uid()));
 
 -- 16. payables
-ALTER TABLE payables ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "payables_all" ON payables;
-CREATE POLICY "payables_all" ON payables
-  FOR ALL TO authenticated
-  USING (is_super_admin() OR EXISTS (SELECT 1 FROM public.proposals WHERE proposals.id = payables.proposal_id AND proposals.created_by = auth.uid()))
-  WITH CHECK (is_super_admin() OR EXISTS (SELECT 1 FROM public.proposals WHERE proposals.id = payables.proposal_id AND proposals.created_by = auth.uid()));
+-- ALTER TABLE payables ENABLE ROW LEVEL SECURITY;
+-- DROP POLICY IF EXISTS "payables_all" ON payables;
+-- CREATE POLICY "payables_all" ON payables
+--   FOR ALL TO authenticated
+--   USING (is_super_admin() OR EXISTS (SELECT 1 FROM public.proposals WHERE proposals.id = payables.proposal_id AND proposals.created_by = auth.uid()))
+--   WITH CHECK (is_super_admin() OR EXISTS (SELECT 1 FROM public.proposals WHERE proposals.id = payables.proposal_id AND proposals.created_by = auth.uid()));
 
 -- 17. forex_locks
 ALTER TABLE forex_locks ENABLE ROW LEVEL SECURITY;

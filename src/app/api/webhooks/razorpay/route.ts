@@ -21,7 +21,9 @@ export async function POST(request: NextRequest) {
     .update(body)
     .digest('hex');
 
-  if (signature !== expectedSignature) {
+  const sigBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(expectedSignature);
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 
@@ -34,6 +36,24 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServiceClient();
+
+    // Idempotency: Razorpay retries deliveries; claim the event before any writes.
+    // x-razorpay-event-id is unique per event; fall back to event:payment id.
+    const eventId = request.headers.get('x-razorpay-event-id') || `${event.event}:${payment.id}`;
+    const { error: claimError } = await supabase.from('webhook_events').insert({
+      provider: 'razorpay',
+      event_id: eventId,
+      event_type: event.event,
+      payload: { payment_id: payment.id, amount: payment.amount, notes: payment.notes || {} },
+    });
+    if (claimError) {
+      if (claimError.code === '23505') {
+        return NextResponse.json({ status: 'duplicate', event_id: eventId });
+      }
+      console.error('webhook_events claim failed:', claimError);
+      // Fail closed: let Razorpay retry rather than risk an unrecorded credit.
+      return NextResponse.json({ error: 'Event claim failed' }, { status: 500 });
+    }
     const amount = payment.amount / 100; // Razorpay sends amount in paise
     const paymentId = payment.id as string;
     const notes = payment.notes || {};

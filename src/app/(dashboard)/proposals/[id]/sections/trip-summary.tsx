@@ -14,6 +14,7 @@ import { AlertTriangle, Loader2, Plus, Trash2 } from 'lucide-react';
 import { CURRENCY_OPTIONS } from '@/lib/utils/pricing';
 import { CreatableCombobox } from '@/components/ui/creatable-combobox';
 import { useLookup } from '@/lib/hooks/use-lookup';
+import { useCityOptions, addCityToLookup } from '@/lib/hooks/use-city-options';
 
 interface TripSummarySectionProps {
   proposal: Proposal;
@@ -26,6 +27,7 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
   const supabase = createClient();
   const [naFields, setNaFields] = useState<Record<string, boolean>>({});
   const { items: vehicleTypes } = useLookup('vehicle_type');
+  const cityOptions = useCityOptions();
 
   const vehicleOptions = vehicleTypes.length > 0
     ? vehicleTypes.map(v => ({ value: v.value, label: v.label }))
@@ -273,33 +275,8 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
               <CreatableCombobox
                 value={proposal.destination || ''}
                 onChange={(v) => updateProposal({ destination: v })}
-                options={[
-                  { value: 'delhi', label: 'Delhi' },
-                  { value: 'mumbai', label: 'Mumbai' },
-                  { value: 'jaipur', label: 'Jaipur' },
-                  { value: 'udaipur', label: 'Udaipur' },
-                  { value: 'goa', label: 'Goa' },
-                  { value: 'kerala', label: 'Kerala' },
-                  { value: 'shimla', label: 'Shimla' },
-                  { value: 'manali', label: 'Manali' },
-                  { value: 'kochi', label: 'Kochi' },
-                  { value: 'coorg', label: 'Coorg' },
-                  { value: 'agra', label: 'Agra' },
-                  { value: 'varanasi', label: 'Varanasi' },
-                  { value: 'rishikesh', label: 'Rishikesh' },
-                  { value: 'darjeeling', label: 'Darjeeling' },
-                  { value: 'andaman', label: 'Andaman' },
-                  { value: 'leh-ladakh', label: 'Leh-Ladakh' },
-                  { value: 'srinagar', label: 'Srinagar' },
-                  { value: 'dubai', label: 'Dubai' },
-                  { value: 'singapore', label: 'Singapore' },
-                  { value: 'thailand', label: 'Thailand' },
-                  { value: 'bali', label: 'Bali' },
-                  { value: 'maldives', label: 'Maldives' },
-                  { value: 'sri-lanka', label: 'Sri Lanka' },
-                  { value: 'vietnam', label: 'Vietnam' },
-                  { value: 'europe', label: 'Europe' },
-                ]}
+                options={cityOptions}
+                onCreateNew={addCityToLookup}
                 placeholder="Search or type destination..."
               />
             </div>
@@ -447,33 +424,8 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
                 <CreatableCombobox
                   value={city.city}
                   onChange={(v) => updateCity(i, { city: v })}
-                  options={[
-                    { value: 'delhi', label: 'Delhi' },
-                    { value: 'mumbai', label: 'Mumbai' },
-                    { value: 'jaipur', label: 'Jaipur' },
-                    { value: 'udaipur', label: 'Udaipur' },
-                    { value: 'goa', label: 'Goa' },
-                    { value: 'kerala', label: 'Kerala' },
-                    { value: 'shimla', label: 'Shimla' },
-                    { value: 'manali', label: 'Manali' },
-                    { value: 'kochi', label: 'Kochi' },
-                    { value: 'coorg', label: 'Coorg' },
-                    { value: 'agra', label: 'Agra' },
-                    { value: 'varanasi', label: 'Varanasi' },
-                    { value: 'rishikesh', label: 'Rishikesh' },
-                    { value: 'darjeeling', label: 'Darjeeling' },
-                    { value: 'andaman', label: 'Andaman' },
-                    { value: 'leh-ladakh', label: 'Leh-Ladakh' },
-                    { value: 'srinagar', label: 'Srinagar' },
-                    { value: 'dubai', label: 'Dubai' },
-                    { value: 'singapore', label: 'Singapore' },
-                    { value: 'thailand', label: 'Thailand' },
-                    { value: 'bali', label: 'Bali' },
-                    { value: 'maldives', label: 'Maldives' },
-                    { value: 'sri-lanka', label: 'Sri Lanka' },
-                    { value: 'vietnam', label: 'Vietnam' },
-                    { value: 'europe', label: 'Europe' },
-                  ]}
+                  options={cityOptions}
+                  onCreateNew={addCityToLookup}
                   placeholder="Select city..."
                 />
               </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { generateTripIdFromDb } from '@/lib/utils/generateId';
 import { getTripIdConfig } from '@/lib/utils/getTripIdConfig';
+import { ensureTripFolder, appendProposalToTrip } from '@/lib/trips';
 
 export async function POST(request: NextRequest) {
   const authClient = await createClient();
@@ -69,12 +70,33 @@ export async function POST(request: NextRequest) {
     return d.toISOString().split('T')[0];
   }
 
-  // Fetch org config for trip ID format
-  const { data: cloneUserData } = await supabase.from('users').select('org_id').eq('id', user.id).single();
-  const tripIdConfig = await getTripIdConfig(supabase, cloneUserData?.org_id);
+  // Cloning for a lead keeps the lead's trip_id (same trip, alternate proposal);
+  // cloning without an enquiry is a genuinely new trip and gets a fresh ID.
+  let cloneTripId: string | null = null;
+  if (enquiry_id) {
+    const { data: enquiry } = await supabase
+      .from('website_enquiries')
+      .select('trip_id')
+      .eq('id', enquiry_id)
+      .single();
+    cloneTripId = enquiry?.trip_id || null;
+  }
+  if (!cloneTripId) {
+    const { data: cloneUserData } = await supabase.from('users').select('org_id').eq('id', user.id).single();
+    const tripIdConfig = await getTripIdConfig(supabase, cloneUserData?.org_id);
+    cloneTripId = await generateTripIdFromDb(supabase, 'PKG', tripIdConfig);
+  }
 
-  // Generate new trip_id for cloned proposal (clone = new trip)
-  const cloneTripId = await generateTripIdFromDb(supabase, 'PKG', tripIdConfig);
+  await ensureTripFolder(supabase, cloneTripId, {
+    status: 'PROPOSING',
+    client_id: client_id || null,
+    destination: destination || source.destination || null,
+    travel_start: travel_start || source.travel_start || null,
+    travel_end: travel_end || source.travel_end || null,
+    pax_adults: pax_adults ?? source.pax_adults ?? 1,
+    pax_children: pax_children ?? source.pax_children ?? 0,
+    created_by: user.id,
+  });
 
   // Create new proposal
   const { data: newProposal, error: createErr } = await supabase
@@ -112,6 +134,7 @@ export async function POST(request: NextRequest) {
   }
 
   const newId = newProposal.id;
+  await appendProposalToTrip(supabase, cloneTripId, newId);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function stripMeta(row: any) {

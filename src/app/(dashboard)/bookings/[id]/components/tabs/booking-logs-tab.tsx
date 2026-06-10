@@ -15,7 +15,7 @@ export function BookingLogsTab() {
         <div className="space-y-3">
           {logs.length === 0 ? (
             <p className="text-center py-6 text-muted-foreground">No activity yet</p>
-          ) : logs.map((l: any) => (
+          ) : logs.map((l) => (
             <div key={l.id} className="flex items-start gap-3 text-sm border-b pb-2 last:border-0">
               <CheckCircle2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
               <div className="flex-1">

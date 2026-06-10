@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import {
   FileText, Users, Clock, ArrowDownLeft, ArrowUpRight, Plus,
-  TrendingUp, Search, Edit, Copy, ExternalLink, ChevronDown, ChevronRight,
-  Inbox, ArrowRight, CalendarCheck, CheckCircle2, HelpCircle, Wallet,
+  TrendingUp, Search, Edit, Copy, ExternalLink,
+  Inbox, ArrowRight, CalendarCheck, CheckCircle2, Wallet,
   Activity, MapPin, Send, Eye, XCircle, Calendar, RefreshCw
 } from 'lucide-react';
 import { differenceInHours, format } from 'date-fns';
@@ -18,14 +18,6 @@ import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 import type { Proposal } from '@/lib/types/database';
 import type { DashboardEnquiry, FollowUpEnquiry } from './page';
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-700',
-  sent: 'bg-blue-100 text-blue-700',
-  viewed: 'bg-yellow-100 text-yellow-700',
-  confirmed: 'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-700',
-};
 
 const STATUS_ORDER = ['sent', 'viewed', 'draft', 'confirmed', 'cancelled'];
 const STATUS_LABELS: Record<string, string> = {
@@ -36,7 +28,7 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
-const STATUS_CONFIG: Record<string, { icon: any, color: string, bg: string, text: string }> = {
+const STATUS_CONFIG: Record<string, { icon: React.ComponentType<{ className?: string }>, color: string, bg: string, text: string }> = {
   draft: { icon: Edit, color: 'text-slate-700', bg: 'text-slate-600', text: 'text-slate-500' },
   sent: { icon: Send, color: 'text-blue-600', bg: 'text-blue-600', text: 'text-slate-500' },
   viewed: { icon: Eye, color: 'text-purple-600', bg: 'text-purple-600', text: 'text-slate-500' },
@@ -58,10 +50,6 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [search, setSearch] = useState('');
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
-    confirmed: true,
-    cancelled: true,
-  });
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [followUps, setFollowUps] = useState(todayFollowUps);
@@ -80,15 +68,6 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
     );
   }, [allProposals, search]);
 
-  const grouped = useMemo(() => {
-    const groups: Record<string, Proposal[]> = {};
-    STATUS_ORDER.forEach(s => { groups[s] = []; });
-    filtered.forEach(p => {
-      if (p.status in groups) groups[p.status].push(p);
-    });
-    return groups;
-  }, [filtered]);
-
   const statusCounts: Record<string, number> = {};
   STATUS_ORDER.forEach(s => { statusCounts[s] = allProposals.filter(p => p.status === s).length; });
 
@@ -101,10 +80,6 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
     const landHrs = p.land_expires_at ? differenceInHours(new Date(p.land_expires_at), now) : 999;
     return flightHrs < 48 || landHrs < 48;
   });
-
-  function toggleGroup(status: string) {
-    setCollapsedGroups(prev => ({ ...prev, [status]: !prev[status] }));
-  }
 
   async function handleCopyLink(p: Proposal) {
     if (!p.share_token) return;
@@ -124,8 +99,8 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
       if (!res.ok) throw new Error('Failed to revalidate');
       toast.success('Proposal prices revalidated for 24h');
       router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to revalidate');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to revalidate');
     } finally {
       setRevalidating(null);
     }

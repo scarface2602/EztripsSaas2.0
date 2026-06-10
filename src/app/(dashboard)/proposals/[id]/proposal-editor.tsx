@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Save, Upload, Undo2, Eye, ArrowLeft, ArrowRight, AlertTriangle, History, ClipboardList, Plus, Trash2, Sparkles, Search, ChevronRight, Download, Share2 } from 'lucide-react';
+import { Save, Upload, Undo2, Eye, ArrowLeft, ArrowRight, AlertTriangle, History, Plus, Trash2, Sparkles, Search, ChevronRight, Download, Share2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 
@@ -235,7 +235,37 @@ export function ProposalEditor({
   // ── Draft save function ────────────────────────────────────
   const saveDraftRef = useRef<() => Promise<void>>();
 
+  // Optimistic locking: remember the row version we loaded; refuse to save
+  // over someone else's edits (another tab, another teammate).
+  const lastKnownUpdatedAt = useRef<string | null>((initialProposal.updated_at as string) || null);
+  const [saveConflict, setSaveConflict] = useState(false);
+
+  const [restoringVersion, setRestoringVersion] = useState<string | null>(null);
+
+  const handleRestoreVersion = async (versionId: string, versionNumber: number) => {
+    if (!confirm(`Restore V${versionNumber} as your working copy? Your current unsaved edits will be replaced.`)) return;
+    setRestoringVersion(versionId);
+    try {
+      const res = await fetch(`/api/proposals/${initialProposal.id}/restore-version`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version_id: versionId }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || 'Failed to restore version');
+        return;
+      }
+      window.location.reload();
+    } catch {
+      alert('Failed to restore version');
+    } finally {
+      setRestoringVersion(null);
+    }
+  };
+
   const saveDraft = useCallback(async () => {
+    if (saveConflict) return;
     setSaving(true);
 
     const v = getValues();
@@ -255,7 +285,7 @@ export function ProposalEditor({
       tcs_amount_override: v.tcsAmountOverride,
     };
 
-    await supabase.from('proposals').update({
+    let query = supabase.from('proposals').update({
       draft_data: draftData,
       draft_differs_from_published: v.proposal.status !== 'draft',
       ...(v.proposal.status === 'draft' ? {
@@ -292,9 +322,21 @@ export function ProposalEditor({
         trip_cities: v.proposal.trip_cities,
       } : {}),
     }).eq('id', v.proposal.id);
+    if (lastKnownUpdatedAt.current) {
+      query = query.eq('updated_at', lastKnownUpdatedAt.current);
+    }
+    const { data: savedRows } = await query.select('updated_at');
+
+    if (!savedRows || savedRows.length === 0) {
+      // Row changed under us — someone else saved since we loaded.
+      setSaveConflict(true);
+      setSaving(false);
+      return;
+    }
+    lastKnownUpdatedAt.current = savedRows[0].updated_at as string;
 
     setSaving(false);
-  }, [getValues, supabase, clientTotal, pricingBreakdown]);
+  }, [getValues, supabase, clientTotal, pricingBreakdown, saveConflict]);
 
   saveDraftRef.current = saveDraft;
 
@@ -385,6 +427,17 @@ export function ProposalEditor({
   return (
     <FormProvider {...form}>
       <div className="space-y-4 w-full max-w-none pb-24">
+        {saveConflict && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <span className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              This proposal was modified elsewhere (another tab or teammate). Auto-save is paused so nothing gets overwritten.
+            </span>
+            <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+              Reload latest
+            </Button>
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-3">
@@ -429,14 +482,30 @@ export function ProposalEditor({
                     {versions.length === 0 ? (
                       <p className="px-3 py-3 text-xs text-muted-foreground">No previous versions</p>
                     ) : (
-                      versions.map((v) => (
-                        <div key={v.id as string} className="px-3 py-2 flex items-center justify-between hover:bg-muted/50 border-t">
-                          <span className="text-sm font-medium">V{v.version as number}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {v.published_at ? new Date(v.published_at as string).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                          </span>
-                        </div>
-                      ))
+                      versions.map((v) => {
+                        const snap = v.snapshot as { proposal?: { total_sp?: number; currency?: string } } | null;
+                        const snapTotal = snap?.proposal?.total_sp;
+                        return (
+                          <div key={v.id as string} className="px-3 py-2 flex items-center justify-between gap-2 hover:bg-muted/50 border-t">
+                            <div className="min-w-0">
+                              <span className="text-sm font-medium">V{v.version as number}</span>
+                              {snapTotal != null && (
+                                <span className="ml-2 text-xs text-muted-foreground">{formatCurrency(Number(snapTotal), snap?.proposal?.currency)}</span>
+                              )}
+                              <span className="block text-xs text-muted-foreground">
+                                {v.published_at ? new Date(v.published_at as string).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                              </span>
+                            </div>
+                            <button
+                              className="text-xs text-blue-600 hover:underline shrink-0 disabled:opacity-50"
+                              disabled={restoringVersion !== null}
+                              onClick={() => handleRestoreVersion(v.id as string, v.version as number)}
+                            >
+                              {restoringVersion === (v.id as string) ? 'Restoring…' : 'Restore'}
+                            </button>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>

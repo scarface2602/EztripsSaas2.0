@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { generateTripIdFromDb, requirementToServiceType } from '@/lib/utils/generateId';
 import { getTripIdConfig } from '@/lib/utils/getTripIdConfig';
+import { ensureTripFolder, appendProposalToTrip } from '@/lib/trips';
 import type { ParsedQuote } from '@/lib/types/database';
 
 export async function POST(request: NextRequest) {
@@ -38,6 +39,19 @@ export async function POST(request: NextRequest) {
     tripId = await generateTripIdFromDb(supabase, 'PKG', tripIdConfig);
   }
 
+  // The trips master folder must exist before the proposal references it (FK),
+  // and a proposal moves the trip to PROPOSING.
+  await ensureTripFolder(supabase, tripId, {
+    status: 'PROPOSING',
+    client_id: body.client_id || null,
+    destination: body.destination || parsed?.destination || null,
+    travel_start: body.travel_start || parsed?.travel_start || null,
+    travel_end: body.travel_end || parsed?.travel_end || null,
+    pax_adults: body.pax_adults || parsed?.pax_adults || 1,
+    pax_children: body.pax_children || parsed?.pax_children || 0,
+    created_by: user.id,
+  });
+
   // Create proposal
   const { data: proposal, error: proposalError } = await supabase.from('proposals').insert({
     created_by: user.id,
@@ -62,6 +76,8 @@ export async function POST(request: NextRequest) {
   if (proposalError || !proposal) {
     return NextResponse.json({ error: proposalError?.message || 'Failed to create proposal' }, { status: 500 });
   }
+
+  await appendProposalToTrip(supabase, tripId, proposal.id);
 
   // Build city-date map from parsed trip_cities for accurate hotel date assignment
   const parsedTripCities: Array<{ city: string; nights: number }> = parsed?.trip_cities || body.trip_cities || [];
@@ -332,8 +348,9 @@ export async function POST(request: NextRequest) {
   }
 
     return NextResponse.json({ id: proposal.id });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Unhandled error in /api/quotes/save:', error);
-    return NextResponse.json({ error: error.message, stack: error.stack }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

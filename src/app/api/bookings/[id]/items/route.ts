@@ -98,9 +98,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (!item_id) return NextResponse.json({ error: 'item_id required' }, { status: 400 });
 
+  // The quoted baseline is immutable — ops edits actuals only.
+  delete updates.quoted_cost;
+  delete updates.quoted_vendor_name;
+
   const supabase = createServiceClient();
 
-  const { data: old } = await supabase.from('booking_items').select('supplier_status, label').eq('id', item_id).single();
+  const { data: old } = await supabase
+    .from('booking_items')
+    .select('supplier_status, label, cost_price, vendor_name, quoted_cost')
+    .eq('id', item_id)
+    .single();
 
   // Server-side status transition validation
   if (updates.supplier_status && old?.supplier_status && updates.supplier_status !== old.supplier_status) {
@@ -143,6 +151,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (updates.supplier_status && old?.supplier_status !== updates.supplier_status) {
     logDetails.old_status = old?.supplier_status;
     logDetails.new_status = updates.supplier_status;
+  }
+  // Negotiated cost / supplier changes — audit trail for margin tracking
+  if (updates.cost_price !== undefined && Number(updates.cost_price) !== Number(old?.cost_price)) {
+    logDetails.old_cost = old?.cost_price;
+    logDetails.new_cost = updates.cost_price;
+    if (old?.quoted_cost != null) {
+      logDetails.margin_delta_vs_quote = Number(old.quoted_cost) - Number(updates.cost_price);
+    }
+  }
+  if (updates.vendor_name !== undefined && updates.vendor_name !== old?.vendor_name) {
+    logDetails.old_vendor = old?.vendor_name;
+    logDetails.new_vendor = updates.vendor_name;
   }
   if (updates.cancellation_reason) logDetails.cancellation_reason = updates.cancellation_reason;
   if (updates.cancellation_charge) logDetails.cancellation_charge = updates.cancellation_charge;

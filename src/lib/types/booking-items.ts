@@ -11,6 +11,9 @@ export interface BookingItem {
   end_date: string | null;
   cost_price: number | null;
   sell_price: number | null;
+  // "As sold" baseline frozen at booking creation — never edited by ops.
+  quoted_cost?: number | null;
+  quoted_vendor_name?: string | null;
   supplier_status: SupplierStatus;
   supplier_reference: string | null;
   supplier_confirmed_at: string | null;

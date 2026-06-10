@@ -66,6 +66,14 @@ export function FollowUpModal({ open, onOpenChange, enquiryId, enquiryName, curr
   const in3Days = format(addDays(new Date(), 3), 'yyyy-MM-dd');
 
   const handleSave = async () => {
+    // No lead without a next step: logging a touch must either close the
+    // lead (won/lost) or schedule the next follow-up date.
+    const closesLead = nextAction === 'lost' || nextAction === 'confirm';
+    if (!closesLead && !followUpDate) {
+      toast.error('Set a next follow-up date, or mark the lead as won/lost');
+      return;
+    }
+
     setSaving(true);
     try {
       // Determine status update based on next action

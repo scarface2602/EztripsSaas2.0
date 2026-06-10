@@ -20,6 +20,14 @@
     {
       "path": "/api/cron/reminders",
       "schedule": "30 1 * * *"
+    },
+    {
+      "path": "/api/cron/trip-completion",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/lead-sla",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

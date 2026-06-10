@@ -19,10 +19,10 @@ export function BookingVouchersTab() {
 
   if (!booking) return null;
 
-  const totalPaidFromPackages = packages.reduce((sum: number, pkg: any) =>
+  const totalPaidFromPackages = packages.reduce((sum, pkg) =>
     sum + (pkg.payments || [])
-      .filter((p: any) => p.status === 'paid')
-      .reduce((s: number, p: any) => s + Number(p.amount_paid || 0), 0)
+      .filter((p) => p.status === 'paid')
+      .reduce((s, p) => s + Number(p.amount_paid || 0), 0)
   , 0);
   const effectiveTotalPaid = Math.max(Number(booking.total_paid), totalPaidFromPackages);
 
@@ -36,10 +36,10 @@ export function BookingVouchersTab() {
           {items.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-4">No booking items to generate vouchers for.</p>
           )}
-          {items.map((item: any) => {
+          {items.map((item) => {
             const Icon = ITEM_ICONS[item.item_type] || Package;
             const isGenerating = generatingVoucher === item.id;
-            const existingVoucher = vouchers.find((v: any) =>
+            const existingVoucher = vouchers.find((v) =>
               v.supplier_name && item.label && (
                 item.label.includes(v.supplier_name) || v.supplier_name.includes(item.label?.split(' ')[0] || '')
               )
@@ -116,7 +116,7 @@ export function BookingVouchersTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {vouchers.map((v: any) => (
+                {vouchers.map((v) => (
                   <TableRow key={v.id}>
                     <TableCell className="capitalize">{v.supplier_type}</TableCell>
                     <TableCell className="font-medium">{v.supplier_name || '-'}</TableCell>

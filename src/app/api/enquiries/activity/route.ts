@@ -37,6 +37,16 @@ export async function POST(req: NextRequest) {
     last_contacted_at: new Date().toISOString(),
   };
 
+  // First touch on the lead stops the SLA clock.
+  const { data: enquiryRow } = await supabase
+    .from('website_enquiries')
+    .select('first_responded_at')
+    .eq('id', enquiry_id)
+    .single();
+  if (enquiryRow && !enquiryRow.first_responded_at) {
+    enquiryUpdates.first_responded_at = new Date().toISOString();
+  }
+
   // If follow-up date set, update on enquiry too
   if (follow_up_date) {
     enquiryUpdates.follow_up_date = follow_up_date;

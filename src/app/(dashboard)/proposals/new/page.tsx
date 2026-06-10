@@ -314,8 +314,8 @@ function NewProposalContent() {
         }
         router.push(`/proposals/${data.id}`);
       }
-    } catch (e: any) {
-      alert('Network or unexpected error: ' + e.message);
+    } catch (e) {
+      alert('Network or unexpected error: ' + (e instanceof Error ? e.message : String(e)));
     } finally {
       setLoading(false);
     }

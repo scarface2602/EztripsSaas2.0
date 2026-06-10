@@ -20,7 +20,7 @@ export default async function OperationsPage() {
       followup_count, last_followup_at, escalated,
       booking_id, assigned_to, checked_in_at, checked_out_at,
       bookings!inner (
-        id, title, destination, travel_start, status,
+        id, title, destination, travel_start, status, booking_type, trip_id,
         clients ( full_name )
       )
     `)

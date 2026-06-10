@@ -36,6 +36,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { EzTripsLogo } from '@/components/eztrips-logo';
+import { GlobalSearch } from '@/components/global-search';
 import {
   Sheet,
   SheetContent,
@@ -206,6 +207,9 @@ function SidebarNav({ user, onNavigate, overdueFollowUps = 0, collapsible = fals
   return (
     <>
       <nav className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className={cn('pb-1', collapsible && 'hidden group-hover/sidebar:block')}>
+          <GlobalSearch />
+        </div>
         <CollapsibleGroup
           label="Sales & Growth"
           icon={TrendingUp}

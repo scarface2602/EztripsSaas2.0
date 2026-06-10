@@ -82,14 +82,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
   }
 
-  // Set confirmed status on proposal
+  // Set confirmed status on proposal. Acceptance locks the quoted price for
+  // the org's window — payment is collected via link within that window, not
+  // captured at the moment of consent (travel pricing moves; consent first).
   const now = new Date().toISOString();
+  const { data: orgRow } = await supabase
+    .from('organisations')
+    .select('price_lock_hours')
+    .limit(1)
+    .maybeSingle();
+  const orgLockHours = orgRow?.price_lock_hours ?? 48;
+
+  // Component-aware lock: flight fares are estimates until ticketed, so a
+  // flight-inclusive acceptance gets at most a 24h lock; land-only quotes
+  // (contracted DMC rates) get the full org window.
+  const { count: flightCount } = await supabase
+    .from('flights')
+    .select('id', { count: 'exact', head: true })
+    .eq('proposal_id', proposalId);
+  const hasFlights = (flightCount ?? 0) > 0;
+  const priceLockHours = hasFlights ? Math.min(orgLockHours, 24) : orgLockHours;
+  const priceLockedUntil = new Date(Date.now() + priceLockHours * 60 * 60 * 1000).toISOString();
+
   await supabase
     .from('proposals')
     .update({
       status: 'confirmed',
       confirmed_at: now,
       confirmed_by: confirmedBy,
+      price_locked_until: priceLockedUntil,
     })
     .eq('id', proposalId);
 
@@ -141,6 +162,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Call unified booking creation engine
   const { createdBookings, createdPackages } = await createBookingsFromProposal(supabase, proposal, proposal.created_by || '');
 
+  // Flight-inclusive trips get an urgent ticketing task: fares must be
+  // booked/held inside the price-lock window, not whenever ops gets to it.
+  if (hasFlights && createdBookings.length > 0) {
+    const ticketBy = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+    await supabase.from('scheduled_reminders').insert({
+      booking_id: (createdBookings[0] as { id: string }).id,
+      reminder_type: 'flight_ticketing',
+      send_at: ticketBy,
+    });
+  }
+
+  let autoPaymentLinkToken: string | null = null;
+
   // --- Attach Unified Client Payment Schedule (AR) ---
   // The client pays a single consolidated deposit & balance for the entire trip.
   // We attach these installments to the first generated booking_package.
@@ -178,6 +212,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     await supabase.from('booking_package_payments').insert(payments);
+
+    // Auto-create the deposit payment link so collection starts the moment
+    // consent lands — the agent forwards it after verifying availability.
+    if (createdBookings.length > 0 && depositAmount > 0) {
+      const firstBookingId = (createdBookings[0] as { id: string }).id;
+      const { data: link } = await supabase
+        .from('payment_links')
+        .insert({
+          booking_id: firstBookingId,
+          amount: depositAmount,
+          currency: proposal.currency || 'INR',
+          label: `Deposit (${depositPct}%) — ${proposal.title || 'Trip'}`,
+          created_by: proposal.created_by || null,
+        })
+        .select('token')
+        .single();
+      if (link?.token) {
+        autoPaymentLinkToken = link.token;
+        await supabase.from('booking_logs').insert({
+          booking_id: firstBookingId,
+          user_id: proposal.created_by || null,
+          action: 'payment_link_created',
+          details: { amount: depositAmount, label: 'Auto-created at acceptance', token: link.token },
+        });
+      }
+    }
   }
 
   // Copy passenger details from proposal to booking_passenger_details
@@ -216,6 +276,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       tier_id: body.tier_id || null,
       addon_ids: body.addon_ids || null,
       grand_total: grandTotal,
+      price_locked_until: priceLockedUntil,
     },
   });
 
@@ -245,11 +306,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Email failure should not block the confirm response
   }
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://eztrips-saas.vercel.app';
   return NextResponse.json({
     success: true,
     proposal_id: proposalId,
     grand_total: grandTotal,
     bookings_count: createdBookings.length,
     packages_count: createdPackages.length,
+    price_locked_until: priceLockedUntil,
+    payment_link_url: autoPaymentLinkToken ? `${appUrl}/p/pay/${autoPaymentLinkToken}` : null,
   });
 }

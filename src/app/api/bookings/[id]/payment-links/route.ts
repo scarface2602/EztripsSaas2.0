@@ -31,6 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const schema = z.object({
     amount: z.number().min(1),
     label: z.string().max(200).optional(),
+    link_type: z.enum(['payment', 'fare_difference']).default('payment'),
+    reason: z.string().max(500).optional(),
   });
 
   const parsed = schema.safeParse(body);
@@ -47,12 +49,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
 
+  const isFareDifference = parsed.data.link_type === 'fare_difference';
+  if (isFareDifference && !parsed.data.reason) {
+    return NextResponse.json({ error: 'A reason is required for fare-difference links' }, { status: 400 });
+  }
+
   const { data: link, error } = await supabase
     .from('payment_links')
     .insert({
       booking_id: id,
       amount: parsed.data.amount,
-      label: parsed.data.label || null,
+      label: parsed.data.label || (isFareDifference ? `Fare difference — ${parsed.data.reason}` : null),
+      link_type: parsed.data.link_type,
+      reason: parsed.data.reason || null,
       currency: booking.currency || 'INR',
       created_by: auth.user.id,
     })
@@ -60,5 +69,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (isFareDifference) {
+    // A fare difference is a price change after acceptance — it always gets
+    // explicit re-consent, recorded on both the booking and the proposal.
+    await supabase.from('booking_logs').insert({
+      booking_id: id,
+      user_id: auth.user.id,
+      action: 'fare_difference_requested',
+      details: { amount: parsed.data.amount, reason: parsed.data.reason, token: link.token },
+    });
+    if (booking.proposal_id) {
+      const { data: proposalRow } = await supabase
+        .from('proposals')
+        .select('version')
+        .eq('id', booking.proposal_id)
+        .single();
+      await supabase.from('proposal_acceptance_log').insert({
+        proposal_id: booking.proposal_id,
+        version: proposalRow?.version || 1,
+        event_type: 'fare_difference_requested',
+        metadata: { amount: parsed.data.amount, reason: parsed.data.reason, payment_link_token: link.token },
+      });
+    }
+  }
+
   return NextResponse.json({ link });
 }

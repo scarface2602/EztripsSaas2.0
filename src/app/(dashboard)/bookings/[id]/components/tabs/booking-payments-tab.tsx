@@ -21,8 +21,8 @@ export function BookingPaymentsTab() {
         travelStartDate={booking.travel_start || ''}
         clientTotal={booking.sell_price || 0}
         supplierNames={items
-          .filter((item: any) => item.vendor_name)
-          .reduce((acc: any, item: any) => {
+          .filter((item) => item.vendor_name)
+          .reduce((acc: { id: string; name: string; amount: number }[], item) => {
             const existing = acc.find((s: { name: string }) => s.name === item.vendor_name);
             if (existing) {
               existing.amount += (item.cost_price || 0);
@@ -44,8 +44,8 @@ export function BookingPaymentsTab() {
           }))
         )}
         supplierData={items
-          .filter((item: any) => item.vendor_name)
-          .map((item: any) => ({
+          .filter((item) => item.vendor_name)
+          .map((item) => ({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             id: (item as any).supplier_id || item.id,
             name: item.vendor_name!,

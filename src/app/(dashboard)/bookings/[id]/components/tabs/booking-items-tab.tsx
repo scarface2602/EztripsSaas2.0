@@ -110,6 +110,17 @@ function ItemCard({
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          {item.quoted_cost != null && item.cost_price != null && Number(item.quoted_cost) !== Number(item.cost_price) && (
+            <Badge
+              variant="outline"
+              className={Number(item.quoted_cost) > Number(item.cost_price)
+                ? 'text-emerald-700 border-emerald-300 bg-emerald-50'
+                : 'text-red-700 border-red-300 bg-red-50'}
+              title={`Quoted cost: ${currency} ${Number(item.quoted_cost).toLocaleString()}`}
+            >
+              {Number(item.quoted_cost) > Number(item.cost_price) ? '+' : '−'}{currency} {Math.abs(Number(item.quoted_cost) - Number(item.cost_price)).toLocaleString()} vs quote
+            </Badge>
+          )}
           {item.cost_price != null && (
             <span className="text-sm text-muted-foreground">{currency} {Number(item.cost_price).toLocaleString()}</span>
           )}
@@ -141,6 +152,9 @@ function ItemCard({
             <div>
               <p className="text-xs text-muted-foreground">Cost Price</p>
               <p className="text-sm font-medium">{item.cost_price != null ? `${currency} ${Number(item.cost_price).toLocaleString()}` : '-'}</p>
+              {item.quoted_cost != null && Number(item.quoted_cost) !== Number(item.cost_price ?? 0) && (
+                <p className="text-xs text-muted-foreground">Quoted: {currency} {Number(item.quoted_cost).toLocaleString()}{item.quoted_vendor_name && item.quoted_vendor_name !== item.vendor_name ? ` (${item.quoted_vendor_name})` : ''}</p>
+              )}
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Sell Price</p>
@@ -319,10 +333,10 @@ export function BookingItemsTab() {
 
   if (!booking) return null;
 
-  const totalPaidFromPackages = packages.reduce((sum: number, pkg: any) =>
+  const totalPaidFromPackages = packages.reduce((sum, pkg) =>
     sum + (pkg.payments || [])
-      .filter((p: any) => p.status === 'paid')
-      .reduce((s: number, p: any) => s + Number(p.amount_paid || 0), 0)
+      .filter((p) => p.status === 'paid')
+      .reduce((s, p) => s + Number(p.amount_paid || 0), 0)
   , 0);
   const effectiveTotalPaid = Math.max(Number(booking.total_paid), totalPaidFromPackages);
   const balance = Number(booking.cost_price) - effectiveTotalPaid;
@@ -331,7 +345,7 @@ export function BookingItemsTab() {
     <div className="space-y-3">
       {items.length === 0 ? (
         <Card><CardContent className="py-8 text-center text-muted-foreground">No items. Items are auto-created when a booking is made from a proposal.</CardContent></Card>
-      ) : items.map((item: any) => (
+      ) : items.map((item) => (
         <ItemCard
           key={item.id}
           item={item}
@@ -345,8 +359,18 @@ export function BookingItemsTab() {
       ))}
       {items.length > 0 && (
         <div className="flex justify-end gap-6 text-sm text-muted-foreground pt-2">
-          <span>Total Cost: <strong className="text-foreground">{booking.currency} {items.reduce((s: number, i: any) => s + Number(i.cost_price || 0), 0).toLocaleString()}</strong></span>
-          <span>Total Sell: <strong className="text-foreground">{booking.currency} {items.reduce((s: number, i: any) => s + Number(i.sell_price || 0), 0).toLocaleString()}</strong></span>
+          {(() => {
+            const marginDelta = items.reduce((s, i) =>
+              s + (i.quoted_cost != null && i.cost_price != null ? Number(i.quoted_cost) - Number(i.cost_price) : 0), 0);
+            if (marginDelta === 0) return null;
+            return (
+              <span className={marginDelta > 0 ? 'text-emerald-700' : 'text-red-700'}>
+                Margin vs quote: <strong>{marginDelta > 0 ? '+' : '−'}{booking.currency} {Math.abs(marginDelta).toLocaleString()}</strong>
+              </span>
+            );
+          })()}
+          <span>Total Cost: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.cost_price || 0), 0).toLocaleString()}</strong></span>
+          <span>Total Sell: <strong className="text-foreground">{booking.currency} {items.reduce((s, i) => s + Number(i.sell_price || 0), 0).toLocaleString()}</strong></span>
         </div>
       )}
     </div>

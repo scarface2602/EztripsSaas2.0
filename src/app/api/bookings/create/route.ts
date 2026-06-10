@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { withAuth } from '@/lib/api/with-auth';
 import { generateTripIdFromDb } from '@/lib/utils/generateId';
 import { getTripIdConfig } from '@/lib/utils/getTripIdConfig';
+import { ensureTripFolder } from '@/lib/trips';
 import { NextRequest, NextResponse } from 'next/server';
 
 interface CreateBookingRequest {
@@ -53,22 +54,23 @@ export async function POST(request: NextRequest) {
     // Calculate total booking cost
     const totalBookingCost = packages.reduce((sum, pkg) => sum + pkg.total_cost, 0);
 
-    // Create trip record
+    // Ensure the trip master folder exists and reflects the booking stage.
+    // The row usually already exists (born at enquiry/proposal time).
+    await ensureTripFolder(supabase, tripId, {
+      status: 'ACTIVE_BOOKING',
+      client_id,
+      destination: proposal.destination || null,
+      travel_start: proposal.travel_start,
+      travel_end: proposal.travel_end,
+      pax_adults: proposal.pax_adults || 1,
+      pax_children: proposal.pax_children || 0,
+      created_by: auth.user.id,
+    });
     const { data: trip } = await supabase
       .from('trips')
-      .insert({
-        trip_id: tripId,
-        status: 'ACTIVE_BOOKING',
-        client_id,
-        destination: proposal.destination || '',
-        travel_start: proposal.travel_start,
-        travel_end: proposal.travel_end,
-        pax_adults: proposal.pax_adults || 1,
-        pax_children: proposal.pax_children || 0,
-        created_by: auth.user.id,
-      })
-      .select()
-      .single();
+      .select('id')
+      .eq('trip_id', tripId)
+      .maybeSingle();
 
     // Create booking
     const { data: booking, error: bookingError } = await supabase

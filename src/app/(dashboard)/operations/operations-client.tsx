@@ -76,6 +76,10 @@ export default function OperationsClient({ items: initialItems, todayItems: init
   // View mode
   const [viewMode, setViewMode] = useState<'board' | 'checklist'>('board');
 
+  // Fulfillment lens: package handovers (one DMC confirms the whole trip)
+  // vs itemized fulfillment (each item has its own supplier cycle).
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<'all' | 'package' | 'itemized'>('all');
+
   // Filters
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -188,8 +192,15 @@ export default function OperationsClient({ items: initialItems, todayItems: init
     } catch { /* ignore */ }
   }, []);
 
+  const isPackageItem = (i: any) => {
+    const booking = Array.isArray(i.bookings) ? i.bookings[0] : i.bookings;
+    return i.item_type === 'dmc_package' || booking?.booking_type === 'package';
+  };
+
   // Apply filters
   const filteredItems = items.filter((i: any) => {
+    if (fulfillmentFilter === 'package' && !isPackageItem(i)) return false;
+    if (fulfillmentFilter === 'itemized' && isPackageItem(i)) return false;
     if (typeFilter !== 'all' && i.item_type !== typeFilter) return false;
     if (statusFilter !== 'all' && i.supplier_status !== statusFilter) return false;
     if (assigneeFilter === 'mine' && i.assigned_to !== currentUserId) return false;
@@ -726,6 +737,19 @@ export default function OperationsClient({ items: initialItems, todayItems: init
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center border rounded-md">
+            {([['all', 'All'], ['package', 'Package'], ['itemized', 'Itemized']] as const).map(([mode, label], idx) => (
+              <Button
+                key={mode}
+                variant={fulfillmentFilter === mode ? 'secondary' : 'ghost'}
+                size="sm"
+                className={`h-8 ${idx === 0 ? 'rounded-r-none' : idx === 2 ? 'rounded-l-none' : 'rounded-none'}`}
+                onClick={() => setFulfillmentFilter(mode)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
           <div className="flex items-center border rounded-md">
             <Button
               variant={viewMode === 'board' ? 'secondary' : 'ghost'}

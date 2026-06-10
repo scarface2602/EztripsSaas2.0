@@ -3,8 +3,16 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
-import type { BookingItem, SupplierStatus } from '@/lib/types/booking-items';
+import type { BookingItem } from '@/lib/types/booking-items';
 import type { PaymentAccount } from '@/lib/types/database';
+import type {
+  PackageWithPayments,
+  BookingLogEntry,
+  BookingEmailRecord,
+  BookingVoucherRecord,
+  TeamMember,
+  EnquiryRecord,
+} from '@/lib/types/booking-detail';
 
 export interface Booking {
   id: string;
@@ -39,13 +47,13 @@ interface BookingContextType {
   bookingId: string;
   booking: Booking | null;
   items: BookingItem[];
-  packages: any[];
+  packages: PackageWithPayments[];
   paymentAccounts: PaymentAccount[];
-  vouchers: any[];
-  logs: any[];
-  emails: any[];
-  teamMembers: any[];
-  enquiry: any | null;
+  vouchers: BookingVoucherRecord[];
+  logs: BookingLogEntry[];
+  emails: BookingEmailRecord[];
+  teamMembers: TeamMember[];
+  enquiry: EnquiryRecord | null;
   loading: boolean;
   saving: boolean;
   generatingVoucher: string | null;
@@ -63,13 +71,13 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [items, setItems] = useState<BookingItem[]>([]);
-  const [packages, setPackages] = useState<any[]>([]);
+  const [packages, setPackages] = useState<PackageWithPayments[]>([]);
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
-  const [vouchers, setVouchers] = useState<any[]>([]);
-  const [logs, setLogs] = useState<any[]>([]);
-  const [emails, setEmails] = useState<any[]>([]);
-  const [teamMembers, setTeamMembers] = useState<any[]>([]);
-  const [enquiry, setEnquiry] = useState<any | null>(null);
+  const [vouchers, setVouchers] = useState<BookingVoucherRecord[]>([]);
+  const [logs, setLogs] = useState<BookingLogEntry[]>([]);
+  const [emails, setEmails] = useState<BookingEmailRecord[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [enquiry, setEnquiry] = useState<EnquiryRecord | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -182,10 +190,10 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
     const totalCost = Number(booking.cost_price);
     let totalPaidPkg = 0;
     if (packages.length > 0) {
-      totalPaidPkg = packages.reduce((sum: number, pkg: any) =>
+      totalPaidPkg = packages.reduce((sum, pkg) =>
         sum + (pkg.payments || [])
-          .filter((p: any) => p.status === 'paid')
-          .reduce((s: number, p: any) => s + Number(p.amount_paid || 0), 0)
+          .filter((p) => p.status === 'paid')
+          .reduce((s, p) => s + Number(p.amount_paid || 0), 0)
       , 0);
     } else {
       const allConfirmed = (items || []).length > 0 && (items || []).every(
@@ -254,7 +262,7 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
           dailyHours: (details.daily_start_time as string) && (details.daily_end_time as string)
             ? `${details.daily_start_time} – ${details.daily_end_time}`
             : '',
-          driverName: (details.driver_name as string) || (item as any).driver_name as string || '',
+          driverName: (details.driver_name as string) || ((item as unknown as Record<string, unknown>).driver_name as string) || '',
           confirmationNumber: confirmationRef,
           itinerary: (details.itinerary as Array<Record<string, string>>) || [],
         };

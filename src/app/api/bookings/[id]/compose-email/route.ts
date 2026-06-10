@@ -4,6 +4,7 @@ import { sendEmail } from '@/lib/email/mailer';
 import { supplierConfirmationRequestEmail, supplierFollowUpEmail } from '@/lib/email/supplier-confirmation-request';
 import { paymentReminderEmail, bookingConfirmedEmail } from '@/lib/email/payment-reminder';
 import { ITEM_TYPE_LABELS } from '@/lib/types/booking-items';
+import { withTripRef } from '@/lib/trips';
 import { format } from 'date-fns';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -143,6 +144,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!subject || !html) {
     return NextResponse.json({ error: 'Subject and body required' }, { status: 400 });
   }
+
+  subject = withTripRef(subject, booking.trip_id);
 
   // If preview mode, return without sending
   if (body.preview) {

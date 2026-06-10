@@ -46,7 +46,7 @@ export function BookingEmailsTab() {
     if (tpl === 'payment_reminder' || tpl === 'booking_confirmed') {
       setToEmail(clientEmail);
     } else if (tpl === 'confirmation_request' || tpl === 'follow_up') {
-      const firstWithEmail = items.find((i: any) => i.vendor_email);
+      const firstWithEmail = items.find((i) => i.vendor_email);
       setToEmail(firstWithEmail?.vendor_email || '');
       setSelectedItemId(firstWithEmail?.id || '');
     }
@@ -173,7 +173,7 @@ export function BookingEmailsTab() {
           <div className="space-y-4">
             <div>
               <Label>To</Label>
-              <Input value={toEmail} onChange={(e: any) => setToEmail(e.target.value)} placeholder="email@example.com" />
+              <Input value={toEmail} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setToEmail(e.target.value)} placeholder="email@example.com" />
             </div>
 
             {(template === 'confirmation_request' || template === 'follow_up') && items.length > 0 && (
@@ -181,12 +181,12 @@ export function BookingEmailsTab() {
                 <Label>Booking Item</Label>
                 <Select value={selectedItemId} onValueChange={v => {
                   setSelectedItemId(v || '');
-                  const item = items.find((i: any) => i.id === v);
+                  const item = items.find((i) => i.id === v);
                   if (item?.vendor_email) setToEmail(item.vendor_email);
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select item..." /></SelectTrigger>
                   <SelectContent>
-                    {items.map((item: any) => (
+                    {items.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {item.label} {ITEM_TYPE_LABELS[item.item_type as keyof typeof ITEM_TYPE_LABELS] ? `(${ITEM_TYPE_LABELS[item.item_type as keyof typeof ITEM_TYPE_LABELS]})` : ''}
                         {item.vendor_email ? ` — ${item.vendor_email}` : ''}

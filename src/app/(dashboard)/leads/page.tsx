@@ -2,6 +2,7 @@ import { requireAuth } from '@/lib/auth/require-role';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Inbox } from 'lucide-react';
 import LeadsClient from './leads-client';
+import { actionNeededSort } from '@/lib/leads/sort';
 
 export default async function LeadsPage() {
   const { user } = await requireAuth();
@@ -31,10 +32,12 @@ export default async function LeadsPage() {
       countMap[eid] = (countMap[eid] || 0) + 1;
     });
 
-    const enriched = (enquiries || []).map((e) => ({
-      ...e,
-      proposal_count: countMap[e.id as string] || 0,
-    }));
+    const enriched = actionNeededSort(
+      (enquiries || []).map((e) => ({
+        ...e,
+        proposal_count: countMap[e.id as string] || 0,
+      })),
+    );
 
     return (
       <div className="space-y-6 min-w-0">
@@ -78,8 +81,8 @@ export default async function LeadsPage() {
       </div>
       <LeadsClient
         role={user.role}
-        myLeads={myLeads || []}
-        unassignedLeads={unassignedLeads || []}
+        myLeads={actionNeededSort(myLeads || [])}
+        unassignedLeads={actionNeededSort(unassignedLeads || [])}
         activeCount={activeCount}
         maxLeads={user.max_active_leads ?? 10}
       />

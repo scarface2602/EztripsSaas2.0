@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       // Fetch booking details
       const { data: booking } = await supabase
         .from('bookings')
-        .select('id, title, destination, travel_start, travel_end, pax_adults, created_by, clients(full_name, email), users!bookings_created_by_fkey(full_name, agency_name)')
+        .select('id, title, destination, travel_start, travel_end, pax_adults, created_by, trip_id, proposal_id, clients(full_name, email), users!bookings_created_by_fkey(full_name, agency_name, email)')
         .eq('id', reminder.booking_id)
         .single();
 
@@ -147,6 +147,32 @@ export async function GET(req: NextRequest) {
           emailData = { to: client.email, ...email };
           break;
         }
+
+        case 'flight_ticketing': {
+          // Urgent nudge to the agent: flight fares are only estimates until
+          // ticketed — book/hold before the price-lock window closes.
+          if (!agent?.email) break;
+          const { data: flightItems } = await supabase
+            .from('booking_items')
+            .select('label, supplier_status')
+            .eq('booking_id', reminder.booking_id)
+            .eq('item_type', 'flight_segment')
+            .neq('supplier_status', 'confirmed');
+
+          if (!flightItems || flightItems.length === 0) break; // already ticketed
+
+          const list = flightItems.map((i: any) => `<li>${i.label}</li>`).join('');
+          emailData = {
+            to: agent.email,
+            subject: `✈ Ticket flights now — ${booking.title || 'booking'} (${(booking as any).trip_id || ''})`,
+            html: `
+              <p>The client has accepted and paid/committed on <strong>${booking.title || 'this booking'}</strong> (${travelDates}).</p>
+              <p>The following flight segments are not yet confirmed. Fares are estimates until ticketed — book or hold them before the price-lock window closes:</p>
+              <ul>${list}</ul>
+              <p>If the fare has moved, send a fare-difference link from the booking page instead of absorbing or surprise-charging the delta.</p>`,
+          };
+          break;
+        }
       }
 
       if (emailData) {
@@ -163,10 +189,12 @@ export async function GET(req: NextRequest) {
         // Log email
         await supabase.from('booking_emails').insert({
           booking_id: reminder.booking_id,
-          direction: 'outgoing',
-          to_address: emailData.to,
+          direction: 'outbound',
+          to_email: emailData.to,
           subject: emailData.subject,
-          body_html: emailData.html,
+          body: emailData.html,
+          template_type: reminder.reminder_type,
+          status: 'sent',
           sent_at: now,
         });
 

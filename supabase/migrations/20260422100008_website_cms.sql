@@ -3,7 +3,7 @@
 -- ============================================================
 
 -- 1. website_enquiries
-create table website_enquiries (
+create table if not exists website_enquiries (
   id uuid primary key default gen_random_uuid(),
   name text,
   email text,
@@ -33,7 +33,7 @@ create index idx_website_enquiries_status on website_enquiries(status);
 create index idx_website_enquiries_created_at on website_enquiries(created_at desc);
 
 -- 2. website_destinations
-create table website_destinations (
+create table if not exists website_destinations (
   id uuid primary key default gen_random_uuid(),
   slug text unique not null,
   title text not null,
@@ -55,7 +55,7 @@ create table website_destinations (
 );
 
 -- 3. website_blog_posts
-create table website_blog_posts (
+create table if not exists website_blog_posts (
   id uuid primary key default gen_random_uuid(),
   slug text unique not null,
   title text not null,
@@ -73,7 +73,7 @@ create table website_blog_posts (
 );
 
 -- 4. website_packages
-create table website_packages (
+create table if not exists website_packages (
   id uuid primary key default gen_random_uuid(),
   slug text unique not null,
   title text not null,

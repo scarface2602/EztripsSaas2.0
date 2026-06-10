@@ -8,12 +8,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run dev       # Start Next.js dev server (localhost:3000)
-npm run build     # Production build — also runs ESLint + TypeScript checks
+npm run build     # Production build — also runs ESLint + TypeScript checks (both gates are ON; keep them on)
 npm run lint      # ESLint only
+npm test          # Vitest — pricing engine, trip-ID generation, lead sorting
 npm start         # Serve production build
 ```
 
-No test suite is configured. Verify changes with `npm run build`.
+Verify changes with `npm test` and `npm run build`. Money math (`src/lib/utils/pricing.ts`), ID generation (`src/lib/utils/generateId.ts`), and lead ordering (`src/lib/leads/sort.ts`) have unit tests — extend them when touching those files.
 
 ---
 
@@ -117,8 +118,24 @@ Configured in `vercel.json`, all routes under `src/app/api/cron/`:
 - `/api/cron/vendor-payment-reminders` — 08:00 UTC daily
 - `/api/cron/customer-reminders` — 10:00 UTC daily
 - `/api/cron/reminders` — 01:30 UTC daily — dispatches `scheduled_reminders` table entries
+- `/api/cron/trip-completion` — 02:00 UTC daily — flips trips past `travel_end` to `COMPLETED`
+- `/api/cron/lead-sla` — every 30 min — stamps `sla_breached_at` on untouched leads, emails managers one digest
 
 The `scheduled_reminders` table stores deferred emails (types: `payment_due`, `supplier_followup`, `booking_confirmed`). Reminders are auto-created by ops-action handlers and payment creation flows.
+
+### Trip ID Backbone
+
+One `trip_id` (default format `EZQPKG260611001`, org-configurable via `organisations.trip_id_config`) follows a trip from enquiry → proposal → booking → documents:
+
+- Born at enquiry insert (DB trigger `generate_enquiry_query_id`, which also creates the `trips` master-folder row). `query_id` is a legacy alias equal to `trip_id` on new rows.
+- Propagated by `quotes/save`, `proposals/clone` (reuses the enquiry's ID), and `createBookingsFromProposal` in `src/lib/bookings.ts` (reuses `proposal.trip_id` — never generate a fresh one when the chain has one).
+- `trips.status` lifecycle: `ENQUIRY → PROPOSING → ACTIVE_BOOKING → COMPLETED`. Use `ensureTripFolder()` in `src/lib/trips.ts` before inserting any row that references a trip_id (FKs enforce the trips row exists). Status never moves backwards.
+- Outgoing booking emails get the trip ref in the subject via `withTripRef()`.
+- Global search (⌘K, `/api/search`) finds any record by trip_id, name, or phone — RLS-scoped.
+
+### Quoted vs Actual Costs
+
+`booking_items` carry an immutable `quoted_cost`/`quoted_vendor_name` baseline (frozen by DB trigger at insert). Ops edits only `cost_price`/`vendor_name`; the items PATCH route strips quoted_* from updates and logs cost/vendor changes with `margin_delta_vs_quote` to `booking_logs`. The UI shows a green/red "vs quote" chip per item.
 
 ### Leads CRM
 

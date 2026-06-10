@@ -6,6 +6,7 @@ import { sendEmail, sendEmailWithAttachments } from '@/lib/email/mailer';
 import { supplierConfirmationRequestEmail, supplierFollowUpEmail } from '@/lib/email/supplier-confirmation-request';
 import type { SupplierStatus } from '@/lib/types/booking-items';
 import { ITEM_TYPE_LABELS } from '@/lib/types/booking-items';
+import { withTripRef } from '@/lib/trips';
 import { format } from 'date-fns';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Fetch item + booking info
   const { data: item } = await supabase
     .from('booking_items')
-    .select('*, bookings!inner(id, title, destination, travel_start, travel_end, pax_adults, clients(full_name, email))')
+    .select('*, bookings!inner(id, title, destination, travel_start, travel_end, pax_adults, trip_id, clients(full_name, email))')
     .eq('id', item_id)
     .single();
 
@@ -279,7 +280,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Send email (non-blocking — don't fail the action if email fails)
   let emailSent = false;
   const finalTo = customTo || emailToSend?.to;
-  const finalSubject = emailToSend?.subject || `${action.replace(/_/g, ' ')} — ${item.label}`;
+  const finalSubject = withTripRef(
+    emailToSend?.subject || `${action.replace(/_/g, ' ')} — ${item.label}`,
+    booking?.trip_id,
+  );
   const finalHtml = customHtmlBody || emailToSend?.html;
 
   if (finalTo && finalHtml) {
@@ -349,15 +353,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       emailSent = true;
 
       // Log email to booking_emails (append-only)
-      await supabase.from('booking_emails').insert({
+      const { error: emailLogError } = await supabase.from('booking_emails').insert({
         booking_id: bookingId,
-        direction: 'outgoing',
-        to_address: finalTo,
+        direction: 'outbound',
+        to_email: finalTo,
         subject: finalSubject,
-        body_html: finalHtml,
+        body: finalHtml,
+        template_type: logAction,
+        status: 'sent',
         sent_at: new Date().toISOString(),
         sent_by: user.id,
-      }).then(() => {});  // ignore email log errors
+      });
+      if (emailLogError) console.error('booking_emails log failed:', emailLogError);
     } catch {
       // Email failed but action succeeded
     }

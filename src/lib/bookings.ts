@@ -26,25 +26,56 @@ export async function createBookingsFromProposal(
   const createdBookings: Record<string, unknown>[] = [];
   const createdPackages: Record<string, unknown>[] = [];
 
-  // ── 1. Generate master trip folder ──
-  const { data: bookingUser } = await supabase.from('users').select('org_id').eq('id', userId).single();
-  const tripIdConfig: TripIdConfig = await getTripIdConfig(supabase, bookingUser?.org_id);
-  const serviceType: ServiceType = 'PKG';
-  const tripId = await generateTripIdFromDb(supabase, serviceType, tripIdConfig);
+  // ── 1. Master trip folder ──
+  // Reuse the trip_id born at enquiry/proposal time so one ID follows the
+  // client from lead to trip completion; generate only if the chain has none.
+  let tripId: string | null = proposal.trip_id || null;
+  if (!tripId) {
+    const { data: bookingUser } = await supabase.from('users').select('org_id').eq('id', userId).single();
+    const tripIdConfig: TripIdConfig = await getTripIdConfig(supabase, bookingUser?.org_id);
+    const serviceType: ServiceType = 'PKG';
+    tripId = await generateTripIdFromDb(supabase, serviceType, tripIdConfig);
+    await supabase.from('proposals').update({ trip_id: tripId }).eq('id', proposalId);
+  }
 
-  const { data: trip } = await supabase.from('trips').insert({
-    trip_id: tripId,
-    status: 'ACTIVE_BOOKING',
-    client_id: proposal.client_id,
-    created_by: userId,
-    destination: proposal.destination,
-    travel_start: proposal.travel_start,
-    travel_end: proposal.travel_end,
-    pax_adults: proposal.pax_adults || 1,
-    pax_children: proposal.pax_children || 0,
-    proposal_ids: [proposalId],
-    winning_proposal_id: proposalId,
-  }).select('id, trip_id').single();
+  const { data: existingTrip } = await supabase
+    .from('trips')
+    .select('id, trip_id, proposal_ids')
+    .eq('trip_id', tripId)
+    .maybeSingle();
+
+  let trip: { id: string; trip_id: string } | null = null;
+  if (existingTrip) {
+    const proposalIds: string[] = Array.isArray(existingTrip.proposal_ids) ? existingTrip.proposal_ids : [];
+    if (!proposalIds.includes(proposalId)) proposalIds.push(proposalId);
+    await supabase.from('trips').update({
+      status: 'ACTIVE_BOOKING',
+      client_id: proposal.client_id,
+      destination: proposal.destination,
+      travel_start: proposal.travel_start,
+      travel_end: proposal.travel_end,
+      pax_adults: proposal.pax_adults || 1,
+      pax_children: proposal.pax_children || 0,
+      proposal_ids: proposalIds,
+      winning_proposal_id: proposalId,
+    }).eq('id', existingTrip.id);
+    trip = { id: existingTrip.id, trip_id: existingTrip.trip_id };
+  } else {
+    const { data: inserted } = await supabase.from('trips').insert({
+      trip_id: tripId,
+      status: 'ACTIVE_BOOKING',
+      client_id: proposal.client_id,
+      created_by: userId,
+      destination: proposal.destination,
+      travel_start: proposal.travel_start,
+      travel_end: proposal.travel_end,
+      pax_adults: proposal.pax_adults || 1,
+      pax_children: proposal.pax_children || 0,
+      proposal_ids: [proposalId],
+      winning_proposal_id: proposalId,
+    }).select('id, trip_id').single();
+    trip = inserted;
+  }
 
   // Fetch all proposal components upfront
   const [

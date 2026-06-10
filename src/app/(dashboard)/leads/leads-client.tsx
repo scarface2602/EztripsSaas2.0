@@ -885,8 +885,10 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                     <TableCell>
                       <div>
                         <span className="font-medium">{e.name as string}</span>
-                        {(e.trip_id as string) && <span className="block text-[10px] text-blue-600 font-mono">{e.trip_id as string}</span>}
-                        <span className="block text-[11px] text-muted-foreground font-mono">{(e.query_id as string) || (e.id as string).slice(0, 8)}</span>
+                        {(e.sla_breached_at as string) && !(e.first_responded_at as string) && (
+                          <Badge className="ml-1.5 bg-red-100 text-red-700 text-[10px] align-middle">SLA</Badge>
+                        )}
+                        <span className="block text-[10px] text-blue-600 font-mono">{(e.trip_id as string) || (e.query_id as string) || (e.id as string).slice(0, 8)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -910,7 +912,16 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{(e.destination as string) || (e.requirement_details as Record<string, unknown>)?.dest_city as string || '—'}</TableCell>
+                    <TableCell>
+                      <div>
+                        {(e.destination as string) || (e.requirement_details as Record<string, unknown>)?.dest_city as string || '—'}
+                        {((e.requirement_details as Record<string, unknown>)?.package_title as string) && (
+                          <span className="block text-[10px] text-indigo-600 truncate max-w-[160px]" title={(e.requirement_details as Record<string, unknown>).package_title as string}>
+                            📦 {(e.requirement_details as Record<string, unknown>).package_title as string}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div>
                         <span className="text-sm">{(e.travel_date as string) || '—'}</span>

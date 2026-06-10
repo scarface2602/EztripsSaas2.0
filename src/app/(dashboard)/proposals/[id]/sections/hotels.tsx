@@ -8,6 +8,46 @@ import { Button } from '@/components/ui/button';
 import { Plus, Trash2, ChevronRight, ChevronDown, AlertTriangle } from 'lucide-react';
 import type { TripCity } from '@/lib/types/database';
 import { CreatableCombobox } from '@/components/ui/creatable-combobox';
+import { useCityOptions, addCityToLookup } from '@/lib/hooks/use-city-options';
+
+interface HotelSuggestion {
+  name: string;
+  city: string | null;
+  star_rating: number | null;
+  room_type: string | null;
+  meal_plan: string | null;
+  last_cp_per_night: number | null;
+}
+
+/**
+ * Hotel autocomplete fed by quoting history (/api/hotels/suggest).
+ * Refetches when the row's city changes; the combobox filters client-side.
+ */
+function useHotelSuggestions(city: string | null | undefined) {
+  const [suggestions, setSuggestions] = useState<HotelSuggestion[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/hotels/suggest?city=${encodeURIComponent(city || '')}`,
+          { signal: controller.signal },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSuggestions(data.suggestions || []);
+        }
+      } catch {
+        // aborted or offline — keep previous suggestions
+      }
+    }, 350);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+  }, [city]);
+  return suggestions;
+}
 
 interface HotelsSectionProps {
   proposal: Proposal;
@@ -229,6 +269,24 @@ function HotelRow({
   showInternalCosts: boolean;
   colSpan: number;
 }) {
+  const cityOptions = useCityOptions();
+  const hotelSuggestions = useHotelSuggestions(hotel.city);
+
+  // Picking a known hotel prefills the row from the last time it was quoted.
+  function handleHotelPick(name: string) {
+    const match = hotelSuggestions.find(s => s.name.toLowerCase() === name.toLowerCase());
+    const updates: Partial<Hotel> = { name };
+    if (match) {
+      if (!hotel.room_type && match.room_type) updates.room_type = match.room_type;
+      if (!hotel.star_rating && match.star_rating) updates.star_rating = match.star_rating;
+      if (!hotel.meal_plan && match.meal_plan) updates.meal_plan = match.meal_plan as Hotel['meal_plan'];
+      if (!hotel.city && match.city) updates.city = match.city;
+      if (hotel.cp_per_night == null && match.last_cp_per_night != null) updates.cp_per_night = match.last_cp_per_night;
+    }
+    onUpdate(updates);
+    onBlurSave();
+  }
+
   return (
     <>
       {/* Main Row */}
@@ -242,19 +300,29 @@ function HotelRow({
           </button>
         </td>
         <td className="py-2 px-2">
-          <Input
+          <CreatableCombobox
             value={hotel.city}
-            onChange={(e) => onUpdate({ city: e.target.value })}
-            onBlur={onBlurSave}
+            onChange={(v) => { onUpdate({ city: v }); onBlurSave(); }}
+            options={cityOptions}
+            onCreateNew={addCityToLookup}
             placeholder="City"
-            className={`h-8 text-sm ${!hotel.city ? 'border-red-300' : ''}`}
+            className={`[&_input]:h-8 [&_input]:text-sm ${!hotel.city ? '[&_input]:border-red-300' : ''}`}
           />
         </td>
         <td className="py-2 px-2">
           <CreatableCombobox
             value={hotel.name}
-            onChange={(v) => { onUpdate({ name: v }); onBlurSave(); }}
-            options={[]}
+            onChange={handleHotelPick}
+            options={hotelSuggestions.map(s => ({
+              value: s.name,
+              label: s.name,
+              description: [
+                s.city,
+                s.star_rating ? `${s.star_rating}★` : null,
+                s.room_type,
+                s.last_cp_per_night != null ? `last CP ₹${Number(s.last_cp_per_night).toLocaleString('en-IN')}/nt` : null,
+              ].filter(Boolean).join(' · '),
+            }))}
             placeholder="Hotel name..."
             className="[&_input]:h-8 [&_input]:text-sm"
           />

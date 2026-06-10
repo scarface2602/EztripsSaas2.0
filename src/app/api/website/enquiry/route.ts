@@ -281,7 +281,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true, enquiry_id: enquiry.id }, { status: 201, headers });
+    return NextResponse.json(
+      { success: true, enquiry_id: enquiry.id, trip_id: tripId },
+      { status: 201, headers },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     return NextResponse.json({ error: message }, { status: 500, headers });

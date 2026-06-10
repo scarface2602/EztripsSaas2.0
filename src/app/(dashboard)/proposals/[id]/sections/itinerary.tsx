@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Wand2, Loader2, CalendarPlus } from 'lucide-react';
 import { CreatableCombobox } from '@/components/ui/creatable-combobox';
+import { useCityOptions, addCityToLookup } from '@/lib/hooks/use-city-options';
 
 interface ItinerarySectionProps {
   proposal: Proposal;
@@ -105,6 +106,7 @@ export function ItinerarySection({
   hotels, flights,
 }: ItinerarySectionProps) {
   const supabase = useMemo(() => createClient(), []);
+  const cityOptions = useCityOptions();
   const [generatingDay, setGeneratingDay] = useState<string | null>(null);
   const [curatingDay, setCuratingDay] = useState<string | null>(null);
   const [generatingDays, setGeneratingDays] = useState(false);
@@ -422,33 +424,8 @@ export function ItinerarySection({
                   <CreatableCombobox
                     value={city}
                     onChange={(v) => { updateDay(index, { city: v }); blurSave(); }}
-                    options={[
-                      { value: 'delhi', label: 'Delhi' },
-                      { value: 'mumbai', label: 'Mumbai' },
-                      { value: 'jaipur', label: 'Jaipur' },
-                      { value: 'udaipur', label: 'Udaipur' },
-                      { value: 'goa', label: 'Goa' },
-                      { value: 'kerala', label: 'Kerala' },
-                      { value: 'shimla', label: 'Shimla' },
-                      { value: 'manali', label: 'Manali' },
-                      { value: 'kochi', label: 'Kochi' },
-                      { value: 'coorg', label: 'Coorg' },
-                      { value: 'agra', label: 'Agra' },
-                      { value: 'varanasi', label: 'Varanasi' },
-                      { value: 'rishikesh', label: 'Rishikesh' },
-                      { value: 'darjeeling', label: 'Darjeeling' },
-                      { value: 'andaman', label: 'Andaman' },
-                      { value: 'leh-ladakh', label: 'Leh-Ladakh' },
-                      { value: 'srinagar', label: 'Srinagar' },
-                      { value: 'dubai', label: 'Dubai' },
-                      { value: 'singapore', label: 'Singapore' },
-                      { value: 'thailand', label: 'Thailand' },
-                      { value: 'bali', label: 'Bali' },
-                      { value: 'maldives', label: 'Maldives' },
-                      { value: 'sri-lanka', label: 'Sri Lanka' },
-                      { value: 'vietnam', label: 'Vietnam' },
-                      { value: 'europe', label: 'Europe' },
-                    ]}
+                    options={cityOptions}
+                    onCreateNew={addCityToLookup}
                     placeholder="Select city..."
                   />
                 </div>

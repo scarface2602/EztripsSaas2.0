@@ -642,6 +642,12 @@ ${orgName ? `
 </body></html>`;
 
   // ── Puppeteer ─────────────────────────────────────────────────────────────
+  // Dev/layout iteration: return the raw HTML so templates can be tuned in
+  // browser print-preview without regenerating PDFs each time.
+  if (searchParams.get('html') === '1') {
+    return new NextResponse(html, { headers: { 'Content-Type': 'text/html' } });
+  }
+
   let browser;
   try {
     if (process.env.VERCEL) {
@@ -662,6 +668,9 @@ ${orgName ? `
     page.setDefaultNavigationTimeout(55000);
     // Static HTML with inline base64 images — domcontentloaded is reliable and faster
     await page.setContent(html, { waitUntil: 'domcontentloaded' });
+    await page.evaluateHandle('document.fonts.ready');
+    const { PRINT_BASE_CSS } = await import('@/lib/pdf/print-base');
+    await page.addStyleTag({ content: PRINT_BASE_CSS });
 
     // FIX 4: Single footer — Puppeteer footerTemplate only (no footer div in body HTML)
     const pdf = await page.pdf({
