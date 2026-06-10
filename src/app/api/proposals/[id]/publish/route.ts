@@ -73,6 +73,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const flightExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(); // 24h
   const landExpiry = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(); // 14 days
 
+  // Compute route metadata for suggestion engine
+  const citiesVisited = Array.from(new Set(
+    (itineraryDays || []).map((d: { city?: string }) => d.city).filter(Boolean) as string[]
+  ));
+  const tripCitiesArr = proposal.trip_cities as Array<{ city: string; nights: number }> | null;
+  const routeSignature = tripCitiesArr?.length
+    ? tripCitiesArr.map(tc => `${tc.city}:${tc.nights}`).join(',')
+    : null;
+
   // Promote: increment version, set published_data, new share_token, reset TTL
   const newVersion = (proposal.version || 1) + (proposal.published_data ? 1 : 0);
   const { error: updateErr } = await supabase
@@ -86,6 +95,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       status: 'sent',
       flight_expires_at: flightExpiry,
       land_expires_at: landExpiry,
+      cities_visited: citiesVisited,
+      route_signature: routeSignature,
       updated_at: now.toISOString(),
     })
     .eq('id', id);

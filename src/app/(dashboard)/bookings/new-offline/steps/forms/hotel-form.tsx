@@ -4,10 +4,19 @@ import { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SupplierSelect } from '@/components/ui/inline-add-select';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
+import { Plus, Trash2 } from 'lucide-react';
+
+interface RoomOccupancy {
+  id: string;
+  adults: number;
+  children: number;
+  extraBeds: number;
+}
 
 interface HotelFormProps {
   itemData: Record<string, unknown>;
@@ -33,16 +42,22 @@ export default function HotelForm({
   const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>([]);
   const supabase = useMemo(() => createClient(), []);
 
-  // Initialize occupancy and fetch suppliers on mount
+  const makeRoom = (): RoomOccupancy => ({
+    id: crypto.randomUUID(),
+    adults: 1,
+    children: 0,
+    extraBeds: 0,
+  });
+
+  // Initialize rooms array on mount
   useEffect(() => {
-    // Initialize occupancy if not set (only on first mount)
-    if (!itemData.occupancy) {
+    if (!itemData.rooms) {
       onItemDataChange({
         ...itemData,
-        occupancy: { adults: 1, children: 0 }
+        rooms: [makeRoom()],
       });
     }
-  }, []); // Empty deps - only run once on mount
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const fetchSuppliers = async () => {
@@ -56,33 +71,26 @@ export default function HotelForm({
     fetchSuppliers();
   }, [supabase]);
 
+  const rooms = (itemData.rooms as RoomOccupancy[]) || [];
+
   const handleChange = (field: string, value: unknown) => {
     onItemDataChange({ ...itemData, [field]: value });
   };
 
-  const handleOccupancyChange = (field: 'adults' | 'children', value: number) => {
-    const newOccupancy = {
-      ...((itemData.occupancy as Record<string, number>) || {}),
-      [field]: value,
-    };
-    
-    // Reset children_ages if children count changes
-    if (field === 'children' && value === 0) {
-      onItemDataChange({ ...itemData, occupancy: newOccupancy, children_ages: undefined });
-    } else {
-      onItemDataChange({ ...itemData, occupancy: newOccupancy });
-    }
+  const updateRoom = (roomId: string, field: keyof Omit<RoomOccupancy, 'id'>, value: number) => {
+    const updated = rooms.map((r) =>
+      r.id === roomId ? { ...r, [field]: value } : r
+    );
+    onItemDataChange({ ...itemData, rooms: updated });
   };
 
-  const handleChildrenAgeChange = (index: number, age: number) => {
-    const ages = ((itemData.children_ages as number[]) || []);
-    const newAges = [...ages];
-    newAges[index] = age;
-    handleChange('children_ages', newAges);
+  const addRoom = () => {
+    onItemDataChange({ ...itemData, rooms: [...rooms, makeRoom()] });
   };
 
-  const childrenCount = ((itemData.occupancy as Record<string, number>)?.children || 0);
-  const childrenAges = ((itemData.children_ages as number[]) || []);
+  const removeRoom = (roomId: string) => {
+    onItemDataChange({ ...itemData, rooms: rooms.filter((r) => r.id !== roomId) });
+  };
 
   const margin = sellPrice - costPrice;
   const marginPct = costPrice > 0 ? ((margin / costPrice) * 100).toFixed(1) : '0';
@@ -164,71 +172,73 @@ export default function HotelForm({
       <Card className="dark:bg-slate-900 dark:border-slate-700">
         <CardHeader>
           <CardTitle>Occupancy</CardTitle>
-          <CardDescription>Number of guests and rooms</CardDescription>
+          <CardDescription>Configure guests per room</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="adults" className="dark:text-slate-200">Adults *</Label>
-              <Input
-                id="adults"
-                type="number"
-                min="1"
-                value={((itemData.occupancy as Record<string, number>)?.adults || 1)}
-                onChange={(e) => handleOccupancyChange('adults', parseInt(e.target.value) || 0)}
-                className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="children" className="dark:text-slate-200">Children</Label>
-              <Input
-                id="children"
-                type="number"
-                min="0"
-                value={childrenCount}
-                onChange={(e) => handleOccupancyChange('children', parseInt(e.target.value) || 0)}
-                className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="extra_beds" className="dark:text-slate-200">Extra Beds</Label>
-              <Input
-                id="extra_beds"
-                type="number"
-                min="0"
-                value={((itemData.extra_beds as number) || 0)}
-                onChange={(e) => handleChange('extra_beds', parseInt(e.target.value) || 0)}
-                className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
-              />
-            </div>
-          </div>
-
-          {/* Children Ages */}
-          {childrenCount > 0 && (
-            <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <Label className="dark:text-slate-200">Children Ages *</Label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {Array.from({ length: childrenCount }).map((_, idx) => (
-                  <div key={idx} className="space-y-1">
-                    <Label htmlFor={`child_age_${idx}`} className="text-sm dark:text-slate-300">Child {idx + 1} Age</Label>
-                    <Input
-                      id={`child_age_${idx}`}
-                      type="number"
-                      min="0"
-                      max="18"
-                      placeholder="Age"
-                      value={childrenAges[idx] || ''}
-                      onChange={(e) => handleChildrenAgeChange(idx, parseInt(e.target.value) || 0)}
-                      className="dark:bg-slate-800 dark:border-slate-600 dark:text-white dark:placeholder-slate-400"
-                    />
-                  </div>
-                ))}
+          {rooms.map((room, idx) => (
+            <div
+              key={room.id}
+              className="p-4 border rounded-lg space-y-3 dark:border-slate-700"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-sm dark:text-slate-200">Room {idx + 1}</span>
+                {rooms.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-red-500 hover:text-red-700"
+                    onClick={() => removeRoom(room.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label className="dark:text-slate-200">Adults *</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={room.adults}
+                    onChange={(e) => updateRoom(room.id, 'adults', parseInt(e.target.value) || 1)}
+                    className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="dark:text-slate-200">Children</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={room.children}
+                    onChange={(e) => updateRoom(room.id, 'children', parseInt(e.target.value) || 0)}
+                    className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="dark:text-slate-200">Extra Beds</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={room.extraBeds}
+                    onChange={(e) => updateRoom(room.id, 'extraBeds', parseInt(e.target.value) || 0)}
+                    className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+                  />
+                </div>
               </div>
             </div>
-          )}
+          ))}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addRoom}
+            className="w-full"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Room
+          </Button>
         </CardContent>
       </Card>
 

@@ -1,16 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { generateTripIdFromDb, requirementToServiceType } from '@/lib/utils/generateId';
+import { getTripIdConfig } from '@/lib/utils/getTripIdConfig';
 import type { ParsedQuote } from '@/lib/types/database';
 
 export async function POST(request: NextRequest) {
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const supabase = createServiceClient();
+    const supabase = createServiceClient();
 
-  const body = await request.json();
+    const body = await request.json();
   const parsed = body.parsed_data as ParsedQuote | null;
+
+  // Fetch org config for trip ID format
+  const { data: userData } = await supabase.from('users').select('org_id').eq('id', user.id).single();
+  const tripIdConfig = await getTripIdConfig(supabase, userData?.org_id);
+
+  // Propagate trip_id from enquiry or generate new one
+  let tripId: string | null = null;
+  if (body.enquiry_id) {
+    const { data: enquiry } = await supabase
+      .from('website_enquiries')
+      .select('trip_id, requirement_type')
+      .eq('id', body.enquiry_id)
+      .single();
+    tripId = enquiry?.trip_id || null;
+    if (!tripId) {
+      tripId = await generateTripIdFromDb(supabase, requirementToServiceType(enquiry?.requirement_type || 'package'), tripIdConfig);
+      // Backfill trip_id on the enquiry so subsequent proposals share the same ID
+      await supabase.from('website_enquiries').update({ trip_id: tripId }).eq('id', body.enquiry_id);
+    }
+  }
+  if (!tripId) {
+    tripId = await generateTripIdFromDb(supabase, 'PKG', tripIdConfig);
+  }
 
   // Create proposal
   const { data: proposal, error: proposalError } = await supabase.from('proposals').insert({
@@ -28,33 +54,56 @@ export async function POST(request: NextRequest) {
     children_ages: body.children_ages || null,
     // Always default to INR — agent can change via currency selector after import
     currency: body.currency || 'INR',
-    num_nights: body.num_nights ?? null,
-    num_rooms: body.num_rooms ?? null,
-    extra_beds: body.extra_beds ?? null,
     status: 'draft',
     trip_cities: body.trip_cities || null,
+    trip_id: tripId,
   }).select().single();
 
   if (proposalError || !proposal) {
     return NextResponse.json({ error: proposalError?.message || 'Failed to create proposal' }, { status: 500 });
   }
 
+  // Build city-date map from parsed trip_cities for accurate hotel date assignment
+  const parsedTripCities: Array<{ city: string; nights: number }> = parsed?.trip_cities || body.trip_cities || [];
+  const cityDateMap = new Map<string, { check_in: string; check_out: string }>();
+  if (parsedTripCities.length > 0 && (body.travel_start || parsed?.travel_start)) {
+    let cursor = new Date(body.travel_start || parsed!.travel_start!);
+    for (const tc of parsedTripCities) {
+      const checkIn = cursor.toISOString().split('T')[0];
+      cursor = new Date(cursor.getTime() + tc.nights * 86400000);
+      const checkOut = cursor.toISOString().split('T')[0];
+      cityDateMap.set(tc.city.trim().toLowerCase(), { check_in: checkIn, check_out: checkOut });
+    }
+  }
+
   // Insert hotels
-  const hotelsToInsert = parsed?.hotels?.length ? parsed.hotels.map((h, i) => ({
-    proposal_id: proposal.id,
-    supplier_id: body.supplier_id || null,
-    name: h.name,
-    city: h.city,
-    check_in: h.check_in || body.travel_start || new Date().toISOString().split('T')[0],
-    check_out: h.check_out || body.travel_end || new Date().toISOString().split('T')[0],
-    room_type: h.room_type,
-    meal_plan: h.meal_plan,
-    cp_per_night: h.cp_per_night,
-    description: h.description,
-    sort_order: i,
-  })) : [];
+  const validMealPlans = ['RO', 'BB', 'HB', 'FB', 'AI'];
+  const hotelsToInsert = parsed?.hotels?.length ? parsed.hotels.map((h, i) => {
+    // Use parsed dates if available, else look up from trip_cities, else fall back to trip dates
+    const cityKey = (h.city || '').trim().toLowerCase();
+    const cityDates = cityDateMap.get(cityKey);
+    const checkIn = h.check_in || cityDates?.check_in || body.travel_start || new Date().toISOString().split('T')[0];
+    const checkOut = h.check_out || cityDates?.check_out || body.travel_end || new Date().toISOString().split('T')[0];
+
+    return {
+      proposal_id: proposal.id,
+      supplier_id: body.supplier_id || null,
+      name: h.name || 'Unnamed Hotel',
+      city: h.city || body.destination || '',
+      check_in: checkIn,
+      check_out: checkOut,
+      room_type: h.room_type || null,
+      meal_plan: (h.meal_plan && validMealPlans.includes(h.meal_plan)) ? h.meal_plan : null,
+      cp_per_night: h.cp_per_night ?? null,
+      description: h.description || null,
+      sort_order: i,
+    };
+  }) : [];
   if (hotelsToInsert.length) {
-    await supabase.from('hotels').insert(hotelsToInsert);
+    const { error: hotelError } = await supabase.from('hotels').insert(hotelsToInsert);
+    if (hotelError) {
+      console.error('Hotel insert failed:', hotelError.message, JSON.stringify(hotelsToInsert));
+    }
   }
 
   // Insert flights with refundable status
@@ -92,12 +141,12 @@ export async function POST(request: NextRequest) {
   ) ?? undefined;
 
   // Helper: auto-assign day_type based on position and city transitions
-  function inferDayType(
+  const inferDayType = (
     dayNum: number,
     totalDays: number,
     prevCity: string | null | undefined,
     thisCity: string | null | undefined,
-  ): string {
+  ): string => {
     if (dayNum === 1) return 'arrival';
     if (dayNum === totalDays) return 'departure';
     if (prevCity && thisCity && prevCity.toLowerCase() !== thisCity.toLowerCase()) {
@@ -107,7 +156,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Helper: given a date string, find which hotel's stay covers it and return that hotel's city
-  function inferCityFromHotels(dateStr: string): string {
+  const inferCityFromHotels = (dateStr: string): string => {
     for (const h of hotelsToInsert) {
       if (h.check_in <= dateStr && h.check_out > dateStr) return h.city;
     }
@@ -209,8 +258,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Auto-generate trip_cities from hotels (always — hotels are the source of truth for stays)
-  if (!body.trip_cities && hotelsToInsert.length) {
+  // Set trip_cities: prefer parsed trip_cities, then body, then auto-generate from hotels
+  if (!body.trip_cities && parsedTripCities.length > 0) {
+    // Use AI-parsed trip_cities with calculated dates
+    const dated = parsedTripCities.map((tc) => {
+      const cityDates = cityDateMap.get(tc.city.trim().toLowerCase());
+      return {
+        city: tc.city,
+        nights: tc.nights,
+        check_in: cityDates?.check_in || '',
+        check_out: cityDates?.check_out || '',
+      };
+    });
+    await supabase.from('proposals').update({ trip_cities: dated }).eq('id', proposal.id);
+  } else if (!body.trip_cities && hotelsToInsert.length) {
     const autoTripCities = hotelsToInsert.map((h, index) => ({
       city: h.city,
       nights: Math.round(
@@ -270,5 +331,9 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ id: proposal.id });
+    return NextResponse.json({ id: proposal.id });
+  } catch (error: any) {
+    console.error('Unhandled error in /api/quotes/save:', error);
+    return NextResponse.json({ error: error.message, stack: error.stack }, { status: 500 });
+  }
 }

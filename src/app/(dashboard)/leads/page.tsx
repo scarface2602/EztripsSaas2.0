@@ -18,7 +18,7 @@ export default async function LeadsPage() {
       supabase
         .from('users')
         .select('id, full_name, role, max_active_leads')
-        .in('role', ['agent', 'manager', 'super_admin']),
+        .neq('role', 'admin'),
       supabase
         .from('proposals')
         .select('enquiry_id')
@@ -37,7 +37,7 @@ export default async function LeadsPage() {
     }));
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 min-w-0">
         <div className="flex items-center gap-2">
           <Inbox className="h-6 w-6" />
           <h1 className="text-2xl font-bold">Enquiries</h1>
@@ -71,7 +71,7 @@ export default async function LeadsPage() {
   ).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       <div className="flex items-center gap-2">
         <Inbox className="h-6 w-6" />
         <h1 className="text-2xl font-bold">My Enquiries</h1>

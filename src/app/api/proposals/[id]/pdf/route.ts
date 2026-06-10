@@ -129,6 +129,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   if (!proposal) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  const draftData = (proposal.draft_data || {}) as Record<string, unknown>;
+  const vehicleType = draftData.vehicle_type as string | undefined;
+  const vehicleModel = draftData.vehicle_model as string | undefined;
+
   // FIX 1: Use literal currency symbol — UTF-8 + Noto Sans font handles ₹ correctly
   const cur = getCurrencySymbol(proposal.currency as string);
 
@@ -181,6 +185,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const hotelSPTotal = (hotels || [])
     .filter(h => (Number(h.sp_per_night) || 0) > 0)
     .reduce((s, h) => s + (Number(h.sp_per_night) || 0) * (Number(h.nights) || 1), 0);
+  const lineItemSPTotal = (lineItems || [])
+    .filter((li: Record<string, unknown>) => li.type === 'ancillary' && li.include_in_total)
+    .reduce((s: number, li: Record<string, unknown>) => s + (Number(li.sp) || Number(li.cp) || 0), 0);
   const flightSPTotal = (flights || [])
     .reduce((s, f) => s + (Number(f.sp_total) || 0), 0);
 
@@ -189,9 +196,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const packageTotal = isPackage
     ? (Number(proposal.total_sp) || (Number(proposal.package_sp_per_person) || 0) * (Number(proposal.pax_adults) || 1) + (Number(proposal.package_cwb_sp) || 0) * (Number(proposal.pax_children) || 0))
     : 0;
+  // land_sp from the editor already includes markup. Fall back to summing item-level SPs.
+  const itemLevelLandSP = hotelSPTotal + lineItemSPTotal;
   const effectiveLandSP = isPackage
-    ? (packageTotal > 0 ? packageTotal : Number(proposal.land_sp) || 0)
-    : (hotelSPTotal > 0 ? hotelSPTotal + (Number(proposal.land_sp) || 0) : Number(proposal.land_sp) || 0);
+    ? (packageTotal > 0 ? packageTotal : Number(proposal.land_sp) || itemLevelLandSP)
+    : (Number(proposal.land_sp) || itemLevelLandSP);
 
   // Per-type totals
   const pricingLandSP   = pdfType === 'flight_only' ? 0 : effectiveLandSP;
@@ -240,6 +249,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     pricingRows += `<tr><td><strong>Grand Total (${paxAdults} pax)</strong></td><td style="text-align:right;"><strong>${R(grandTotal)}</strong></td></tr>`;
   } else if (grandTotal > 0) {
     pricingRows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${R(grandTotal)}</strong></td></tr>`;
+  } else if (Number(proposal.total_sp) > 0) {
+    // Fallback: use the pre-calculated total_sp from the proposal editor
+    pricingRows += `<tr class="grand-total-row"><td><strong>Grand Total</strong></td><td style="text-align:right;"><strong>${R(Number(proposal.total_sp))}</strong></td></tr>`;
   }
   if (!pricingRows) {
     pricingRows = `<tr><td colspan="2" style="text-align:center;color:#888;font-size:0.9rem;padding:18px;">Pricing to be updated</td></tr>`;
@@ -449,9 +461,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     <tr><td><strong>Travel Dates</strong></td><td>${proposal.travel_start ? fmtDate(String(proposal.travel_start)) : '&#8212;'} to ${proposal.travel_end ? fmtDate(String(proposal.travel_end)) : '&#8212;'}</td></tr>
     <tr><td><strong>Travellers</strong></td><td>${proposal.pax_adults} Adults${(proposal.pax_children as number) > 0 ? `, ${proposal.pax_children} Children${proposal.children_ages ? ` (Ages: ${(proposal.children_ages as number[]).join(', ')})` : ''}` : ''}</td></tr>
     ${(proposal.trip_cities as Array<{city: string; nights: number}> || []).length > 0 ? `<tr><td><strong>Cities</strong></td><td>${(proposal.trip_cities as Array<{city: string; nights: number}>).map(c => `${toTitleCase(c.city)} (${c.nights}N)`).join(' &#8594; ')}</td></tr>` : ''}
-    <tr><td><strong>Trip ID</strong></td><td>${String(proposal.id).slice(0, 8).toUpperCase()}</td></tr>
+    <tr><td><strong>Trip ID</strong></td><td>${(proposal.trip_id as string) || String(proposal.id).slice(0, 8).toUpperCase()}</td></tr>
     ${proposal.special_notes ? `<tr><td><strong>Special Occasions</strong></td><td>${cleanText(String(proposal.special_notes))}</td></tr>` : ''}
     ${proposal.dietary_notes ? `<tr><td><strong>Dietary Notes</strong></td><td>${cleanText(String(proposal.dietary_notes))}</td></tr>` : ''}
+    ${vehicleType ? `<tr><td><strong>Vehicle Type</strong></td><td>${toTitleCase(String(vehicleType).replace(/_/g, ' '))}</td></tr>` : ''}
+    ${vehicleModel ? `<tr><td><strong>Vehicle Model</strong></td><td>${cleanText(String(vehicleModel))}</td></tr>` : ''}
   </table>
 </div>
 

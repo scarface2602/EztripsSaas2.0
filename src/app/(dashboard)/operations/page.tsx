@@ -8,8 +8,9 @@ export default async function OperationsPage() {
   const { data: { user: authUser } } = await authClient.auth.getUser();
   const currentUserId = authUser?.id || '';
   const today = new Date().toISOString().split('T')[0];
+  const thirtyDaysOut = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // Fetch all active booking items needing attention
+  // Fetch all active booking items needing attention (current date → 30 days out)
   const { data: activeItems } = await supabase
     .from('booking_items')
     .select(`
@@ -24,6 +25,8 @@ export default async function OperationsPage() {
       )
     `)
     .in('supplier_status', ['pending', 'confirmation_requested', 'on_hold', 'confirmed'])
+    .gte('start_date', today)
+    .lte('start_date', thirtyDaysOut)
     .order('start_date', { ascending: true });
 
   // Today's travel (check-ins: start_date = today)
@@ -58,18 +61,17 @@ export default async function OperationsPage() {
     .in('role', ['super_admin', 'agent', 'manager', 'operations'])
     .order('full_name');
 
-  // Supplier dues this week (from booking_payments)
-  const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  // Supplier dues this week (from booking_package_payments — no direction column, filter by status + due date window)
+  const thirtyDayEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const { data: supplierDues } = await supabase
-    .from('booking_payments')
-    .select('amount, supplier_id')
-    .eq('direction', 'payable')
-    .in('status', ['pending', 'partial'])
+    .from('booking_package_payments')
+    .select('amount, booking_packages!inner(booking_id)')
+    .eq('status', 'pending')
     .gte('due_date', today)
-    .lte('due_date', weekEnd);
+    .lte('due_date', thirtyDayEnd);
 
   const supplierDueTotal = (supplierDues || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-  const supplierDueCount = new Set((supplierDues || []).map((p: any) => p.supplier_id).filter(Boolean)).size;
+  const supplierDueCount = (supplierDues || []).length;
 
   return (
     <OperationsClient

@@ -70,8 +70,7 @@ export async function GET(req: NextRequest) {
           const { data: payments } = await supabase
             .from('booking_payments')
             .select('amount, status')
-            .eq('booking_id', reminder.booking_id)
-            .eq('direction', 'receivable');
+            .eq('booking_id', reminder.booking_id);
 
           const totalAmount = (payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
           const amountPaid = (payments || []).filter((p: any) => p.status === 'paid').reduce((s: number, p: any) => s + Number(p.amount), 0);

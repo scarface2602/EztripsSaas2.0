@@ -13,6 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Search, Plus, X, Truck } from 'lucide-react';
 import { Pagination } from '@/components/pagination';
 import { SortableHead, useSort } from '@/components/sortable-head';
+import { useLookup } from '@/lib/hooks/use-lookup';
+import { CreatableCombobox } from '@/components/ui/creatable-combobox';
 
 const PAGE_SIZE = 20;
 
@@ -35,6 +37,9 @@ export default function SuppliersPage() {
   const { sortCol, sortDir, onSort } = useSort('created_at', 'desc');
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const { items: destinationItems } = useLookup('destination');
+  const [newCountry, setNewCountry] = useState('');
+  const destinationOptions = destinationItems.map(d => ({ value: d.value, label: d.label }));
 
   const fetchSuppliers = useCallback(async (query: string) => {
     setLoading(true);
@@ -81,6 +86,7 @@ export default function SuppliersPage() {
 
     if (!error) {
       setShowAddForm(false);
+      setNewCountry('');
       fetchSuppliers(search);
     }
   }
@@ -118,7 +124,13 @@ export default function SuppliersPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="country">Destination</Label>
-                <Input id="country" name="country" />
+                <input type="hidden" name="country" value={newCountry} />
+                <CreatableCombobox
+                  value={newCountry}
+                  onChange={setNewCountry}
+                  options={destinationOptions}
+                  placeholder="Search destination..."
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="contact_name">Contact Name</Label>

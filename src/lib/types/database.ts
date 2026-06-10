@@ -492,6 +492,7 @@ export interface ParsedQuote {
   exclusions: string[];
   activities: ParsedActivity[];
   itinerary_days: ParsedItineraryDay[];
+  trip_cities?: Array<{ city: string; nights: number }>;
   payment_terms: string | null;
   validity: string | null;
 }
@@ -700,4 +701,84 @@ export interface VoucherAudit {
   actor_id: string | null;
   details: Record<string, unknown> | null;
   created_at: string;
+}
+
+// ============================================================
+// Trip Master Folder (Macro-ERP)
+// ============================================================
+
+export type TripStatus = 'ENQUIRY' | 'PROPOSING' | 'ACTIVE_BOOKING' | 'COMPLETED';
+
+export interface Trip {
+  id: string;
+  trip_id: string; // Semantic ID e.g. EZ-2606001pkg
+  status: TripStatus;
+  client_id: string | null;
+  created_by: string | null;
+  destination: string | null;
+  travel_start: string | null;
+  travel_end: string | null;
+  pax_adults: number;
+  pax_children: number;
+
+  // Proposal linkage
+  proposal_ids: string[];
+  winning_proposal_id: string | null;
+
+  // Booking linkage
+  booking_id: string | null;
+
+  // Handover compliance
+  passports_verified: boolean;
+  pan_verified: boolean;
+  initial_deposit_received: boolean;
+  handover_locked: boolean; // true = ops handover blocked
+
+  // Metadata
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Ops task linked to a trip
+export type OpsTaskStatus = 'to_book' | 'pending_dmc' | 'payment_requested' | 'ready_for_vouchers';
+
+export interface OpsTask {
+  id: string;
+  trip_id: string; // FK to Trip.trip_id
+  booking_item_id: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  description: string;
+  status: OpsTaskStatus;
+  travel_date: string | null;
+  assigned_to: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Financial ledger entries keyed to trip
+export type LedgerDirection = 'receivable' | 'payable';
+
+export interface TripLedgerEntry {
+  id: string;
+  trip_id: string; // FK to Trip.trip_id
+  direction: LedgerDirection;
+  // AR fields
+  client_id: string | null;
+  client_name: string | null;
+  // AP fields
+  supplier_id: string | null;
+  supplier_name: string | null;
+  booking_ref: string | null;
+  amount: number;
+  amount_paid: number;
+  due_date: string;
+  status: 'pending' | 'partial' | 'paid' | 'overdue';
+  utr_number: string | null;
+  payment_proof_url: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }

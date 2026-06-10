@@ -101,12 +101,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .eq('id', proposal.enquiry_id);
   }
 
-  // Auto-generate receivables from payment_terms
-  const paymentTerms = proposal.payment_terms as { deposit_pct?: number; balance_days_before?: number; notes?: string } | null;
-  const depositPct = paymentTerms?.deposit_pct ?? 25;
-  const balanceDaysBefore = paymentTerms?.balance_days_before ?? 30;
-
-  // Calculate grand total from SP values
+  // Calculate grand total from SP values (for acceptance log + email)
   const [
     { data: hotels },
     { data: flights },
@@ -143,108 +138,47 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const roundingUnit = Number(proposal.rounding_unit) || 0;
   if (roundingUnit > 0) grandTotal = Math.ceil(grandTotal / roundingUnit) * roundingUnit;
 
-  const depositAmount = Math.round(grandTotal * depositPct / 100);
-  const balanceAmount = grandTotal - depositAmount;
+  // Call unified booking creation engine
+  const { createdBookings, createdPackages } = await createBookingsFromProposal(supabase, proposal, proposal.created_by || '');
 
-  const travelStart = proposal.travel_start ? new Date(proposal.travel_start) : new Date();
-  const balanceDueDate = new Date(travelStart);
-  balanceDueDate.setDate(balanceDueDate.getDate() - balanceDaysBefore);
+  // --- Attach Unified Client Payment Schedule (AR) ---
+  // The client pays a single consolidated deposit & balance for the entire trip.
+  // We attach these installments to the first generated booking_package.
+  if (createdPackages.length > 0) {
+    const paymentTerms = proposal.payment_terms as { deposit_pct?: number; balance_days_before?: number } | null;
+    const depositPct = paymentTerms?.deposit_pct ?? 30;
+    const balanceDaysBefore = paymentTerms?.balance_days_before ?? 30;
 
-  const receivables = [
-    {
-      proposal_id: proposalId,
-      client_id: proposal.client_id,
-      description: `${depositPct}% deposit`,
-      amount: depositAmount,
-      due_date: new Date().toISOString().split('T')[0],
-      status: 'pending',
-    },
-  ];
+    const depositAmount = Math.round(grandTotal * depositPct / 100);
+    const balanceAmount = grandTotal - depositAmount;
 
-  if (balanceAmount > 0) {
-    receivables.push({
-      proposal_id: proposalId,
-      client_id: proposal.client_id,
-      description: `${100 - depositPct}% balance`,
-      amount: balanceAmount,
-      due_date: balanceDueDate.toISOString().split('T')[0],
-      status: 'pending',
-    });
-  }
+    const travelStart = proposal.travel_start ? new Date(proposal.travel_start) : new Date();
+    const balanceDueDate = new Date(travelStart);
+    balanceDueDate.setDate(balanceDueDate.getDate() - balanceDaysBefore);
 
-  await supabase.from('receivables').insert(receivables);
+    const firstPackageId = (createdPackages[0] as { id: string }).id;
+    const payments = [
+      {
+        package_id: firstPackageId,
+        sequence: 1,
+        amount: depositAmount,
+        due_date: new Date().toISOString().split('T')[0],
+        status: 'pending',
+      },
+    ];
 
-  // Auto-generate payables per supplier from CP
-  const [
-    { data: hotelsFull },
-    { data: flightsFull },
-    { data: activitiesFull },
-    { data: lineItemsFull },
-  ] = await Promise.all([
-    supabase.from('hotels').select('supplier_id, cp_per_night, nights, name').eq('proposal_id', proposalId),
-    supabase.from('flights').select('supplier_id, cp_total, flight_number').eq('proposal_id', proposalId),
-    supabase.from('itinerary_activities').select('supplier_id, confirmed_cp, pvt_cp, sic_cp, is_optional, option_mode, type, location').eq('proposal_id', proposalId),
-    supabase.from('line_items').select('supplier_id, cp, is_optional, is_included, description').eq('proposal_id', proposalId),
-  ]);
-
-  // Group by supplier
-  const supplierTotals: Record<string, { amount: number; descriptions: string[] }> = {};
-
-  const addToSupplier = (supplierId: string | null, amount: number, desc: string) => {
-    if (!supplierId || amount <= 0) return;
-    if (!supplierTotals[supplierId]) supplierTotals[supplierId] = { amount: 0, descriptions: [] };
-    supplierTotals[supplierId].amount += amount;
-    supplierTotals[supplierId].descriptions.push(desc);
-  };
-
-  (hotelsFull || []).forEach((h) => {
-    addToSupplier(h.supplier_id, (Number(h.cp_per_night) || 0) * (Number(h.nights) || 0), `Hotel: ${h.name}`);
-  });
-  (flightsFull || []).forEach((f) => {
-    addToSupplier(f.supplier_id, Number(f.cp_total) || 0, `Flight: ${f.flight_number}`);
-  });
-  (activitiesFull || []).forEach((a) => {
-    if (a.is_optional) return;
-    const cp = a.option_mode === 'dual' ? (Number(a.confirmed_cp) || 0) : (Number(a.pvt_cp) || Number(a.sic_cp) || 0);
-    addToSupplier(a.supplier_id, cp, `${a.type}: ${a.location || ''}`);
-  });
-  (lineItemsFull || []).forEach((li) => {
-    if (li.is_included && !li.is_optional) {
-      addToSupplier(li.supplier_id, Number(li.cp) || 0, li.description);
+    if (balanceAmount > 0) {
+      payments.push({
+        package_id: firstPackageId,
+        sequence: 2,
+        amount: balanceAmount,
+        due_date: balanceDueDate.toISOString().split('T')[0],
+        status: 'pending',
+      });
     }
-  });
 
-  // Get supplier payment terms for due dates
-  const supplierIds = Object.keys(supplierTotals);
-  const { data: suppliers } = await supabase
-    .from('suppliers')
-    .select('id, payment_terms_days')
-    .in('id', supplierIds.length > 0 ? supplierIds : ['__none__']);
-
-  const supplierTerms: Record<string, number> = {};
-  (suppliers || []).forEach((s) => {
-    supplierTerms[s.id] = s.payment_terms_days || 30;
-  });
-
-  const payables = supplierIds.map((supplierId) => {
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + (supplierTerms[supplierId] || 30));
-    return {
-      proposal_id: proposalId,
-      supplier_id: supplierId,
-      description: supplierTotals[supplierId].descriptions.join(', '),
-      amount: Math.round(supplierTotals[supplierId].amount * 100) / 100,
-      due_date: dueDate.toISOString().split('T')[0],
-      status: 'pending',
-    };
-  });
-
-  if (payables.length > 0) {
-    await supabase.from('payables').insert(payables);
+    await supabase.from('booking_package_payments').insert(payments);
   }
-
-  // Auto-create ops bookings (one per supplier)
-  const createdBookings = await createBookingsFromProposal(supabase, proposal, proposal.created_by || '');
 
   // Copy passenger details from proposal to booking_passenger_details
   const passengerDetails = proposal.passenger_details as Array<Record<string, unknown>> | null;
@@ -315,8 +249,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     success: true,
     proposal_id: proposalId,
     grand_total: grandTotal,
-    receivables_count: receivables.length,
-    payables_count: payables.length,
     bookings_count: createdBookings.length,
+    packages_count: createdPackages.length,
   });
 }

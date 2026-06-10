@@ -18,7 +18,7 @@ const BRAND = {
 
 export type VoucherStatus = 'confirmed' | 'blocked';
 
-function baseLayout(title: string, logoDataUri: string, orgName: string, body: string, status: VoucherStatus = 'confirmed'): string {
+function baseLayout(title: string, logoDataUri: string, orgName: string, body: string, status: VoucherStatus = 'confirmed', tripId?: string): string {
   const isConfirmed = status === 'confirmed';
   const badgeColor = isConfirmed ? BRAND.green : '#d97706';
   const badgeText = isConfirmed ? 'CONFIRMED' : 'BLOCKED';
@@ -59,6 +59,7 @@ function baseLayout(title: string, logoDataUri: string, orgName: string, body: s
   </div>
   <div class="title">${title}</div>
   <div style="text-align:center;"><span class="badge">${badgeText}</span></div>
+  ${tripId ? `<div style="text-align:center;font-size:0.8rem;color:${BRAND.grayText};margin-top:4px;font-family:monospace;">Trip: ${tripId}</div>` : ''}
   ${body}
   <div class="footer">
     This voucher is issued by ${orgName}. Please present this voucher at the time of check-in/service.
@@ -90,7 +91,7 @@ export interface HotelVoucherData {
   specialRequests?: string;
 }
 
-export function hotelVoucherHTML(d: HotelVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed'): string {
+export function hotelVoucherHTML(d: HotelVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed', tripId?: string): string {
   const guestList = d.guestNames && d.guestNames.length > 0
     ? d.guestNames.map((g, i) => `Room ${i + 1}: ${g}`).join('<br/>')
     : '';
@@ -110,7 +111,7 @@ export function hotelVoucherHTML(d: HotelVoucherData, logoDataUri: string, orgNa
     </table>
     ${guestList ? `<div style="margin-top:12px;"><strong style="font-size:0.85rem;">Guests per Room:</strong><br/><span style="font-size:0.85rem;">${guestList}</span></div>` : ''}
     ${d.specialRequests ? `<div class="note"><strong>Special Requests:</strong> ${d.specialRequests}</div>` : ''}
-  `, status);
+  `, status, tripId);
 }
 
 export interface FlightVoucherData {
@@ -126,7 +127,7 @@ export interface FlightVoucherData {
   baggage?: string;
 }
 
-export function flightVoucherHTML(d: FlightVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed'): string {
+export function flightVoucherHTML(d: FlightVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed', tripId?: string): string {
   return baseLayout('Flight Voucher', logoDataUri, orgName, `
     <table>
       ${row('Passenger', d.customerName)}
@@ -141,7 +142,7 @@ export function flightVoucherHTML(d: FlightVoucherData, logoDataUri: string, org
       ${row('Contact', d.contactPhone || '')}
     </table>
     <div class="note"><strong>Important:</strong> Please arrive at the airport at least 2 hours before departure for domestic and 3 hours for international flights.</div>
-  `, status);
+  `, status, tripId);
 }
 
 export interface ActivityVoucherData {
@@ -155,7 +156,7 @@ export interface ActivityVoucherData {
   contactPhone?: string;
 }
 
-export function activityVoucherHTML(d: ActivityVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed'): string {
+export function activityVoucherHTML(d: ActivityVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed', tripId?: string): string {
   return baseLayout('Activity Voucher', logoDataUri, orgName, `
     <table>
       ${row('Guest Name', d.customerName)}
@@ -167,7 +168,7 @@ export function activityVoucherHTML(d: ActivityVoucherData, logoDataUri: string,
       ${status === 'confirmed' ? row('Confirmation No.', d.confirmationNumber || '') : ''}
       ${row('Contact', d.contactPhone || '')}
     </table>
-  `, status);
+  `, status, tripId);
 }
 
 export interface TransferVoucherData {
@@ -184,7 +185,7 @@ export interface TransferVoucherData {
   contactPhone?: string;
 }
 
-export function transferVoucherHTML(d: TransferVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed'): string {
+export function transferVoucherHTML(d: TransferVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed', tripId?: string): string {
   return baseLayout('Transfer Voucher', logoDataUri, orgName, `
     <table>
       ${row('Guest Name', d.customerName)}
@@ -198,7 +199,7 @@ export function transferVoucherHTML(d: TransferVoucherData, logoDataUri: string,
       ${row('Agent Contact', d.contactPhone || '')}
     </table>
     <div class="note"><strong>Note:</strong> The driver will be at the pickup location 15 minutes before the scheduled time.</div>
-  `, status);
+  `, status, tripId);
 }
 
 // ─── Vehicle Voucher ─────────────────────────────────────────────────────────
@@ -220,7 +221,7 @@ export interface VehicleVoucherData {
   itinerary?: Array<{ date?: string; time?: string; location?: string; notes?: string }>;
 }
 
-export function vehicleVoucherHTML(d: VehicleVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed'): string {
+export function vehicleVoucherHTML(d: VehicleVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed', tripId?: string): string {
   const vehicleLabel = [d.vehicleBrand, d.vehicleType?.replace(/_/g, ' ')].filter(Boolean).join(' — ');
   const modeLabel = d.availabilityMode === 'at_disposal' ? 'At Disposal' : d.availabilityMode === 'point_to_point' ? 'Point-to-Point' : (d.availabilityMode || '');
 
@@ -255,7 +256,7 @@ export function vehicleVoucherHTML(d: VehicleVoucherData, logoDataUri: string, o
     </table>
     ${itineraryHtml}
     <div class="note"><strong>Note:</strong> The driver will be at the pickup location 15 minutes before the scheduled time. Please carry a valid photo ID.</div>
-  `, status);
+  `, status, tripId);
 }
 
 // ─── Package Voucher (Combined) ─────────────────────────────────────────────
@@ -399,7 +400,7 @@ function renderItemGroup(type: string, items: PackageVoucherItem[]): string {
     </div>`;
 }
 
-export function packageVoucherHTML(data: PackageVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed'): string {
+export function packageVoucherHTML(data: PackageVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed', tripId?: string): string {
   const paxStr = `${data.paxAdults} Adult${data.paxAdults !== 1 ? 's' : ''}${data.paxChildren > 0 ? `, ${data.paxChildren} Child${data.paxChildren !== 1 ? 'ren' : ''}` : ''}`;
 
   // Group items by type, in display order
@@ -456,5 +457,5 @@ export function packageVoucherHTML(data: PackageVoucherData, logoDataUri: string
     ${emergencyHtml}
   `;
 
-  return baseLayout('Booking Confirmed', logoDataUri, orgName, body, status);
+  return baseLayout('Booking Confirmed', logoDataUri, orgName, body, status, tripId);
 }

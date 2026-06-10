@@ -402,6 +402,7 @@ export default function OperationsClient({ items: initialItems, todayItems: init
   };
 
   // Checklist View Component — grouped by overdue / due today / upcoming
+  // Uses both scheduled_reminders (API) and booking items (props, 30-day window)
   const ChecklistView = () => {
     const [taskGroups, setTaskGroups] = useState<{ overdue: any[]; due_today: any[]; upcoming: any[] }>({ overdue: [], due_today: [], upcoming: [] });
     const [checklistLoading, setChecklistLoading] = useState(true);
@@ -410,7 +411,51 @@ export default function OperationsClient({ items: initialItems, todayItems: init
     useEffect(() => {
       fetch('/api/ops/daily-tasks')
         .then(r => r.ok ? r.json() : { overdue: [], due_today: [], upcoming: [] })
-        .then(data => setTaskGroups({ overdue: data.overdue || [], due_today: data.due_today || [], upcoming: data.upcoming || [] }))
+        .then(data => {
+          // Supplement with booking items from the 30-day window (items prop)
+          // that aren't already covered by a scheduled_reminder
+          const itemTasks: { overdue: any[]; due_today: any[]; upcoming: any[] } = { overdue: [], due_today: [], upcoming: [] };
+          const actionableStatuses = ['pending', 'confirmation_requested', 'on_hold'];
+
+          for (const item of items) {
+            if (!actionableStatuses.includes(item.supplier_status)) continue;
+            // Skip if already represented by a reminder
+            const hasReminder = (data.overdue || []).concat(data.due_today || [], data.upcoming || [])
+              .some((t: any) => t.booking_item?.id === item.id);
+            if (hasReminder) continue;
+
+            const booking = item.bookings as any;
+            const task = {
+              id: `item-${item.id}`,
+              type: item.supplier_status === 'confirmation_requested' ? 'supplier_followup' : 'supplier_followup',
+              scheduled_for: item.start_date,
+              status: 'pending',
+              booking_id: item.booking_id,
+              booking_item: item,
+              booking: booking ? {
+                id: booking.id,
+                title: booking.title,
+                destination: booking.destination,
+                client_name: booking.clients?.full_name || 'Guest',
+              } : null,
+            };
+
+            const startDate = (item.start_date || '').split('T')[0];
+            if (startDate < todayStr) {
+              itemTasks.overdue.push(task);
+            } else if (startDate === todayStr) {
+              itemTasks.due_today.push(task);
+            } else {
+              itemTasks.upcoming.push(task);
+            }
+          }
+
+          setTaskGroups({
+            overdue: [...(data.overdue || []), ...itemTasks.overdue],
+            due_today: [...(data.due_today || []), ...itemTasks.due_today],
+            upcoming: [...(data.upcoming || []), ...itemTasks.upcoming],
+          });
+        })
         .catch(() => {})
         .finally(() => setChecklistLoading(false));
     }, []);

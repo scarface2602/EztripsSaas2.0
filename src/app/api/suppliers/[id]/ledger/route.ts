@@ -26,13 +26,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .eq('supplier_id', supplierId)
     .order('due_date', { ascending: false });
 
-  // Fetch booking_payments (new system — payable direction only)
+  // Fetch booking_items for this supplier (supplier cost settlements)
   const { data: bookingPayments } = await supabase
-    .from('booking_payments')
-    .select('id, amount, due_date, paid_date, status, payment_mode, reference_number, notes, booking_id, bookings(title)')
+    .from('booking_items')
+    .select('id, cost_price, supplier_status, supplier_reference, item_type, created_at, booking_id, bookings(title)')
     .eq('supplier_id', supplierId)
-    .eq('direction', 'payable')
-    .order('due_date', { ascending: false });
+    .order('created_at', { ascending: false });
 
   // Merge into unified list
   const allPayables = [
@@ -52,14 +51,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     ...(bookingPayments || []).map((p: any) => ({
       id: p.id,
       source: 'booking',
-      description: (p.bookings as any)?.title || 'Booking payment',
-      amount: Number(p.amount),
-      due_date: p.due_date,
-      status: p.status,
-      paid_date: p.paid_date,
-      payment_mode: p.payment_mode,
-      reference: p.reference_number,
-      notes: p.notes,
+      description: `${p.item_type || 'Item'} — ${(p.bookings as any)?.title || 'Booking'}`,
+      amount: Number(p.cost_price || 0),
+      due_date: p.created_at?.split('T')[0] || null,
+      status: p.supplier_status === 'confirmed' ? 'paid' : 'pending',
+      paid_date: p.supplier_status === 'confirmed' ? p.created_at?.split('T')[0] : null,
+      payment_mode: null,
+      reference: p.supplier_reference,
+      notes: null,
       booking_title: (p.bookings as any)?.title,
     })),
   ];

@@ -29,6 +29,7 @@ export interface ReceiptData {
   // Booking
   bookingTitle?: string;
   destination?: string;
+  tripId?: string;
 
   // Payment
   amount: number;
@@ -84,6 +85,7 @@ export function receiptHTML(data: ReceiptData): string {
       <div style="text-align:right;">
         <div class="receipt-title">PAYMENT RECEIPT</div>
         <div style="color:${BRAND.grayText};font-size:0.85rem;margin-top:4px;">${data.receiptNumber}</div>
+        ${data.tripId ? `<div style="color:${BRAND.grayText};font-size:0.85rem;">Trip: ${data.tripId}</div>` : ''}
         <div style="color:${BRAND.grayText};font-size:0.85rem;">Date: ${data.receiptDate}</div>
       </div>
     </div>

@@ -27,7 +27,11 @@ import {
   Headset,
   CheckSquare,
   Wallet,
-  IndianRupee,
+  TrendingUp,
+  ChevronDown,
+  ChevronRight,
+  CreditCard,
+  BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -38,27 +42,25 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 
-// Core nav — visible to all roles
-const CORE_ITEMS = [
+// ── Workspace Groups ────────────────────────────────────
+
+const SALES_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/leads', label: 'Enquiries', icon: Inbox },
   { href: '/proposals', label: 'Proposals', icon: FileText },
   { href: '/bookings', label: 'Bookings', icon: ClipboardList },
-  { href: '/leads', label: 'Enquiries', icon: Inbox },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Suppliers', icon: Truck },
 ];
 
-// Finance group — receivables, payables, accounts
-const FINANCE_ITEMS = [
-  { href: '/receivables', label: 'Receivables', icon: IndianRupee },
-  { href: '/payables', label: 'Payables', icon: IndianRupee },
-  { href: '/accounts/payments', label: 'Accounts', icon: Wallet, roles: ['accounts', 'manager', 'super_admin'] },
-];
-
-// Ops group — operations, approvals
 const OPS_ITEMS = [
   { href: '/operations', label: 'Operations', icon: Headset, roles: ['operations', 'manager', 'super_admin'] },
   { href: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['manager', 'super_admin'] },
+];
+
+const FINANCE_ITEMS = [
+  { href: '/accounts', label: 'Treasury', icon: Wallet, roles: ['accounts', 'manager', 'super_admin'] },
+  { href: '/accounts/payments', label: 'Payments', icon: CreditCard, roles: ['accounts', 'manager', 'super_admin'] },
 ];
 
 const ADMIN_ITEMS = [
@@ -72,6 +74,8 @@ const WEBSITE_ITEMS = [
   { href: '/admin/website/destinations', label: 'Destinations & Packages', icon: MapPin },
   { href: '/admin/website/blog', label: 'Blog', icon: BookOpen },
 ];
+
+// ── Components ──────────────────────────────────────────
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -98,13 +102,16 @@ interface NavItem {
   roles?: string[];
 }
 
-function NavLink({ item, pathname, onNavigate, badge }: { item: NavItem; pathname: string; onNavigate?: () => void; badge?: number }) {
-  const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+function NavLink({ item, pathname, onNavigate, badge, collapsible = false }: { item: NavItem; pathname: string; onNavigate?: () => void; badge?: number; collapsible?: boolean }) {
+  const isActive = item.href === '/'
+    ? pathname === '/'
+    : pathname.startsWith(item.href);
   const Icon = item.icon;
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
+      title={item.label}
       className={cn(
         'flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
         isActive
@@ -112,10 +119,10 @@ function NavLink({ item, pathname, onNavigate, badge }: { item: NavItem; pathnam
           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >
-      <Icon className="h-4 w-4" />
-      {item.label}
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className={cn(collapsible && 'hidden group-hover/sidebar:inline')}>{item.label}</span>
       {badge != null && badge > 0 && (
-        <span className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 flex items-center justify-center px-1">
+        <span className={cn('ml-auto bg-red-500 text-white text-xs rounded-full h-5 min-w-5 flex items-center justify-center px-1', collapsible && 'hidden group-hover/sidebar:flex')}>
           {badge}
         </span>
       )}
@@ -123,69 +130,144 @@ function NavLink({ item, pathname, onNavigate, badge }: { item: NavItem; pathnam
   );
 }
 
-function SidebarNav({ user, onNavigate, overdueFollowUps = 0 }: { user: User; onNavigate?: () => void; overdueFollowUps?: number }) {
+function CollapsibleGroup({
+  label,
+  icon: Icon,
+  items,
+  pathname,
+  isOpen,
+  onToggle,
+  onNavigate,
+  userRole,
+  overdueFollowUps,
+  collapsible = false,
+}: {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  items: NavItem[];
+  pathname: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  onNavigate?: () => void;
+  userRole: string;
+  overdueFollowUps?: number;
+  collapsible?: boolean;
+}) {
+  const visibleItems = items.filter(i => !i.roles || i.roles.includes(userRole));
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        title={label}
+        className={cn(
+          'flex items-center gap-2 w-full px-3 py-2 text-xs font-semibold uppercase tracking-wider rounded-md transition-colors',
+          isOpen ? 'text-foreground bg-muted/50' : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+        )}
+      >
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+        <span className={cn(collapsible && 'hidden group-hover/sidebar:inline')}>{label}</span>
+        <span className={cn('ml-auto', collapsible && 'hidden group-hover/sidebar:inline')}>
+          {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        </span>
+      </button>
+      {isOpen && (
+        <div className="mt-0.5 space-y-0.5 pl-1">
+          {visibleItems.map((item) => (
+            <NavLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              onNavigate={onNavigate}
+              badge={item.href === '/leads' ? overdueFollowUps : undefined}
+              collapsible={collapsible}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SidebarNav({ user, onNavigate, overdueFollowUps = 0, collapsible = false }: { user: User; onNavigate?: () => void; overdueFollowUps?: number; collapsible?: boolean }) {
   const pathname = usePathname();
   const isAdmin = user.role === 'super_admin' || user.role === 'manager';
 
-  const visibleOps = OPS_ITEMS.filter(i => !i.roles || i.roles.includes(user.role));
-  const visibleFinance = FINANCE_ITEMS.filter(i => !i.roles || i.roles.includes(user.role));
+  // Auto-expand the group matching the current route
+  const isSalesRoute = pathname === '/' || pathname.startsWith('/proposals') || pathname.startsWith('/leads') || pathname.startsWith('/clients') || pathname.startsWith('/suppliers') || pathname.startsWith('/bookings');
+  const isOpsRoute = pathname.startsWith('/operations') || pathname.startsWith('/approvals');
+  const isFinanceRoute = pathname.startsWith('/accounts');
+
+  const [salesOpen, setSalesOpen] = useState(isSalesRoute);
+  const [opsOpen, setOpsOpen] = useState(isOpsRoute);
+  const [financeOpen, setFinanceOpen] = useState(isFinanceRoute);
 
   return (
     <>
-      <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-        {CORE_ITEMS.map((item) => (
-          <NavLink
-            key={item.href}
-            item={item}
-            pathname={pathname}
-            onNavigate={onNavigate}
-            badge={item.href === '/leads' ? overdueFollowUps : undefined}
-          />
-        ))}
+      <nav className="flex-1 overflow-y-auto p-3 space-y-2">
+        <CollapsibleGroup
+          label="Sales & Growth"
+          icon={TrendingUp}
+          items={SALES_ITEMS}
+          pathname={pathname}
+          isOpen={salesOpen}
+          onToggle={() => setSalesOpen(!salesOpen)}
+          onNavigate={onNavigate}
+          userRole={user.role}
+          overdueFollowUps={overdueFollowUps}
+          collapsible={collapsible}
+        />
 
-        {visibleFinance.length > 0 && (
-          <>
-            <p className="text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider">Finance</p>
-            {visibleFinance.map((item) => (
-              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
-            ))}
-          </>
-        )}
+        <CollapsibleGroup
+          label="Operations"
+          icon={Headset}
+          items={OPS_ITEMS}
+          pathname={pathname}
+          isOpen={opsOpen}
+          onToggle={() => setOpsOpen(!opsOpen)}
+          onNavigate={onNavigate}
+          userRole={user.role}
+          collapsible={collapsible}
+        />
 
-        {visibleOps.length > 0 && (
-          <>
-            <p className="text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider">Ops</p>
-            {visibleOps.map((item) => (
-              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
-            ))}
-          </>
-        )}
+        <CollapsibleGroup
+          label="Finance & Treasury"
+          icon={BarChart3}
+          items={FINANCE_ITEMS}
+          pathname={pathname}
+          isOpen={financeOpen}
+          onToggle={() => setFinanceOpen(!financeOpen)}
+          onNavigate={onNavigate}
+          userRole={user.role}
+          collapsible={collapsible}
+        />
 
         {isAdmin && (
           <>
-            <p className="text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider">Admin</p>
+            <p className={cn('text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider', collapsible && 'hidden group-hover/sidebar:block')}>Admin</p>
             {ADMIN_ITEMS.map((item) => (
-              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} collapsible={collapsible} />
             ))}
           </>
         )}
 
         {isAdmin && (
           <>
-            <p className="text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider">Website CMS</p>
+            <p className={cn('text-[11px] text-muted-foreground px-3 pt-3 pb-0.5 uppercase tracking-wider', collapsible && 'hidden group-hover/sidebar:block')}>Website CMS</p>
             {WEBSITE_ITEMS.map((item) => (
-              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} collapsible={collapsible} />
             ))}
           </>
         )}
 
         {/* Settings at the bottom of nav */}
         <div className="pt-2">
-          <NavLink item={{ href: '/settings', label: 'Settings', icon: Settings }} pathname={pathname} onNavigate={onNavigate} />
+          <NavLink item={{ href: '/settings', label: 'Settings', icon: Settings }} pathname={pathname} onNavigate={onNavigate} collapsible={collapsible} />
         </div>
       </nav>
       <Separator />
-      <div className="p-3 space-y-2 shrink-0">
+      <div className={cn('p-3 space-y-2 shrink-0', collapsible && 'hidden group-hover/sidebar:block')}>
         <div className="text-sm">
           <p className="font-medium truncate">{user.full_name}</p>
           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
@@ -206,12 +288,12 @@ function SidebarNav({ user, onNavigate, overdueFollowUps = 0 }: { user: User; on
 
 export function Sidebar({ user, overdueFollowUps = 0 }: { user: User; overdueFollowUps?: number }) {
   return (
-    <aside className="hidden md:flex w-64 bg-background border-r flex-col h-full overflow-hidden">
-      <div className="p-4 shrink-0">
+    <aside className="group/sidebar hidden md:flex w-[64px] hover:w-[240px] transition-all duration-300 ease-in-out bg-background border-r flex-col h-full overflow-hidden z-50 absolute md:relative shadow-none hover:shadow-lg">
+      <div className="p-3 shrink-0 flex items-center justify-center group-hover/sidebar:p-4 group-hover/sidebar:justify-start transition-all duration-300">
         <Link href="/"><EzTripsLogo /></Link>
       </div>
       <Separator />
-      <SidebarNav user={user} overdueFollowUps={overdueFollowUps} />
+      <SidebarNav user={user} overdueFollowUps={overdueFollowUps} collapsible />
     </aside>
   );
 }

@@ -77,7 +77,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Sidebar user={user} overdueFollowUps={overdueFollowUps} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <MobileHeader user={user} overdueFollowUps={overdueFollowUps} />
-        <main className="flex-1 overflow-y-auto bg-muted/30">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-muted/30">
           <div className="p-4 md:p-6 max-w-7xl mx-auto">
             {children}
           </div>

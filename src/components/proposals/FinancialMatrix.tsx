@@ -6,10 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Sparkles, ClipboardPaste } from 'lucide-react';
-import { toast } from 'sonner';
+import { Plus, Trash2 } from 'lucide-react';
 import { type ProposalItem } from '@/lib/schemas/proposals';
 import { calculateLineItemSP, formatCurrency } from '@/lib/utils/pricing';
 
@@ -34,10 +32,14 @@ function newItem(): MatrixItem {
 export function FinancialMatrix({
   initialItems = [],
   currency = 'INR',
+  quoteType = 'itemised',
+  onQuoteTypeChange,
   onChange,
 }: {
   initialItems?: ProposalItem[];
   currency?: string;
+  quoteType?: 'package' | 'itemised';
+  onQuoteTypeChange?: (qt: 'package' | 'itemised') => void;
   onChange?: (items: ProposalItem[]) => void;
 }) {
   const [items, setItems] = useState<MatrixItem[]>(() =>
@@ -45,11 +47,9 @@ export function FinancialMatrix({
       ? initialItems.map(it => ({ ...it, _key: it.id || crypto.randomUUID() }))
       : [newItem()]
   );
-  const [isDmcMode, setIsDmcMode] = useState(false);
+  const isDmcMode = quoteType === 'package';
   const [dmcCost, setDmcCost] = useState(0);
   const [dmcMarkup, setDmcMarkup] = useState(0);
-  const [dropText, setDropText] = useState('');
-  const [parsing, setParsing] = useState(false);
 
   const emitChange = useCallback((updated: MatrixItem[]) => {
     if (onChange) {
@@ -107,90 +107,28 @@ export function FinancialMatrix({
     return { grossCost, profit, tax, clientTotal };
   }, [items, isDmcMode, dmcCost, dmcMarkup]);
 
-  // AI parse handler
-  const handleParse = async () => {
-    if (!dropText.trim()) return;
-    setParsing(true);
-    try {
-      const res = await fetch('/api/parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: dropText }),
-      });
-      if (!res.ok) throw new Error('Parse failed');
-      const { items: parsed } = await res.json();
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        toast.error('No items parsed from text');
-        return;
-      }
-      const newItems: MatrixItem[] = parsed.map((p: Record<string, unknown>) => ({
-        _key: crypto.randomUUID(),
-        type: (ITEM_TYPES.includes(p.type as typeof ITEM_TYPES[number]) ? p.type : 'other') as ProposalItem['type'],
-        service_name: String(p.service_name || p.description || ''),
-        cost_price: Number(p.cost_price || p.cp || 0),
-        markup_amount: Number(p.markup_amount || p.markup || 0),
-        tax_amount: Number(p.tax_amount || p.tax || 0),
-        selling_price: calculateLineItemSP(
-          Number(p.cost_price || p.cp || 0),
-          Number(p.markup_amount || p.markup || 0)
-        ) + Number(p.tax_amount || p.tax || 0),
-        ops_status: 'pending' as const,
-        currency,
-      }));
-      setItems(newItems);
-      emitChange(newItems);
-      setDropText('');
-      toast.success(`${newItems.length} items parsed`);
-    } catch {
-      toast.error('Failed to parse text');
-    } finally {
-      setParsing(false);
-    }
-  };
-
   return (
     <div className="space-y-4">
-      {/* AI Drop Zone */}
-      <Card className="border-dashed">
-        <CardContent className="pt-4">
-          <div className="flex items-start gap-3">
-            <div className="flex-1">
-              <Label className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-                <Sparkles className="h-3 w-3" /> Paste quote text to auto-populate rows
-              </Label>
-              <textarea
-                className="w-full min-h-[60px] rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-y"
-                placeholder="Paste supplier quote, DMC costing, or itinerary text here..."
-                value={dropText}
-                onChange={e => setDropText(e.target.value)}
-                onPaste={e => {
-                  const text = e.clipboardData.getData('text');
-                  if (text) setDropText(text);
-                }}
-              />
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-5 gap-1"
-              onClick={handleParse}
-              disabled={parsing || !dropText.trim()}
-            >
-              <ClipboardPaste className="h-3.5 w-3.5" />
-              {parsing ? 'Parsing...' : 'Parse'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Mode toggle + aggregate bar */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <Label className="text-sm font-medium">DMC Quote (Lump Sum)</Label>
-          <Switch checked={isDmcMode} onCheckedChange={setIsDmcMode} />
-          <Label className="text-sm text-muted-foreground">
-            {isDmcMode ? 'Lump Sum' : 'Itemized FIT'}
-          </Label>
+        <div className="flex items-center gap-1">
+          <Label className="text-sm font-medium mr-2">Pricing Mode</Label>
+          <div className="flex bg-muted rounded-lg p-0.5">
+            <button
+              type="button"
+              onClick={() => onQuoteTypeChange?.('package')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${isDmcMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Land Package (DMC)
+            </button>
+            <button
+              type="button"
+              onClick={() => onQuoteTypeChange?.('itemised')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${!isDmcMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Itemised
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div>
@@ -250,8 +188,8 @@ export function FinancialMatrix({
         </Card>
       )}
 
-      {/* Itemized grid */}
-      <Card>
+      {/* Itemized grid — only shown in itemised mode */}
+      {!isDmcMode && <Card>
         <CardContent className="pt-4 overflow-x-auto">
           <Table>
             <TableHeader>
@@ -356,7 +294,7 @@ export function FinancialMatrix({
             <Plus className="h-3.5 w-3.5" /> Add Item
           </Button>
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   );
 }

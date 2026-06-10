@@ -95,6 +95,40 @@ export default function EnquiryDetailPage() {
   const [teamMembers, setTeamMembers] = useState<Enquiry[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Requirements editing state
+  const [isEditingReqs, setIsEditingReqs] = useState(false);
+  const [editReqs, setEditReqs] = useState({
+    destination: '',
+    travel_date: '',
+    number_of_nights: 0,
+    adults: 1,
+    children: 0,
+    children_ages: '',
+    budget_range: '',
+    hotel_category: '',
+    special_requirements: '',
+  });
+
+  const handleStartEditReqs = () => {
+    setEditReqs({
+      destination: enquiry?.destination || '',
+      travel_date: enquiry?.travel_date || '',
+      number_of_nights: enquiry?.number_of_nights || 0,
+      adults: enquiry?.adults || 1,
+      children: enquiry?.children || 0,
+      children_ages: enquiry?.children_ages || '',
+      budget_range: enquiry?.budget_range || '',
+      hotel_category: enquiry?.hotel_category || '',
+      special_requirements: enquiry?.special_requirements || '',
+    });
+    setIsEditingReqs(true);
+  };
+
+  const handleSaveReqs = async () => {
+    await updateEnquiry(editReqs);
+    setIsEditingReqs(false);
+  };
+
   // Activity form
   const [showActivityForm, setShowActivityForm] = useState(false);
   const [actType, setActType] = useState('call_outgoing');
@@ -120,7 +154,7 @@ export default function EnquiryDetailPage() {
     const [eRes, aRes, pRes, uRes, srRes] = await Promise.all([
       supabase.from('website_enquiries').select('*').eq('id', id).single(),
       fetch(`/api/website/cms/enquiries/${id}/activities`).then(r => r.json()),
-      supabase.from('proposals').select('id, title, status, destination, created_at').eq('enquiry_id', id).order('created_at', { ascending: false }),
+      supabase.from('proposals').select('id, title, status, destination, created_at, bookings(trip_id)').eq('enquiry_id', id).order('created_at', { ascending: false }),
       supabase.from('users').select('id, full_name, email'),
       fetch(`/api/enquiries/send-to-supplier?enquiry_id=${id}`).then(r => r.json()),
     ]);
@@ -230,7 +264,14 @@ export default function EnquiryDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">{enquiry.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold">{enquiry.name}</h1>
+              {enquiry.query_id && (
+                <span className="text-xs text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded border">
+                  {enquiry.query_id}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
               {enquiry.destination || 'No destination'} &bull; Enquired {formatDistanceToNow(new Date(enquiry.created_at), { addSuffix: true })}
             </p>
@@ -274,21 +315,163 @@ export default function EnquiryDetailPage() {
 
           {/* Trip Details Card */}
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Trip Requirements</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p><span className="text-muted-foreground">Destination:</span> {enquiry.destination || '-'}</p>
-              <p><span className="text-muted-foreground">Travel Date:</span> {enquiry.travel_date || '-'}
-                {enquiry.date_flexible && <span className="text-xs text-muted-foreground ml-1">(flexible {enquiry.flexibility_days ? `+/-${enquiry.flexibility_days}d` : ''})</span>}
-              </p>
-              <p><span className="text-muted-foreground">Nights:</span> {enquiry.number_of_nights || '-'}</p>
-              <p><span className="text-muted-foreground">Pax:</span> {enquiry.adults || 0}A {enquiry.children > 0 ? `+ ${enquiry.children}C` : ''}</p>
-              {enquiry.children_ages && <p><span className="text-muted-foreground">Children Ages:</span> {enquiry.children_ages}</p>}
-              <p><span className="text-muted-foreground">Budget:</span> {enquiry.budget_range || '-'} {enquiry.budget_type ? `(${enquiry.budget_type})` : ''}</p>
-              <p><span className="text-muted-foreground">Hotel Category:</span> {enquiry.hotel_category || '-'}</p>
-              {enquiry.special_requirements && (
-                <p><span className="text-muted-foreground">Special:</span> {enquiry.special_requirements}</p>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Trip Requirements</CardTitle>
+              {!isEditingReqs ? (
+                <Button variant="ghost" size="sm" onClick={handleStartEditReqs}>
+                  Edit
+                </Button>
+              ) : (
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => setIsEditingReqs(false)}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" className="h-8" onClick={handleSaveReqs}>
+                    Save
+                  </Button>
+                </div>
               )}
-              <p><span className="text-muted-foreground">Source:</span> {enquiry.source || 'Website'}</p>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {isEditingReqs ? (
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Destination</Label>
+                    <Input
+                      value={editReqs.destination}
+                      onChange={(e) => setEditReqs({ ...editReqs, destination: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Travel Date</Label>
+                      <Input
+                        type="date"
+                        value={editReqs.travel_date}
+                        onChange={(e) => setEditReqs({ ...editReqs, travel_date: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Nights</Label>
+                      <Input
+                        type="number"
+                        value={editReqs.number_of_nights || ''}
+                        onChange={(e) => setEditReqs({ ...editReqs, number_of_nights: Number(e.target.value) || 0 })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Adults</Label>
+                      <Input
+                        type="number"
+                        value={editReqs.adults}
+                        onChange={(e) => setEditReqs({ ...editReqs, adults: Number(e.target.value) || 1 })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Children</Label>
+                      <Input
+                        type="number"
+                        value={editReqs.children}
+                        onChange={(e) => setEditReqs({ ...editReqs, children: Number(e.target.value) || 0 })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Child Ages</Label>
+                      <Input
+                        value={editReqs.children_ages}
+                        placeholder="5,10"
+                        onChange={(e) => setEditReqs({ ...editReqs, children_ages: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Budget</Label>
+                      <Input
+                        value={editReqs.budget_range}
+                        onChange={(e) => setEditReqs({ ...editReqs, budget_range: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Hotel Category</Label>
+                      <Input
+                        value={editReqs.hotel_category}
+                        onChange={(e) => setEditReqs({ ...editReqs, hotel_category: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Special Requirements</Label>
+                    <Textarea
+                      rows={2}
+                      value={editReqs.special_requirements}
+                      onChange={(e) => setEditReqs({ ...editReqs, special_requirements: e.target.value })}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p><span className="text-muted-foreground">Destination:</span> {enquiry.destination || '-'}</p>
+                  <p><span className="text-muted-foreground">Travel Date:</span> {enquiry.travel_date || enquiry.requirement_details?.travel_month || '-'}
+                    {enquiry.date_flexible && <span className="text-xs text-muted-foreground ml-1">(flexible {enquiry.flexibility_days ? `+/-${enquiry.flexibility_days}d` : ''})</span>}
+                  </p>
+                  <p><span className="text-muted-foreground">Nights:</span> {enquiry.number_of_nights || '-'}</p>
+                  <p><span className="text-muted-foreground">Pax:</span> {enquiry.adults || 0}A {enquiry.children > 0 ? `+ ${enquiry.children}C` : ''}</p>
+                  {enquiry.children_ages && <p><span className="text-muted-foreground">Children Ages:</span> {enquiry.children_ages}</p>}
+                  <p><span className="text-muted-foreground">Budget:</span> {enquiry.budget_range || '-'} {enquiry.budget_type ? `(${enquiry.budget_type})` : ''}</p>
+                  <p><span className="text-muted-foreground">Hotel Category:</span> {enquiry.hotel_category || '-'}</p>
+                  {enquiry.special_requirements && (
+                    <p><span className="text-muted-foreground">Special:</span> {enquiry.special_requirements}</p>
+                  )}
+                  <p><span className="text-muted-foreground">Source:</span> {enquiry.source || 'Website'}</p>
+
+                  {/* Display Wizard Choices */}
+                  {enquiry.requirement_details && (
+                    <div className="mt-4 pt-4 border-t space-y-2">
+                      <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Wizard Selections</p>
+                      
+                      {enquiry.requirement_details.departure_city && (
+                        <p>
+                          <span className="text-muted-foreground">Origin Hub:</span>{' '}
+                          <Badge variant="secondary" className="font-medium text-xs">
+                            {enquiry.requirement_details.departure_city}
+                          </Badge>
+                        </p>
+                      )}
+
+                      {Array.isArray(enquiry.requirement_details.cities) && enquiry.requirement_details.cities.length > 0 && (
+                        <div>
+                          <span className="text-muted-foreground block text-xs mb-1">
+                            {enquiry.requirement_details.is_pilgrimage ? 'Shrines in Focus:' : 'Cities in Focus:'}
+                          </span>
+                          <div className="flex flex-wrap gap-1">
+                            {enquiry.requirement_details.cities.map((c: string) => (
+                              <Badge key={c} variant="outline" className="text-[11px] bg-slate-50">
+                                {c}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {Array.isArray(enquiry.requirement_details.special_services) && enquiry.requirement_details.special_services.length > 0 && (
+                        <div className="pt-1">
+                          <span className="text-muted-foreground block text-xs mb-1">Requested Yatra Services:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {enquiry.requirement_details.special_services.map((s: string) => (
+                              <Badge key={s} variant="outline" className="text-[11px] bg-amber-50 text-amber-800 border-amber-200">
+                                {s}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -395,19 +578,30 @@ export default function EnquiryDetailPage() {
                 <p className="text-sm text-muted-foreground">No proposals created yet</p>
               ) : (
                 <div className="space-y-2">
-                  {proposals.map(p => (
-                    <div
-                      key={p.id}
-                      className="flex items-center justify-between p-2 border rounded cursor-pointer hover:bg-muted/50"
-                      onClick={() => router.push(`/proposals/${p.id}`)}
-                    >
-                      <div>
-                        <p className="text-sm font-medium">{p.title || 'Untitled'}</p>
-                        <p className="text-xs text-muted-foreground">{p.destination} &bull; {format(new Date(p.created_at), 'dd MMM yyyy')}</p>
+                  {proposals.map(p => {
+                    const bookingsArray = p.bookings as { trip_id: string | null }[] | undefined;
+                    const tripId = bookingsArray?.[0]?.trip_id;
+                    return (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between p-2 border rounded cursor-pointer hover:bg-muted/50"
+                        onClick={() => router.push(`/proposals/${p.id}`)}
+                      >
+                        <div>
+                          <p className="text-sm font-medium">
+                            {p.title || 'Untitled'}
+                            {tripId && (
+                              <span className="ml-2 font-mono text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                {tripId}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{p.destination} &bull; {format(new Date(p.created_at), 'dd MMM yyyy')}</p>
+                        </div>
+                        <Badge className="text-xs">{p.status}</Badge>
                       </div>
-                      <Badge className="text-xs">{p.status}</Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

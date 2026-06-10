@@ -50,6 +50,7 @@ interface Booking {
   created_at: string;
   clients: { full_name: string; phone: string | null; email: string | null } | null;
   suppliers: { name: string } | null;
+  trip_id: string | null;
 }
 
 export default function BookingsPage() {
@@ -152,7 +153,12 @@ export default function BookingsPage() {
               <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No bookings found</TableCell></TableRow>
             ) : bookings.map((b) => (
               <TableRow key={b.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/bookings/${b.id}`)}>
-                <TableCell className="font-medium">{b.title}</TableCell>
+                <TableCell className="font-medium">
+                  <div>{b.title}</div>
+                  {b.trip_id && (
+                    <div className="text-[10px] font-mono text-muted-foreground mt-0.5">{b.trip_id}</div>
+                  )}
+                </TableCell>
                 <TableCell><Badge variant="outline" className="text-xs">{TYPE_LABELS[b.booking_type] || b.booking_type}</Badge></TableCell>
                 <TableCell>{b.clients?.full_name || '-'}</TableCell>
                 <TableCell className="text-muted-foreground">{b.suppliers?.name || '-'}</TableCell>

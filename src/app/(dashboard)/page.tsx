@@ -5,6 +5,7 @@ import type { Proposal } from '@/lib/types/database';
 
 export interface DashboardEnquiry {
   id: string;
+  query_id?: string | null;
   name: string | null;
   destination: string | null;
   travel_date: string | null;
@@ -40,11 +41,11 @@ export default async function DashboardPage() {
   try {
     const [proposalsRes, receivablesRes, payablesRes, enquiryCountRes, recentEnquiriesRes, todayFollowUpsRes, overdueFollowUpsRes] = await Promise.all([
       supabase.from('proposals').select('*, clients(full_name)').order('created_at', { ascending: false }),
-      supabase.from('receivables').select('*').eq('status', 'pending'),
-      supabase.from('payables').select('*').eq('status', 'pending'),
+      supabase.from('booking_package_payments').select('id, amount, amount_paid, status').in('status', ['pending', 'due']),
+      supabase.from('booking_items').select('id, cost_price').not('supplier_id', 'is', null).not('supplier_status', 'in', '("completed","cancelled")'),
       supabase.from('website_enquiries').select('id', { count: 'exact', head: true }).eq('status', 'new'),
-      supabase.from('website_enquiries').select('id, name, destination, travel_date, adults, children, source, status, created_at').order('created_at', { ascending: false }).limit(5),
-      supabase.from('website_enquiries').select('id, name, destination, follow_up_date, status').eq('follow_up_date', today).not('status', 'in', '("won","lost","spam")'),
+      supabase.from('website_enquiries').select('id, query_id, name, destination, travel_date, adults, children, source, status, created_at').order('created_at', { ascending: false }).limit(5),
+      supabase.from('website_enquiries').select('id, name, destination, follow_up_date, status').lte('follow_up_date', today).not('status', 'in', '("won","lost","spam")'),
       supabase.from('website_enquiries').select('id', { count: 'exact', head: true }).lt('follow_up_date', today).not('status', 'in', '("won","lost","spam")'),
     ]);
 

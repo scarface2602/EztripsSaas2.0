@@ -122,22 +122,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const supplierName = content.hotelName || content.airline || content.activityName || booking.suppliers?.name || '';
 
   // Generate HTML based on supplier type
+  const tripId = booking.trip_id || undefined;
   let html: string;
   switch (supplier_type) {
     case 'hotel':
-      html = hotelVoucherHTML(content, logoDataUri, orgName, displayStatus);
+      html = hotelVoucherHTML(content, logoDataUri, orgName, displayStatus, tripId);
       break;
     case 'flight':
-      html = flightVoucherHTML(content, logoDataUri, orgName, displayStatus);
+      html = flightVoucherHTML(content, logoDataUri, orgName, displayStatus, tripId);
       break;
     case 'activity':
-      html = activityVoucherHTML(content, logoDataUri, orgName, displayStatus);
+      html = activityVoucherHTML(content, logoDataUri, orgName, displayStatus, tripId);
       break;
     case 'transfer':
-      html = transferVoucherHTML(content, logoDataUri, orgName, displayStatus);
+      html = transferVoucherHTML(content, logoDataUri, orgName, displayStatus, tripId);
       break;
     case 'vehicle':
-      html = vehicleVoucherHTML(content, logoDataUri, orgName, displayStatus);
+      html = vehicleVoucherHTML(content, logoDataUri, orgName, displayStatus, tripId);
       break;
     default:
       return NextResponse.json({ error: 'Invalid supplier_type' }, { status: 400 });

@@ -1,44 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { Proposal, ItineraryDay, ItineraryActivity, Hotel, Supplier, Flight, DayType } from '@/lib/types/database';
+import type { Proposal, ItineraryDay, Hotel, Flight, DayType } from '@/lib/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, Wand2, Loader2, AlertTriangle, GripVertical, CalendarPlus, Save, CheckCircle2, XCircle } from 'lucide-react';
+import { Wand2, Loader2, CalendarPlus } from 'lucide-react';
+import { CreatableCombobox } from '@/components/ui/creatable-combobox';
 
 interface ItinerarySectionProps {
   proposal: Proposal;
   itineraryDays: ItineraryDay[];
   setItineraryDays: (days: ItineraryDay[]) => void;
-  activities: ItineraryActivity[];
-  setActivities: (activities: ItineraryActivity[]) => void;
   hotels: Hotel[];
   flights: Flight[];
-  suppliers: Supplier[];
-  setHasUnsavedChanges: (v: boolean) => void;
-  onDirtyChange: (v: boolean) => void;
 }
 
-const ACTIVITY_TYPES = [
-  { value: 'transfer', label: 'Transfer' },
-  { value: 'sightseeing', label: 'Sightseeing' },
-  { value: 'meal', label: 'Meal' },
-  { value: 'activity', label: 'Activity' },
-  { value: 'free_time', label: 'Free Time' },
-  { value: 'other', label: 'Other' },
-];
-
-const OPTION_MODES = [
-  { value: 'pvt_only', label: 'Private' },
-  { value: 'sic_only', label: 'SIC' },
-  { value: 'tbd', label: 'TBD' },
-  { value: 'dual', label: 'Dual (Pvt + SIC)' },
+const TRANSPORT_OPTIONS = [
+  { value: 'SIC', label: 'SIC' },
+  { value: 'PVT', label: 'PVT' },
+  { value: 'N/A', label: 'N/A' },
 ];
 
 const DAY_TYPE_OPTIONS: { value: DayType; label: string }[] = [
@@ -85,11 +68,10 @@ function getDayTypeTemplate(type: DayType, city: string, nextCity?: string): { h
         description: `After breakfast and hotel checkout in ${city}, transfer to the airport for your onward flight${nextCity ? ` to ${nextCity}` : ''}. Arrive and transfer to your hotel for check-in. Spend the evening settling in and exploring the area.`,
       };
     case 'tour':
-      return null; // No template for tour — leave existing content unchanged
+      return null;
   }
 }
 
-// Auto-assign day_type for a set of days based on city transitions and flights
 function computeDayType(
   day: ItineraryDay,
   days: ItineraryDay[],
@@ -119,21 +101,40 @@ function computeDayType(
 }
 
 export function ItinerarySection({
-  proposal, itineraryDays, setItineraryDays, activities, setActivities,
-  hotels, flights, suppliers, setHasUnsavedChanges, onDirtyChange,
+  proposal, itineraryDays, setItineraryDays,
+  hotels, flights,
 }: ItinerarySectionProps) {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [generatingDay, setGeneratingDay] = useState<string | null>(null);
   const [curatingDay, setCuratingDay] = useState<string | null>(null);
   const [generatingDays, setGeneratingDays] = useState(false);
-  const [savingItinerary, setSavingItinerary] = useState(false);
-  const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null);
-  const [dirty, setDirty] = useState(false);
 
-  // Keep parent in sync with dirty state
-  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
+  // ── Debounced auto-save per day on blur ────────────────────
+  const saveTimers = useRef<Record<string, NodeJS.Timeout>>({});
+  const daysRef = useRef(itineraryDays);
+  daysRef.current = itineraryDays;
 
-  // City assignment from trip_cities
+  useEffect(() => {
+    return () => {
+      Object.values(saveTimers.current).forEach(clearTimeout);
+    };
+  }, []);
+
+  function scheduleDaySave(dayId: string) {
+    if (saveTimers.current[dayId]) clearTimeout(saveTimers.current[dayId]);
+    saveTimers.current[dayId] = setTimeout(async () => {
+      const day = daysRef.current.find(d => d.id === dayId);
+      if (!day) return;
+      await supabase.from('itinerary_days').update({
+        heading: day.heading,
+        description: day.description,
+        city: day.city,
+        overnight_city: day.overnight_city,
+        day_type: day.day_type,
+      }).eq('id', day.id);
+    }, 1500);
+  }
+
   const tripCities = proposal.trip_cities || [];
   function getCityFromTripCities(dayNumber: number): string {
     if (!tripCities.length) return '';
@@ -159,7 +160,6 @@ export function ItinerarySection({
     return dates;
   }
 
-  // Run auto-assign on days that have null day_type (e.g. days imported before this feature)
   useEffect(() => {
     const needsAssignment = itineraryDays.some(d => !d.day_type);
     if (!needsAssignment || itineraryDays.length === 0) return;
@@ -168,7 +168,6 @@ export function ItinerarySection({
       day_type: day.day_type || computeDayType(day, itineraryDays, flights),
     }));
     setItineraryDays(updated);
-    // Don't mark as dirty — this is a silent correction on load
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -195,13 +194,11 @@ export function ItinerarySection({
           .sort((a, b) => a.date.localeCompare(b.date))
           .map((d, i) => ({ ...d, day_number: i + 1 }));
 
-        // Auto-assign day_type for all days
         const withTypes = merged.map(day => ({
           ...day,
           day_type: day.day_type || computeDayType(day, merged, flights),
         }));
 
-        // Persist renumbered day_number
         for (const d of withTypes) {
           const orig = [...itineraryDays, ...(inserted as ItineraryDay[])].find(o => o.id === d.id);
           if (orig && orig.day_number !== d.day_number) {
@@ -209,8 +206,6 @@ export function ItinerarySection({
           }
         }
         setItineraryDays(withTypes);
-        setHasUnsavedChanges(true);
-        setDirty(true);
       }
     } finally {
       setGeneratingDays(false);
@@ -225,10 +220,6 @@ export function ItinerarySection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function getDayActivities(dayId: string) {
-    return activities.filter(a => a.itinerary_day_id === dayId).sort((a, b) => a.sort_order - b.sort_order);
-  }
-
   function getCityForDate(date: string): string {
     const hotel = hotels.find(h => h.check_in <= date && h.check_out > date);
     return hotel?.city || '';
@@ -238,8 +229,6 @@ export function ItinerarySection({
     const updated = [...itineraryDays];
     updated[index] = { ...updated[index], ...updates };
     setItineraryDays(updated);
-    setHasUnsavedChanges(true);
-    setDirty(true);
   }
 
   function changeDayType(index: number, newType: DayType) {
@@ -256,53 +245,21 @@ export function ItinerarySection({
       day_type: newType,
       ...(template ? { heading: template.heading, description: template.description } : {}),
     });
-  }
-
-  async function saveAllDays() {
-    if (itineraryDays.length === 0) return;
-    setSavingItinerary(true);
-    setSaveResult(null);
-    try {
-      const updates = itineraryDays.map(day =>
-        supabase.from('itinerary_days').update({
-          heading: day.heading,
-          description: day.description,
-          city: day.city,
-          overnight_city: day.overnight_city,
-          day_type: day.day_type,
-        }).eq('id', day.id)
-      );
-      const results = await Promise.all(updates);
-      const hasError = results.some(r => r.error);
-      if (hasError) {
-        setSaveResult('error');
-      } else {
-        setDirty(false);
-        setSaveResult('success');
-        setTimeout(() => setSaveResult(null), 3000);
-      }
-    } catch {
-      setSaveResult('error');
-    } finally {
-      setSavingItinerary(false);
-    }
+    scheduleDaySave(day.id);
   }
 
   async function generateDayContent(index: number) {
     const day = itineraryDays[index];
     setGeneratingDay(day.id);
     try {
-      const dayActivities = getDayActivities(day.id);
       const body: Record<string, unknown> = {
         day_number: day.day_number,
         destination: proposal.destination,
         city: day.city || getCityForDate(day.date),
         hotel: hotels.find(h => h.check_in <= day.date && h.check_out > day.date)?.name,
-        activities: dayActivities.map(a => a.details),
         raw_description: day.raw_description || undefined,
         day_type: day.day_type || undefined,
       };
-      // If heading already exists, pass it as seed for the AI
       if (day.heading && !day.raw_description) {
         body.existing_heading = day.heading;
       }
@@ -323,15 +280,13 @@ export function ItinerarySection({
       }
       const isTourWithHeading = day.day_type === 'tour' && day.heading && !day.raw_description;
       if (isTourWithHeading) {
-        updateDay(index, {
-          heading: data.heading || day.heading,
-          description: data.description,
-        });
+        updateDay(index, { heading: data.heading || day.heading, description: data.description });
       } else if (day.heading && !day.raw_description) {
         updateDay(index, { description: data.description });
       } else {
         updateDay(index, { heading: data.heading, description: data.description });
       }
+      scheduleDaySave(day.id);
     } catch (e) {
       alert(`AI Generate error: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
@@ -364,85 +319,12 @@ export function ItinerarySection({
         alert(`Curate failed: ${data.error}`);
         return;
       }
-      updateDay(index, {
-        heading: data.heading || day.heading,
-        description: data.description,
-      });
+      updateDay(index, { heading: data.heading || day.heading, description: data.description });
+      scheduleDaySave(day.id);
     } catch (e) {
       alert(`Curate error: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
       setCuratingDay(null);
-    }
-  }
-
-  async function addActivity(dayId: string) {
-    const dayActivities = getDayActivities(dayId);
-    const { data } = await supabase.from('itinerary_activities').insert({
-      itinerary_day_id: dayId,
-      proposal_id: proposal.id,
-      type: 'activity',
-      option_mode: 'pvt_only',
-      sort_order: dayActivities.length,
-      details: {},
-    }).select().single();
-    if (data) {
-      setActivities([...activities, data as ItineraryActivity]);
-      setHasUnsavedChanges(true);
-    }
-  }
-
-  function updateActivity(activityId: string, updates: Partial<ItineraryActivity>) {
-    setActivities(activities.map(a => a.id === activityId ? { ...a, ...updates } : a));
-    setHasUnsavedChanges(true);
-  }
-
-  async function deleteActivity(activityId: string) {
-    await supabase.from('itinerary_activities').delete().eq('id', activityId);
-    setActivities(activities.filter(a => a.id !== activityId));
-    setHasUnsavedChanges(true);
-  }
-
-  async function saveActivity(act: ItineraryActivity) {
-    await supabase.from('itinerary_activities').update({
-      type: act.type,
-      option_mode: act.option_mode,
-      pvt_cp: act.pvt_cp,
-      pvt_sp: act.pvt_sp,
-      pvt_basis: act.pvt_basis,
-      pvt_vehicle_type: act.pvt_vehicle_type,
-      sic_cp: act.sic_cp,
-      sic_sp: act.sic_sp,
-      sic_basis: act.sic_basis,
-      start_time: act.start_time,
-      end_time: act.end_time,
-      location: act.location,
-      details: act.details,
-      is_optional: act.is_optional,
-      supplier_id: act.supplier_id,
-      conflict_acknowledged: act.conflict_acknowledged,
-    }).eq('id', act.id);
-
-    // Run conflict detection in background after save
-    runConflictCheck();
-  }
-
-  async function runConflictCheck() {
-    try {
-      const res = await fetch(`/api/proposals/${proposal.id}/check-conflicts`, { method: 'POST' });
-      if (res.ok) {
-        const result = await res.json();
-        if (result.conflicts > 0) {
-          // Re-fetch activities to pick up updated conflict flags
-          const { data } = await supabase
-            .from('itinerary_activities')
-            .select('*')
-            .eq('proposal_id', proposal.id)
-            .order('sort_order');
-          if (data) setActivities(data);
-        }
-      }
-    } catch {
-      // Conflict check is non-blocking
     }
   }
 
@@ -454,26 +336,12 @@ export function ItinerarySection({
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">
           Day-wise Itinerary ({itineraryDays.length} days)
-          {dirty && <span className="ml-2 inline-block w-2 h-2 rounded-full bg-amber-400" title="Unsaved changes" />}
         </h2>
         <div className="flex items-center gap-2">
           {expectedDayCount > 0 && missingDayCount > 0 && (
             <Button size="sm" variant="outline" onClick={generateMissingDays} disabled={generatingDays}>
               {generatingDays ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CalendarPlus className="h-3 w-3 mr-1" />}
               Generate {missingDayCount} missing day{missingDayCount !== 1 ? 's' : ''}
-            </Button>
-          )}
-          {itineraryDays.length > 0 && (
-            <Button size="sm" onClick={saveAllDays} disabled={savingItinerary}>
-              {savingItinerary
-                ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                : saveResult === 'success'
-                  ? <CheckCircle2 className="h-3 w-3 mr-1 text-green-600" />
-                  : saveResult === 'error'
-                    ? <XCircle className="h-3 w-3 mr-1 text-red-500" />
-                    : <Save className="h-3 w-3 mr-1" />
-              }
-              {saveResult === 'success' ? 'Saved!' : saveResult === 'error' ? 'Error' : 'Save Itinerary'}
             </Button>
           )}
         </div>
@@ -499,8 +367,9 @@ export function ItinerarySection({
 
       {itineraryDays.map((day, index) => {
         const city = day.city || getCityFromTripCities(day.day_number) || getCityForDate(day.date);
-        const dayActivities = getDayActivities(day.id);
         const dayType = day.day_type;
+        const transport = day.overnight_city || 'N/A';
+        const blurSave = () => scheduleDaySave(day.id);
 
         return (
           <Card key={day.id}>
@@ -517,7 +386,6 @@ export function ItinerarySection({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Day type override */}
                   <select
                     className="h-7 rounded border px-2 text-xs bg-background"
                     value={dayType || ''}
@@ -539,18 +407,62 @@ export function ItinerarySection({
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label>Heading</Label>
-                  <Input
+                  <Label>Day Title</Label>
+                  <CreatableCombobox
                     value={day.heading || ''}
-                    onChange={(e) => updateDay(index, { heading: e.target.value })}
+                    onChange={(v) => { updateDay(index, { heading: v }); blurSave(); }}
+                    options={[]}
                     placeholder="e.g., Arrival in Dubai"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>City</Label>
-                  <Input value={city} onChange={(e) => updateDay(index, { city: e.target.value })} />
+                  <CreatableCombobox
+                    value={city}
+                    onChange={(v) => { updateDay(index, { city: v }); blurSave(); }}
+                    options={[
+                      { value: 'delhi', label: 'Delhi' },
+                      { value: 'mumbai', label: 'Mumbai' },
+                      { value: 'jaipur', label: 'Jaipur' },
+                      { value: 'udaipur', label: 'Udaipur' },
+                      { value: 'goa', label: 'Goa' },
+                      { value: 'kerala', label: 'Kerala' },
+                      { value: 'shimla', label: 'Shimla' },
+                      { value: 'manali', label: 'Manali' },
+                      { value: 'kochi', label: 'Kochi' },
+                      { value: 'coorg', label: 'Coorg' },
+                      { value: 'agra', label: 'Agra' },
+                      { value: 'varanasi', label: 'Varanasi' },
+                      { value: 'rishikesh', label: 'Rishikesh' },
+                      { value: 'darjeeling', label: 'Darjeeling' },
+                      { value: 'andaman', label: 'Andaman' },
+                      { value: 'leh-ladakh', label: 'Leh-Ladakh' },
+                      { value: 'srinagar', label: 'Srinagar' },
+                      { value: 'dubai', label: 'Dubai' },
+                      { value: 'singapore', label: 'Singapore' },
+                      { value: 'thailand', label: 'Thailand' },
+                      { value: 'bali', label: 'Bali' },
+                      { value: 'maldives', label: 'Maldives' },
+                      { value: 'sri-lanka', label: 'Sri Lanka' },
+                      { value: 'vietnam', label: 'Vietnam' },
+                      { value: 'europe', label: 'Europe' },
+                    ]}
+                    placeholder="Select city..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Transport</Label>
+                  <select
+                    className="w-full h-10 rounded-md border px-3 text-sm"
+                    value={transport}
+                    onChange={(e) => { updateDay(index, { overnight_city: e.target.value } as Partial<ItineraryDay>); blurSave(); }}
+                  >
+                    {TRANSPORT_OPTIONS.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="space-y-2">
@@ -566,120 +478,15 @@ export function ItinerarySection({
                 <Textarea
                   value={day.description || ''}
                   onChange={(e) => updateDay(index, { description: e.target.value })}
-                  rows={5}
-                  className="font-mono text-sm"
+                  onBlur={blurSave}
+                  rows={4}
                   placeholder={day.heading ? 'Click AI Generate to fill from heading, or write manually.' : 'Enter itinerary description or use AI Generate.'}
                 />
-                {day.description && (
-                  <div className="p-3 bg-muted/30 rounded text-sm text-muted-foreground border">
-                    <strong>Preview:</strong>
-                    <p className="mt-2 whitespace-pre-line">{day.description}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Activities */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">
-                    Activities ({dayActivities.length})
-                    {(dayType === 'transfer' || dayType === 'flight') && (
-                      <span className="ml-1 text-xs text-muted-foreground">(before / after transfer)</span>
-                    )}
-                  </Label>
-                  <Button size="sm" variant="outline" onClick={() => addActivity(day.id)}>
-                    <Plus className="h-3 w-3 mr-1" /> Add Activity
-                  </Button>
-                </div>
-                {dayActivities.map((act) => (
-                  <div key={act.id} className="p-3 border rounded-md space-y-3">
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                      <select className="h-8 rounded border px-2 text-sm" value={act.type} onChange={(e) => updateActivity(act.id, { type: e.target.value as ItineraryActivity['type'] })}>
-                        {ACTIVITY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                      </select>
-                      <select className="h-8 rounded border px-2 text-sm" value={act.option_mode || ''} onChange={(e) => updateActivity(act.id, { option_mode: e.target.value as ItineraryActivity['option_mode'] })}>
-                        {OPTION_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                      </select>
-                      {act.option_mode === 'tbd' && <Badge className="bg-orange-100 text-orange-700">TBD</Badge>}
-                      {act.conflict_flagged && !act.conflict_acknowledged && (
-                        <Badge className="bg-red-100 text-red-700" title={act.conflict_note || 'Scheduling conflict detected'}>
-                          <AlertTriangle className="h-3 w-3 mr-1" /> Conflict
-                        </Badge>
-                      )}
-                      <div className="flex-1" />
-                      <div className="flex items-center gap-1">
-                        <Switch checked={act.is_optional} onCheckedChange={(v) => updateActivity(act.id, { is_optional: v })} />
-                        <span className="text-xs">Optional</span>
-                      </div>
-                      <Button size="sm" variant="outline" onClick={() => saveActivity(act)}>Save</Button>
-                      <Button size="sm" variant="ghost" onClick={() => deleteActivity(act.id)}>
-                        <Trash2 className="h-3 w-3 text-red-500" />
-                      </Button>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Start Time</Label>
-                        <Input type="time" value={act.start_time || ''} onChange={(e) => updateActivity(act.id, { start_time: e.target.value })} className="h-8 text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">End Time</Label>
-                        <Input type="time" value={act.end_time || ''} onChange={(e) => updateActivity(act.id, { end_time: e.target.value })} className="h-8 text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Location</Label>
-                        <Input value={act.location || ''} onChange={(e) => updateActivity(act.id, { location: e.target.value })} className="h-8 text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Supplier</Label>
-                        <select className="w-full h-8 rounded border px-2 text-sm" value={act.supplier_id || ''} onChange={(e) => updateActivity(act.id, { supplier_id: e.target.value || null })}>
-                          <option value="">None</option>
-                          {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    {(act.option_mode === 'pvt_only' || act.option_mode === 'dual') && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pl-4">
-                        <span className="text-xs font-medium self-center">Private:</span>
-                        <Input type="number" step="0.01" placeholder="CP" value={act.pvt_cp ?? ''} onChange={(e) => updateActivity(act.id, { pvt_cp: e.target.value ? Number(e.target.value) : null })} className="h-8 text-sm" />
-                        <Input type="number" step="0.01" placeholder="SP" value={act.pvt_sp ?? ''} onChange={(e) => updateActivity(act.id, { pvt_sp: e.target.value ? Number(e.target.value) : null })} className="h-8 text-sm" />
-                        <Input placeholder="Vehicle type" value={act.pvt_vehicle_type || ''} onChange={(e) => updateActivity(act.id, { pvt_vehicle_type: e.target.value })} className="h-8 text-sm" />
-                      </div>
-                    )}
-                    {(act.option_mode === 'sic_only' || act.option_mode === 'dual') && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pl-4">
-                        <span className="text-xs font-medium self-center">SIC:</span>
-                        <Input type="number" step="0.01" placeholder="CP" value={act.sic_cp ?? ''} onChange={(e) => updateActivity(act.id, { sic_cp: e.target.value ? Number(e.target.value) : null })} className="h-8 text-sm" />
-                        <Input type="number" step="0.01" placeholder="SP" value={act.sic_sp ?? ''} onChange={(e) => updateActivity(act.id, { sic_sp: e.target.value ? Number(e.target.value) : null })} className="h-8 text-sm" />
-                        <div />
-                      </div>
-                    )}
-                  </div>
-                ))}
               </div>
             </CardContent>
           </Card>
         );
       })}
-
-      {/* Save Itinerary at bottom for easy access */}
-      {itineraryDays.length > 0 && (
-        <div className="flex justify-end pt-2">
-          <Button onClick={saveAllDays} disabled={savingItinerary}>
-            {savingItinerary
-              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              : saveResult === 'success'
-                ? <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
-                : saveResult === 'error'
-                  ? <XCircle className="h-4 w-4 mr-2 text-red-500" />
-                  : <Save className="h-4 w-4 mr-2" />
-            }
-            {saveResult === 'success' ? 'Saved!' : saveResult === 'error' ? 'Error' : 'Save Itinerary'}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

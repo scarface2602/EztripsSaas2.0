@@ -59,6 +59,7 @@ Return this exact shape:
     "description": string,
     "type": "transfer"|"sightseeing"|"activity"|"other"
   }],
+  "trip_cities": [{"city": string, "nights": number}],
   "payment_terms": string | null,
   "validity": string | null
 }
@@ -79,6 +80,7 @@ IMPORTANT extraction rules:
 - flights[].cancellation_policy_text: Extract verbatim flight cancellation/refund policy text if mentioned.
 - inclusions: Extract ALL items listed under "Inclusions" or "Included" as an array of strings.
 - exclusions: Extract ALL items listed under "Exclusions" or "Not included" as an array of strings.
+- trip_cities: Extract the city-by-city night allocation. Look for patterns like "03 N/S KATHMANDU", "2 Nights Pokhara", "02N/S CHITWAN", or hotel stay descriptions like "03 night's accommodation at hotel in Kathmandu". Each entry must have the city name and exact number of nights in that city. This is CRITICAL for correct trip structure — do NOT default every city to the total trip nights.
 - payment_terms: Extract the full payment terms text verbatim.`;
 
 export async function POST(request: NextRequest) {

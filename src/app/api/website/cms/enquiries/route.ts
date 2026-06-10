@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { requireApiAdmin } from '@/lib/auth/require-api-admin';
+import { generateTripIdFromDb, requirementToServiceType } from '@/lib/utils/generateId';
+import { getTripIdConfig } from '@/lib/utils/getTripIdConfig';
 
 export async function GET(request: NextRequest) {
   const auth = await requireApiAdmin();
@@ -47,6 +49,19 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Fetch org config for trip ID format
+  const authClient = await createClient();
+  const { data: { user: authUser } } = await authClient.auth.getUser();
+  let orgId: string | null = null;
+  if (authUser) {
+    const { data: userData } = await supabase.from('users').select('org_id').eq('id', authUser.id).single();
+    orgId = userData?.org_id || null;
+  }
+  const tripIdConfig = await getTripIdConfig(supabase, orgId);
+
+  // Generate trip_id
+  const tripId = await generateTripIdFromDb(supabase, requirementToServiceType(requirement_type || 'package'), tripIdConfig);
+
   const { data, error } = await supabase
     .from('website_enquiries')
     .insert({
@@ -69,6 +84,7 @@ export async function POST(request: NextRequest) {
       status: 'new',
       priority: 'medium',
       lead_temperature: 'warm',
+      trip_id: tripId,
     })
     .select()
     .single();
@@ -118,6 +134,9 @@ export async function PATCH(request: NextRequest) {
     'status', 'notes', 'assigned_to', 'priority', 'lead_temperature',
     'follow_up_date', 'last_contacted_at', 'converted_at',
     'lost_reason', 'lost_notes',
+    'destination', 'travel_date', 'number_of_nights', 'adults', 'children',
+    'children_ages', 'budget_range', 'hotel_category', 'special_requirements',
+    'requirement_details',
   ];
   for (const field of allowedFields) {
     if (body[field] !== undefined) update[field] = body[field];

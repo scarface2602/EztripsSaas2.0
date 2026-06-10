@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { Proposal, Flight, FlightLayover, Supplier } from '@/lib/types/database';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,27 +9,66 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, Search, Loader2, Check, Save, Wand2 } from 'lucide-react';
+import { Plus, Trash2, Search, Loader2, Wand2 } from 'lucide-react';
 
 interface FlightsSectionProps {
   proposal: Proposal;
   flights: Flight[];
   setFlights: (flights: Flight[]) => void;
   suppliers: Supplier[];
-  setHasUnsavedChanges: (v: boolean) => void;
 }
 
-export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedChanges }: FlightsSectionProps) {
-  const supabase = createClient();
+export function FlightsSection({ proposal, flights, setFlights }: FlightsSectionProps) {
+  const supabase = useMemo(() => createClient(), []);
   const [lookingUp, setLookingUp] = useState<string | null>(null);
   const [sectionNA, setSectionNA] = useState(false);
   const [parsingPolicy, setParsingPolicy] = useState<string | null>(null);
+
+  // ── Debounced auto-save per flight on blur ─────────────────
+  const saveTimers = useRef<Record<string, NodeJS.Timeout>>({});
+  const flightsRef = useRef(flights);
+  flightsRef.current = flights;
+
+  useEffect(() => {
+    return () => {
+      Object.values(saveTimers.current).forEach(clearTimeout);
+    };
+  }, []);
+
+  function scheduleFlightSave(flightId: string) {
+    if (saveTimers.current[flightId]) clearTimeout(saveTimers.current[flightId]);
+    saveTimers.current[flightId] = setTimeout(async () => {
+      const f = flightsRef.current.find(fl => fl.id === flightId);
+      if (!f) return;
+      const toNull = (v: string | null | undefined) => (v === '' || v == null) ? null : v;
+      await supabase.from('flights').update({
+        flight_number: f.flight_number,
+        airline: toNull(f.airline),
+        origin_iata: toNull(f.origin_iata),
+        origin_city: toNull(f.origin_city),
+        destination_iata: toNull(f.destination_iata),
+        destination_city: toNull(f.destination_city),
+        departure_at: toNull(f.departure_at),
+        arrival_at: toNull(f.arrival_at),
+        aircraft_type: toNull(f.aircraft_type),
+        cabin_class: toNull(f.cabin_class),
+        baggage_allowance: toNull(f.baggage_allowance),
+        is_non_refundable: f.is_non_refundable,
+        refundable_status: f.refundable_status || 'non_refundable',
+        cancellation_policy_text: toNull(f.cancellation_policy_text),
+        layovers: f.layovers || [],
+        cp_total: f.cp_total,
+        sp_total: f.sp_total,
+        fare_expires_at: toNull(f.fare_expires_at),
+        supplier_id: toNull(f.supplier_id),
+      }).eq('id', f.id);
+    }, 1500);
+  }
 
   function updateFlight(index: number, updates: Partial<Flight>) {
     const updated = [...flights];
     updated[index] = { ...updated[index], ...updates };
     setFlights(updated);
-    setHasUnsavedChanges(true);
   }
 
   function updateLayover(flightIndex: number, layoverIndex: number, updates: Partial<FlightLayover>) {
@@ -59,14 +98,12 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
     }).select().single();
     if (data) {
       setFlights([...flights, data as Flight]);
-      setHasUnsavedChanges(true);
     }
   }
 
   async function deleteFlight(index: number) {
     await supabase.from('flights').delete().eq('id', flights[index].id);
     setFlights(flights.filter((_, i) => i !== index));
-    setHasUnsavedChanges(true);
   }
 
   async function lookupFlight(index: number) {
@@ -91,45 +128,10 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
           arrival_at: data.arrival_at,
           aircraft_type: data.aircraft_type,
         });
+        scheduleFlightSave(flight.id);
       }
     } finally {
       setLookingUp(null);
-    }
-  }
-
-  const [savingFlight, setSavingFlight] = useState<string | null>(null);
-  const [savedFlight, setSavedFlight] = useState<string | null>(null);
-
-  async function saveFlight(index: number) {
-    const f = flights[index];
-    setSavingFlight(f.id);
-    setSavedFlight(null);
-    const toNull = (v: string | null | undefined) => (v === '' || v == null) ? null : v;
-    const { error } = await supabase.from('flights').update({
-      flight_number: f.flight_number,
-      airline: toNull(f.airline),
-      origin_iata: toNull(f.origin_iata),
-      origin_city: toNull(f.origin_city),
-      destination_iata: toNull(f.destination_iata),
-      destination_city: toNull(f.destination_city),
-      departure_at: toNull(f.departure_at),
-      arrival_at: toNull(f.arrival_at),
-      aircraft_type: toNull(f.aircraft_type),
-      cabin_class: toNull(f.cabin_class),
-      baggage_allowance: toNull(f.baggage_allowance),
-      is_non_refundable: f.is_non_refundable,
-      refundable_status: f.refundable_status || 'non_refundable',
-      cancellation_policy_text: toNull(f.cancellation_policy_text),
-      layovers: f.layovers || [],
-      cp_total: f.cp_total,
-      sp_total: f.sp_total,
-      fare_expires_at: toNull(f.fare_expires_at),
-      supplier_id: toNull(f.supplier_id),
-    }).eq('id', f.id);
-    setSavingFlight(null);
-    if (!error) {
-      setSavedFlight(f.id);
-      setTimeout(() => setSavedFlight(null), 2000);
     }
   }
 
@@ -157,6 +159,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
       {flights.map((flight, index) => {
         const layovers = flight.layovers || [];
         const hasLayovers = layovers.length > 0;
+        const blurSave = () => scheduleFlightSave(flight.id);
 
         return (
           <Card key={flight.id}>
@@ -165,7 +168,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                 <div className="col-span-2 space-y-2">
                   <Label>Flight Number</Label>
                   <div className="flex gap-1">
-                    <Input value={flight.flight_number} onChange={(e) => updateFlight(index, { flight_number: e.target.value })} placeholder="EK512" className="font-mono text-base" />
+                    <Input value={flight.flight_number} onChange={(e) => updateFlight(index, { flight_number: e.target.value })} onBlur={blurSave} placeholder="EK512" className="font-mono text-base" />
                     <Button size="sm" variant="outline" onClick={() => lookupFlight(index)} disabled={lookingUp === flight.id}>
                       {lookingUp === flight.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                     </Button>
@@ -173,30 +176,30 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                 </div>
                 <div className="space-y-2">
                   <Label>Airline</Label>
-                  <Input value={flight.airline || ''} onChange={(e) => updateFlight(index, { airline: e.target.value })} />
+                  <Input value={flight.airline || ''} onChange={(e) => updateFlight(index, { airline: e.target.value })} onBlur={blurSave} />
                 </div>
                 <div className="space-y-2">
                   <Label>From</Label>
-                  <Input value={flight.origin_city || ''} onChange={(e) => updateFlight(index, { origin_city: e.target.value })} placeholder="City (IATA)" />
+                  <Input value={flight.origin_city || ''} onChange={(e) => updateFlight(index, { origin_city: e.target.value })} onBlur={blurSave} placeholder="City (IATA)" />
                 </div>
                 <div className="space-y-2">
                   <Label>To</Label>
-                  <Input value={flight.destination_city || ''} onChange={(e) => updateFlight(index, { destination_city: e.target.value })} placeholder="City (IATA)" />
+                  <Input value={flight.destination_city || ''} onChange={(e) => updateFlight(index, { destination_city: e.target.value })} onBlur={blurSave} placeholder="City (IATA)" />
                 </div>
                 <div className="space-y-2">
                   <Label>Departure</Label>
-                  <Input type="datetime-local" value={flight.departure_at?.slice(0, 16) || ''} onChange={(e) => updateFlight(index, { departure_at: e.target.value })} />
+                  <Input type="datetime-local" value={flight.departure_at?.slice(0, 16) || ''} onChange={(e) => updateFlight(index, { departure_at: e.target.value })} onBlur={blurSave} />
                 </div>
                 <div className="space-y-2">
                   <Label>Arrival</Label>
-                  <Input type="datetime-local" value={flight.arrival_at?.slice(0, 16) || ''} onChange={(e) => updateFlight(index, { arrival_at: e.target.value })} />
+                  <Input type="datetime-local" value={flight.arrival_at?.slice(0, 16) || ''} onChange={(e) => updateFlight(index, { arrival_at: e.target.value })} onBlur={blurSave} />
                 </div>
                 <div className="space-y-2">
                   <Label>Cabin Class</Label>
                   <select
                     className="w-full h-10 rounded-md border px-3 text-sm"
                     value={flight.cabin_class || 'Economy'}
-                    onChange={(e) => updateFlight(index, { cabin_class: e.target.value })}
+                    onChange={(e) => { updateFlight(index, { cabin_class: e.target.value }); blurSave(); }}
                   >
                     <option value="Economy">Economy</option>
                     <option value="Premium Economy">Premium Economy</option>
@@ -206,19 +209,19 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                 </div>
                 <div className="space-y-2">
                   <Label>Baggage Allowance (kg)</Label>
-                  <Input value={flight.baggage_allowance || ''} onChange={(e) => updateFlight(index, { baggage_allowance: e.target.value })} placeholder="e.g. 20 or 30kg checked + 7kg cabin" />
+                  <Input value={flight.baggage_allowance || ''} onChange={(e) => updateFlight(index, { baggage_allowance: e.target.value })} onBlur={blurSave} placeholder="e.g. 20 or 30kg checked + 7kg cabin" />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs">CP Total (internal)</Label>
-                  <Input type="number" step="0.01" value={flight.cp_total ?? ''} onChange={(e) => updateFlight(index, { cp_total: e.target.value ? Number(e.target.value) : null })} />
+                  <Input type="number" step="0.01" value={flight.cp_total ?? ''} onChange={(e) => updateFlight(index, { cp_total: e.target.value ? Number(e.target.value) : null })} onBlur={blurSave} />
                 </div>
                 <div className="space-y-2">
                   <Label>SP Total (client)</Label>
-                  <Input type="number" step="0.01" value={flight.sp_total ?? ''} onChange={(e) => updateFlight(index, { sp_total: e.target.value ? Number(e.target.value) : null })} />
+                  <Input type="number" step="0.01" value={flight.sp_total ?? ''} onChange={(e) => updateFlight(index, { sp_total: e.target.value ? Number(e.target.value) : null })} onBlur={blurSave} />
                 </div>
                 <div className="space-y-2">
                   <Label>Fare Expires</Label>
-                  <Input type="datetime-local" value={flight.fare_expires_at?.slice(0, 16) || ''} onChange={(e) => updateFlight(index, { fare_expires_at: e.target.value })} />
+                  <Input type="datetime-local" value={flight.fare_expires_at?.slice(0, 16) || ''} onChange={(e) => updateFlight(index, { fare_expires_at: e.target.value })} onBlur={blurSave} />
                 </div>
               </div>
 
@@ -234,6 +237,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                         } else {
                           updateFlight(index, { layovers: [] });
                         }
+                        blurSave();
                       }}
                     />
                     <Label className="text-sm font-medium dark:text-slate-200">Has Layover?</Label>
@@ -251,6 +255,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                       <Input
                         value={layover.city}
                         onChange={(e) => updateLayover(index, li, { city: e.target.value })}
+                        onBlur={blurSave}
                         placeholder="Dubai"
                         className="h-8 text-sm"
                       />
@@ -260,6 +265,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                       <Input
                         value={layover.airport_code}
                         onChange={(e) => updateLayover(index, li, { airport_code: e.target.value.toUpperCase() })}
+                        onBlur={blurSave}
                         placeholder="DXB"
                         className="h-8 text-sm font-mono"
                         maxLength={4}
@@ -273,6 +279,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                         max={48}
                         value={layover.duration_hours}
                         onChange={(e) => updateLayover(index, li, { duration_hours: Number(e.target.value) })}
+                        onBlur={blurSave}
                         className="h-8 text-sm"
                       />
                     </div>
@@ -284,6 +291,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                         max={59}
                         value={layover.duration_minutes}
                         onChange={(e) => updateLayover(index, li, { duration_minutes: Number(e.target.value) })}
+                        onBlur={blurSave}
                         className="h-8 text-sm"
                       />
                     </div>
@@ -312,6 +320,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                         refundable_status: val,
                         is_non_refundable: val === 'non_refundable',
                       });
+                      blurSave();
                     }}
                   >
                     <option value="refundable">Refundable</option>
@@ -340,6 +349,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                             const data = await res.json();
                             if (data.cleaned) {
                               updateFlight(index, { cancellation_policy_text: data.cleaned });
+                              blurSave();
                             }
                           } finally {
                             setParsingPolicy(null);
@@ -353,6 +363,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
                     <Textarea
                       value={flight.cancellation_policy_text || ''}
                       onChange={(e) => updateFlight(index, { cancellation_policy_text: e.target.value })}
+                      onBlur={blurSave}
                       placeholder="Paste cancellation policy text here..."
                       rows={3}
                     />
@@ -361,13 +372,7 @@ export function FlightsSection({ proposal, flights, setFlights, setHasUnsavedCha
               </div>
 
               <div className="flex items-center justify-between">
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => saveFlight(index)} disabled={savingFlight === flight.id}>
-                    {savingFlight === flight.id ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : savedFlight === flight.id ? <Check className="h-4 w-4 mr-1 text-green-600" /> : <Save className="h-4 w-4 mr-1" />}
-                    {savedFlight === flight.id ? 'Saved' : 'Save'}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => deleteFlight(index)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                </div>
+                <Button size="sm" variant="ghost" onClick={() => deleteFlight(index)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
               </div>
             </CardContent>
           </Card>

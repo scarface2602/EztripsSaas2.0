@@ -41,6 +41,7 @@ export interface InvoiceData {
   bookingTitle?: string;
   destination?: string;
   travelDates?: string;
+  tripId?: string;
 
   // Line items
   lineItems: InvoiceLineItem[];
@@ -113,6 +114,7 @@ export function invoiceHTML(d: InvoiceData): string {
     <div style="text-align:right;">
       <div style="font-size:1.2rem;font-weight:700;color:${BRAND.navy};">${typeLabel(d.invoiceType)}</div>
       <div style="font-size:0.9rem;font-weight:600;margin-top:4px;">${d.invoiceNumber}</div>
+      ${d.tripId ? `<div style="font-size:0.8rem;color:${BRAND.grayText};margin-top:2px;">Trip: ${d.tripId}</div>` : ''}
       <div style="font-size:0.8rem;color:${BRAND.grayText};margin-top:2px;">Date: ${d.invoiceDate}</div>
       ${d.dueDate ? `<div style="font-size:0.8rem;color:${BRAND.grayText};">Due: ${d.dueDate}</div>` : ''}
     </div>

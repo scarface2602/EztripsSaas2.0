@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { Proposal, TripCity, Hotel } from '@/lib/types/database';
@@ -12,6 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { AlertTriangle, Loader2, Plus, Trash2 } from 'lucide-react';
 import { CURRENCY_OPTIONS } from '@/lib/utils/pricing';
+import { CreatableCombobox } from '@/components/ui/creatable-combobox';
+import { useLookup } from '@/lib/hooks/use-lookup';
 
 interface TripSummarySectionProps {
   proposal: Proposal;
@@ -23,6 +25,19 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
   const router = useRouter();
   const supabase = createClient();
   const [naFields, setNaFields] = useState<Record<string, boolean>>({});
+  const { items: vehicleTypes } = useLookup('vehicle_type');
+
+  const vehicleOptions = vehicleTypes.length > 0
+    ? vehicleTypes.map(v => ({ value: v.value, label: v.label }))
+    : [
+        { value: 'hatchback', label: 'Hatchback' },
+        { value: 'sedan', label: 'Sedan' },
+        { value: 'muv', label: 'MUV' },
+        { value: 'suv', label: 'SUV' },
+        { value: 'luxury', label: 'Luxury' },
+        { value: 'tempo_traveller', label: 'Tempo Traveller' },
+        { value: 'tempo_traveller_urbania', label: 'Tempo Traveller Urbania' },
+      ];
   const [applying, setApplying] = useState(false);
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
 
@@ -154,15 +169,139 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
     }
   }
 
+  // Client + trip meta stored in draft_data
+  const draftData = (proposal.draft_data || {}) as Record<string, unknown>;
+  const clientName = (draftData.client_name as string) || '';
+  const clientEmail = (draftData.client_email as string) || '';
+  const clientPhone = (draftData.client_phone as string) || '';
+  const supplierName = (draftData.supplier_name as string) || '';
+  const numRooms = (draftData.num_rooms as number | undefined) ?? '';
+  const vehicleType = (draftData.vehicle_type as string) || '';
+  const vehicleModel = (draftData.vehicle_model as string) || '';
+
+  // Auto-fill client details from clients table when draft_data is empty
+  const [clientFetched, setClientFetched] = useState(false);
+  useEffect(() => {
+    if (clientFetched || clientName || !proposal.client_id) return;
+    (async () => {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('full_name, email, phone')
+        .eq('id', proposal.client_id!)
+        .single();
+      if (client) {
+        const updates: Record<string, unknown> = { ...(proposal.draft_data || {}) };
+        if (!updates.client_name && client.full_name) updates.client_name = client.full_name;
+        if (!updates.client_email && client.email) updates.client_email = client.email;
+        if (!updates.client_phone && client.phone) updates.client_phone = client.phone;
+        updateProposal({ draft_data: updates as Record<string, unknown> });
+      }
+      setClientFetched(true);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function updateDraftField(field: string, value: string) {
+    updateProposal({
+      draft_data: { ...(proposal.draft_data || {}), [field]: value } as Record<string, unknown>,
+    });
+  }
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader><CardTitle>Trip Summary</CardTitle></CardHeader>
         <CardContent className="space-y-4">
+          {/* Client Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Full Name <span className="text-red-500">*</span></Label>
+              <Input value={clientName} onChange={(e) => updateDraftField('client_name', e.target.value)} placeholder="Client full name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input type="email" value={clientEmail} onChange={(e) => updateDraftField('client_email', e.target.value)} placeholder="client@email.com" />
+            </div>
+            <div className="space-y-2">
+              <Label>Phone</Label>
+              <Input type="tel" value={clientPhone} onChange={(e) => updateDraftField('client_phone', e.target.value)} placeholder="+91 98765 43210" />
+            </div>
+          </div>
+
+          {/* Proposal meta */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Destination(s)</Label>
-              <Input value={proposal.destination || ''} onChange={(e) => updateProposal({ destination: e.target.value })} />
+              <Label>Proposal Title</Label>
+              <Input value={proposal.title || ''} onChange={(e) => updateProposal({ title: e.target.value || null })} placeholder="Trip to..." />
+            </div>
+            <div className="space-y-2">
+              <Label>Supplier</Label>
+              <Input value={supplierName} onChange={(e) => updateDraftField('supplier_name', e.target.value)} placeholder="DMC / Supplier name" />
+            </div>
+            <div className="space-y-2">
+              <Label>No. of Rooms</Label>
+              <Input
+                type="number"
+                min={0}
+                value={numRooms}
+                onChange={(e) => updateProposal({ draft_data: { ...draftData, num_rooms: e.target.value ? Number(e.target.value) : undefined } } as Parameters<typeof updateProposal>[0])}
+                placeholder="1"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Vehicle Type</Label>
+              <CreatableCombobox
+                value={vehicleType}
+                onChange={(v) => updateDraftField('vehicle_type', v)}
+                options={vehicleOptions}
+                placeholder="Select or type vehicle type..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Vehicle Model</Label>
+              <Input
+                value={vehicleModel}
+                onChange={(e) => updateDraftField('vehicle_model', e.target.value)}
+                placeholder="e.g. Dzire, Innova Crysta"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Destination(s) <span className="text-red-500">*</span></Label>
+              <CreatableCombobox
+                value={proposal.destination || ''}
+                onChange={(v) => updateProposal({ destination: v })}
+                options={[
+                  { value: 'delhi', label: 'Delhi' },
+                  { value: 'mumbai', label: 'Mumbai' },
+                  { value: 'jaipur', label: 'Jaipur' },
+                  { value: 'udaipur', label: 'Udaipur' },
+                  { value: 'goa', label: 'Goa' },
+                  { value: 'kerala', label: 'Kerala' },
+                  { value: 'shimla', label: 'Shimla' },
+                  { value: 'manali', label: 'Manali' },
+                  { value: 'kochi', label: 'Kochi' },
+                  { value: 'coorg', label: 'Coorg' },
+                  { value: 'agra', label: 'Agra' },
+                  { value: 'varanasi', label: 'Varanasi' },
+                  { value: 'rishikesh', label: 'Rishikesh' },
+                  { value: 'darjeeling', label: 'Darjeeling' },
+                  { value: 'andaman', label: 'Andaman' },
+                  { value: 'leh-ladakh', label: 'Leh-Ladakh' },
+                  { value: 'srinagar', label: 'Srinagar' },
+                  { value: 'dubai', label: 'Dubai' },
+                  { value: 'singapore', label: 'Singapore' },
+                  { value: 'thailand', label: 'Thailand' },
+                  { value: 'bali', label: 'Bali' },
+                  { value: 'maldives', label: 'Maldives' },
+                  { value: 'sri-lanka', label: 'Sri Lanka' },
+                  { value: 'vietnam', label: 'Vietnam' },
+                  { value: 'europe', label: 'Europe' },
+                ]}
+                placeholder="Search or type destination..."
+              />
             </div>
             <div className="space-y-2">
               <Label>Currency</Label>
@@ -177,11 +316,11 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
               </select>
             </div>
             <div className="space-y-2">
-              <Label>Travel Start</Label>
+              <Label>Travel Start <span className="text-red-500">*</span></Label>
               <Input type="date" value={proposal.travel_start || ''} onChange={(e) => updateProposal({ travel_start: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>Travel End</Label>
+              <Label>Travel End <span className="text-red-500">*</span></Label>
               <Input
                 type="date"
                 value={proposal.travel_end || ''}
@@ -192,6 +331,16 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
                 <p className="text-xs text-red-600">Travel end must be after travel start</p>
               )}
             </div>
+          </div>
+
+          {/* Nights display */}
+          {proposal.travel_start && proposal.travel_end && proposal.travel_end > proposal.travel_start && (
+            <div className="px-3 py-2 bg-muted/50 rounded-md text-sm font-medium">
+              {Math.round((new Date(proposal.travel_end).getTime() - new Date(proposal.travel_start).getTime()) / 86400000)} Nights
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Adults</Label>
               <Input type="number" min={1} value={proposal.pax_adults} onChange={(e) => updateProposal({ pax_adults: Number(e.target.value) })} />
@@ -266,41 +415,6 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
         </CardContent>
       </Card>
 
-      {/* Booking Structure */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Booking Structure</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>How are you sourcing this trip? *</Label>
-            <Select value={proposal.booking_structure_type || ''} onValueChange={(v) => updateProposal({ booking_structure_type: v as ('full_dmc' | 'partial_dmc' | 'mixed' | 'undecided') || null })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select sourcing model..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="full_dmc">Full DMC</SelectItem>
-                <SelectItem value="partial_dmc">Partial DMC + Online Vendors</SelectItem>
-                <SelectItem value="mixed">Mixed / Separate Vendors</SelectItem>
-                <SelectItem value="undecided">Undecided (Decide at Booking)</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              This determines how payment terms will be organized at booking confirmation.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label>Sourcing Notes</Label>
-            <Textarea
-              value={proposal.booking_structure_notes || ''}
-              onChange={(e) => updateProposal({ booking_structure_notes: e.target.value })}
-              placeholder="e.g., DMC is Rajasthan Tours, hotels booked directly, flights via travel portal..."
-              rows={2}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Trip Structure — city-based builder */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -330,10 +444,37 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
             <div key={i} className="flex items-end gap-3">
               <div className="flex-1 space-y-1">
                 <Label className="text-xs">City {i + 1}</Label>
-                <Input
+                <CreatableCombobox
                   value={city.city}
-                  onChange={(e) => updateCity(i, { city: e.target.value })}
-                  placeholder="City name"
+                  onChange={(v) => updateCity(i, { city: v })}
+                  options={[
+                    { value: 'delhi', label: 'Delhi' },
+                    { value: 'mumbai', label: 'Mumbai' },
+                    { value: 'jaipur', label: 'Jaipur' },
+                    { value: 'udaipur', label: 'Udaipur' },
+                    { value: 'goa', label: 'Goa' },
+                    { value: 'kerala', label: 'Kerala' },
+                    { value: 'shimla', label: 'Shimla' },
+                    { value: 'manali', label: 'Manali' },
+                    { value: 'kochi', label: 'Kochi' },
+                    { value: 'coorg', label: 'Coorg' },
+                    { value: 'agra', label: 'Agra' },
+                    { value: 'varanasi', label: 'Varanasi' },
+                    { value: 'rishikesh', label: 'Rishikesh' },
+                    { value: 'darjeeling', label: 'Darjeeling' },
+                    { value: 'andaman', label: 'Andaman' },
+                    { value: 'leh-ladakh', label: 'Leh-Ladakh' },
+                    { value: 'srinagar', label: 'Srinagar' },
+                    { value: 'dubai', label: 'Dubai' },
+                    { value: 'singapore', label: 'Singapore' },
+                    { value: 'thailand', label: 'Thailand' },
+                    { value: 'bali', label: 'Bali' },
+                    { value: 'maldives', label: 'Maldives' },
+                    { value: 'sri-lanka', label: 'Sri Lanka' },
+                    { value: 'vietnam', label: 'Vietnam' },
+                    { value: 'europe', label: 'Europe' },
+                  ]}
+                  placeholder="Select city..."
                 />
               </div>
               <div className="w-24 space-y-1">
@@ -375,4 +516,3 @@ export function TripSummarySection({ proposal, updateProposal, setHotels }: Trip
     </div>
   );
 }
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

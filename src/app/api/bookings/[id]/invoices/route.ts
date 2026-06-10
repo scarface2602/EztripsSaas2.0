@@ -189,6 +189,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     clientPhone: client?.phone,
     bookingTitle: booking.title,
     destination: booking.destination,
+    tripId: booking.trip_id || undefined,
     travelDates: booking.travel_start && booking.travel_end
       ? `${booking.travel_start} — ${booking.travel_end}` : undefined,
     lineItems,

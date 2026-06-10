@@ -79,7 +79,7 @@ export function BookingFinancials({ bookingId, currency }: BookingFinancialsProp
   const [expandedSupplier, setExpandedSupplier] = useState<string | null>(null);
 
   // Record payment dialog
-  const [recordDialog, setRecordDialog] = useState<{ type: 'collection' | 'supplier'; id?: string } | null>(null);
+  const [recordDialog, setRecordDialog] = useState<{ type: 'collection' | 'supplier'; id?: string; packageId?: string } | null>(null);
   const [recordForm, setRecordForm] = useState<Record<string, string>>({});
   const [recording, setRecording] = useState(false);
 
@@ -103,22 +103,19 @@ export function BookingFinancials({ bookingId, currency }: BookingFinancialsProp
     if (!recordDialog || !recordForm.amount) return;
     setRecording(true);
     try {
-      const endpoint = recordDialog.type === 'collection'
-        ? `/api/receivables/${recordDialog.id}`
-        : `/api/payables/${recordDialog.id}`;
+      const endpoint = `/api/bookings/${bookingId}/financials`;
 
       const body: Record<string, unknown> = {
+        paymentId: recordDialog.id,
+        packageId: recordDialog.packageId || null,
         status: 'paid',
-        paid_at: new Date().toISOString(),
+        amount_paid: Number(recordForm.amount) || 0,
+        payment_method: recordForm.payment_mode || 'bank_transfer',
       };
 
-      if (recordDialog.type === 'collection') {
-        body.payment_method = recordForm.payment_mode || 'bank_transfer';
-      } else {
-        body.payment_mode = recordForm.payment_mode || 'bank_transfer';
-        body.reference = recordForm.reference || null;
+      if (recordDialog.type === 'supplier') {
+        if (recordForm.reference) body.reference_number = recordForm.reference;
         if (recordForm.bank_charges) body.bank_charges = Number(recordForm.bank_charges);
-        if (recordForm.from_account_id) body.from_account_id = recordForm.from_account_id;
       }
 
       const res = await fetch(endpoint, {
@@ -250,7 +247,7 @@ export function BookingFinancials({ bookingId, currency }: BookingFinancialsProp
                             className="h-7 text-xs"
                             onClick={() => {
                               setRecordForm({ amount: String(r.amount) });
-                              setRecordDialog({ type: 'collection', id: r.id });
+                              setRecordDialog({ type: 'collection', id: r.id, packageId: r.package_id });
                             }}
                           >
                             Record
@@ -349,7 +346,7 @@ export function BookingFinancials({ bookingId, currency }: BookingFinancialsProp
                                       className="h-7 text-xs"
                                       onClick={() => {
                                         setRecordForm({ amount: String(p.amount) });
-                                        setRecordDialog({ type: 'supplier', id: p.id });
+                                        setRecordDialog({ type: 'supplier', id: p.id, packageId: p.package_id });
                                       }}
                                     >
                                       Record

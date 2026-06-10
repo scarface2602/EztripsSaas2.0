@@ -1,4 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/server';
+import { generateTripIdFromDb, type ServiceType, type TripIdConfig } from '@/lib/utils/generateId';
+import { getTripIdConfig } from '@/lib/utils/getTripIdConfig';
 
 export async function createBookingsFromProposal(
   supabase: ReturnType<typeof createServiceClient>,
@@ -20,8 +22,29 @@ export async function createBookingsFromProposal(
     status: 'confirmed' as const,
   };
 
-  const travelStart = proposal.travel_start ? new Date(proposal.travel_start) : new Date();
+
   const createdBookings: Record<string, unknown>[] = [];
+  const createdPackages: Record<string, unknown>[] = [];
+
+  // ── 1. Generate master trip folder ──
+  const { data: bookingUser } = await supabase.from('users').select('org_id').eq('id', userId).single();
+  const tripIdConfig: TripIdConfig = await getTripIdConfig(supabase, bookingUser?.org_id);
+  const serviceType: ServiceType = 'PKG';
+  const tripId = await generateTripIdFromDb(supabase, serviceType, tripIdConfig);
+
+  const { data: trip } = await supabase.from('trips').insert({
+    trip_id: tripId,
+    status: 'ACTIVE_BOOKING',
+    client_id: proposal.client_id,
+    created_by: userId,
+    destination: proposal.destination,
+    travel_start: proposal.travel_start,
+    travel_end: proposal.travel_end,
+    pax_adults: proposal.pax_adults || 1,
+    pax_children: proposal.pax_children || 0,
+    proposal_ids: [proposalId],
+    winning_proposal_id: proposalId,
+  }).select('id, trip_id').single();
 
   // Fetch all proposal components upfront
   const [
@@ -39,7 +62,6 @@ export async function createBookingsFromProposal(
   if (proposal.quote_type === 'package') {
     const supplierId = hotelsAll?.[0]?.supplier_id || null;
 
-    // Look up DMC/supplier name for package quotes
     let packageSupplierName = '';
     if (supplierId) {
       const { data: supplier } = await supabase.from('suppliers').select('name').eq('id', supplierId).single();
@@ -60,6 +82,7 @@ export async function createBookingsFromProposal(
 
     const { data: booking } = await supabase.from('bookings').insert({
       ...common,
+      trip_id: tripId,
       supplier_id: supplierId,
       booking_type: 'package',
       title: proposal.title || 'Package Booking',
@@ -69,21 +92,33 @@ export async function createBookingsFromProposal(
 
     if (booking) {
       createdBookings.push(booking);
-      await createDefaultInstallments(supabase, booking.id, booking.cost_price, travelStart);
       await logBookingCreated(supabase, booking.id, userId, proposalId, 'package');
 
-      // Auto-create booking items from all proposal components
-      await createItemsFromProposal(supabase, booking.id, {
+      const createdItems = await createItemsFromProposal(supabase, booking.id, {
         hotels: hotelsAll || [],
         flights: flightsAll || [],
         activities: activitiesAll || [],
         lineItems: lineItemsAll || [],
       }, packageSupplierName);
+
+      const { data: pkg } = await supabase.from('booking_packages').insert({
+        booking_id: booking.id,
+        type: 'full_dmc',
+        supplier_id: supplierId,
+        booking_items_ids: createdItems,
+        total_cost: Math.round(totalCost * 100) / 100,
+        status: 'pending',
+      }).select().single();
+      
+      if (pkg) createdPackages.push(pkg);
+
+      if (trip) {
+        await supabase.from('trips').update({ booking_id: booking.id }).eq('id', trip.id);
+      }
     }
   } else {
-    // Itemised: multiple bookings
+    const allBookingIds: string[] = [];
 
-    // --- Hotels: one booking per hotel ---
     for (const h of (hotelsAll || [])) {
       const nights = Number(h.nights) || Math.max(1, Math.round(
         (new Date(h.check_out).getTime() - new Date(h.check_in).getTime()) / 86400000
@@ -93,6 +128,7 @@ export async function createBookingsFromProposal(
 
       const { data: booking } = await supabase.from('bookings').insert({
         ...common,
+        trip_id: tripId,
         supplier_id: h.supplier_id,
         booking_type: 'hotel',
         title: `${h.name} – ${h.city}`,
@@ -105,17 +141,26 @@ export async function createBookingsFromProposal(
 
       if (booking) {
         createdBookings.push(booking);
-        await createDefaultInstallments(supabase, booking.id, booking.cost_price, new Date(h.check_in));
-        await logBookingCreated(supabase, booking.id, userId, proposalId, 'hotel');
+        allBookingIds.push(booking.id);
 
-        // Create hotel item
-        await createItemsFromProposal(supabase, booking.id, {
+        const createdItems = await createItemsFromProposal(supabase, booking.id, {
           hotels: [h], flights: [], activities: [], lineItems: [],
         });
+
+        const { data: pkg } = await supabase.from('booking_packages').insert({
+          booking_id: booking.id,
+          type: 'individual',
+          supplier_id: h.supplier_id,
+          booking_items_ids: createdItems,
+          total_cost: Math.round(cost * 100) / 100,
+          status: 'pending',
+        }).select().single();
+        if (pkg) createdPackages.push(pkg);
+
+        await logBookingCreated(supabase, booking.id, userId, proposalId, 'hotel');
       }
     }
 
-    // --- Land services: group by supplier ---
     const landBySupplier: Record<string, {
       cost: number; sell: number;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -166,6 +211,7 @@ export async function createBookingsFromProposal(
       const supplierId = suppKey === '__no_supplier__' ? null : suppKey;
       const { data: booking } = await supabase.from('bookings').insert({
         ...common,
+        trip_id: tripId,
         supplier_id: supplierId,
         booking_type: 'land',
         title: `Land Services – ${proposal.destination || 'Trip'}`,
@@ -175,15 +221,12 @@ export async function createBookingsFromProposal(
 
       if (booking) {
         createdBookings.push(booking);
-        await createDefaultInstallments(supabase, booking.id, booking.cost_price, travelStart);
-        await logBookingCreated(supabase, booking.id, userId, proposalId, 'land');
+        allBookingIds.push(booking.id);
 
-        // If single supplier covers everything → create one DMC package item
-        // Otherwise create individual items
+        let createdItemsIds: string[] = [];
         const totalLandItems = land.activities.length + land.lineItems.length;
         if (totalLandItems > 1 && supplierId) {
-          // DMC package — one consolidated item
-          await supabase.from('booking_items').insert({
+          const { data: dmcItem } = await supabase.from('booking_items').insert({
             booking_id: booking.id,
             item_type: 'dmc_package',
             label: `Land Package – ${proposal.destination || 'Trip'}`,
@@ -201,18 +244,31 @@ export async function createBookingsFromProposal(
               ],
             },
             sort_order: 0,
-          });
+          }).select('id').single();
+          if (dmcItem) createdItemsIds.push(dmcItem.id);
         } else {
-          await createItemsFromProposal(supabase, booking.id, {
+          const cItems = await createItemsFromProposal(supabase, booking.id, {
             hotels: [], flights: [],
             activities: land.activities,
             lineItems: land.lineItems,
           });
+          createdItemsIds = cItems;
         }
+
+        const { data: pkg } = await supabase.from('booking_packages').insert({
+          booking_id: booking.id,
+          type: supplierId && totalLandItems > 1 ? 'full_dmc' : 'individual',
+          supplier_id: supplierId,
+          booking_items_ids: createdItemsIds,
+          total_cost: Math.round(land.cost * 100) / 100,
+          status: 'pending',
+        }).select().single();
+        if (pkg) createdPackages.push(pkg);
+
+        await logBookingCreated(supabase, booking.id, userId, proposalId, 'land');
       }
     }
 
-    // --- Flights: group by supplier ---
     const flightsBySupplier: Record<string, {
       cost: number; sell: number;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -234,6 +290,7 @@ export async function createBookingsFromProposal(
       const supplierId = suppKey === '__no_supplier__' ? null : suppKey;
       const { data: booking } = await supabase.from('bookings').insert({
         ...common,
+        trip_id: tripId,
         supplier_id: supplierId,
         booking_type: 'flight',
         title: fg.airlines.length ? fg.airlines.join(', ') : `Flights – ${proposal.destination || 'Trip'}`,
@@ -243,23 +300,33 @@ export async function createBookingsFromProposal(
 
       if (booking) {
         createdBookings.push(booking);
-        await createDefaultInstallments(supabase, booking.id, booking.cost_price, travelStart);
-        await logBookingCreated(supabase, booking.id, userId, proposalId, 'flight');
+        allBookingIds.push(booking.id);
 
-        await createItemsFromProposal(supabase, booking.id, {
+        const createdItems = await createItemsFromProposal(supabase, booking.id, {
           hotels: [], flights: fg.flights, activities: [], lineItems: [],
         });
+
+        const { data: pkg } = await supabase.from('booking_packages').insert({
+          booking_id: booking.id,
+          type: 'individual',
+          supplier_id: supplierId,
+          booking_items_ids: createdItems,
+          total_cost: Math.round(fg.cost * 100) / 100,
+          status: 'pending',
+        }).select().single();
+        if (pkg) createdPackages.push(pkg);
+
+        await logBookingCreated(supabase, booking.id, userId, proposalId, 'flight');
       }
+    }
+
+    if (trip && allBookingIds.length > 0) {
+      await supabase.from('trips').update({ booking_id: allBookingIds[0] }).eq('id', trip.id);
     }
   }
 
-  return createdBookings;
+  return { createdBookings, createdPackages };
 }
-
-/**
- * Auto-create booking_items from proposal components.
- * All items start with supplier_status = 'pending'.
- */
 async function createItemsFromProposal(
   supabase: ReturnType<typeof createServiceClient>,
   bookingId: string,
@@ -274,7 +341,7 @@ async function createItemsFromProposal(
     lineItems: any[];
   },
   packageSupplierName?: string,
-) {
+): Promise<string[]> {
   const items: Record<string, unknown>[] = [];
   let sortOrder = 0;
 
@@ -401,50 +468,10 @@ async function createItemsFromProposal(
     }
   }
 
-  if (items.length > 0) {
-    await supabase.from('booking_items').insert(items);
-  }
-}
+  if (items.length === 0) return [];
 
-async function createDefaultInstallments(
-  supabase: ReturnType<typeof createServiceClient>,
-  bookingId: string,
-  costPrice: number,
-  travelStart: Date,
-) {
-  if (costPrice <= 0) return;
-
-  const advanceAmount = Math.round(costPrice * 30) / 100;
-  const balanceAmount = Math.round((costPrice - advanceAmount) * 100) / 100;
-
-  const balanceDueDate = new Date(travelStart);
-  balanceDueDate.setDate(balanceDueDate.getDate() - 30);
-  const today = new Date();
-  if (balanceDueDate < today) balanceDueDate.setTime(today.getTime());
-
-  const installments = [
-    {
-      booking_id: bookingId,
-      installment_label: '30% advance',
-      installment_number: 1,
-      amount: advanceAmount,
-      due_date: new Date().toISOString().split('T')[0],
-      status: 'pending',
-    },
-  ];
-
-  if (balanceAmount > 0) {
-    installments.push({
-      booking_id: bookingId,
-      installment_label: '70% balance',
-      installment_number: 2,
-      amount: balanceAmount,
-      due_date: balanceDueDate.toISOString().split('T')[0],
-      status: 'pending',
-    });
-  }
-
-  await supabase.from('booking_payments').insert(installments);
+  const { data: inserted } = await supabase.from('booking_items').insert(items).select('id');
+  return (inserted || []).map(i => i.id);
 }
 
 async function logBookingCreated(

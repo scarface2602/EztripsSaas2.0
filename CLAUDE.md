@@ -122,7 +122,26 @@ The `scheduled_reminders` table stores deferred emails (types: `payment_due`, `s
 
 ### Leads CRM
 
-Leads come from `website_enquiries`. The leads page (`src/app/(dashboard)/leads/`) shows enquiries with agent assignment, follow-up tracking, and proposal counts. Agents see only their assigned leads; admins see all.
+Leads come from `website_enquiries`. The leads page (`src/app/(dashboard)/leads/`) shows enquiries with agent assignment, follow-up tracking, and proposal counts. Agents see only their assigned leads; admins see all. Enquiry `requirement_type` can be `package`, `flight`, `hotel`, `transfer`, or `visa` — each with type-specific fields in `requirement_details` JSONB.
+
+### Proposal Editor & Pricing Engine
+
+`src/app/(dashboard)/proposals/[id]/proposal-editor.tsx` (~1000 lines) is a large single-file component using `react-hook-form` with `FormProvider`. Key patterns:
+
+- **Form shape** (`ProposalFormValues`): `{ proposal, hotels, flights, itineraryDays, lineItems, customSections, includeFlights, globalMarkupPct, pricingMode, landMarkupPct, flightMarkupPct, gstAmountOverride, tcsAmountOverride }`
+- **Pricing modes**: `package` (single global markup %) or `itemised` (separate land/flight markup %)
+- **Markup inputs** use controlled `value` + `onChange` with `setValue()` — do NOT use `register` with `valueAsNumber` (causes NaN when cleared)
+- **Auto-save**: 3-second debounced save on any form change; writes `draft_data` JSONB + `total_sp` and `land_sp` to the proposals table
+- **Accordion sections**: 11 sections (cover, trip summary, hotels, flights, ancillaries, itinerary, inclusions/exclusions, custom sections, cancellation, payment terms, comments)
+
+### Quick-Start Suggestion Engine
+
+When creating a proposal from a lead (`/proposals/new?enquiry_id=X`), agents can clone past successful proposals:
+- `proposals.cities_visited` (text[]) and `proposals.route_signature` (text) are auto-populated on publish
+- `find_similar_proposals` RPC: Branch A (exact city match) or Branch B (distinct route signatures)
+- `/api/proposals/suggestions` — GET endpoint for fetching matches
+- `/api/proposals/clone` — POST endpoint for deep-cloning proposal + hotels/flights/itinerary/activities/line_items
+- UI component: `src/components/proposals/route-suggestions.tsx`
 
 ---
 
@@ -148,12 +167,20 @@ Migrations live in `supabase/migrations/`. Key tables beyond the basics:
 
 ## Large File Pattern
 
-Some client-side pages contain multiple component functions in a single file. The most notable is `src/app/(dashboard)/bookings/[id]/page.tsx` (~1900 lines) which contains:
+Some client-side pages contain multiple component functions in a single file:
+
+**`src/app/(dashboard)/bookings/[id]/page.tsx`** (~1900 lines):
 - `BookingDetailPage()` — main component (~1300 lines with all state, tabs, dialogs)
 - `ItemCard()` — booking item card with status workflow
 - `EmailsTab()` — email composition and history
 - `InvoiceReceiptList()` — document listing
 - `SendReminderButton()` — quick reminder action
+
+**`src/app/(dashboard)/proposals/[id]/proposal-editor.tsx`** (~1000 lines):
+- `ProposalEditor()` — form state, pricing `useMemo`, auto-save, sticky pricing bar, accordion wrapper
+- Pricing calculations at lines ~175-225 — `landSupplierCost`, `flightSupplierCost`, `pricingBreakdown` useMemo
+
+**`src/app/(dashboard)/leads/leads-client.tsx`** — leads table + Add Enquiry sheet with per-type form fields
 
 When editing these files, identify which component function you're modifying and be careful not to place JSX or state in the wrong function boundary.
 

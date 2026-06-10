@@ -150,9 +150,14 @@ export default function ApprovalsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold mb-1">Approvals</h1>
-        <p className="text-muted-foreground">
+      <div className="flex items-center gap-3">
+        <h1 className="text-3xl font-bold">Approvals</h1>
+        {totalPending > 0 && (
+          <Badge variant="destructive" className="text-sm px-2.5 py-0.5 animate-pulse">
+            {totalPending}
+          </Badge>
+        )}
+        <p className="text-muted-foreground ml-auto text-sm">
           {totalPending === 0 ? 'All caught up!' : `${totalPending} item${totalPending !== 1 ? 's' : ''} awaiting your approval`}
         </p>
       </div>

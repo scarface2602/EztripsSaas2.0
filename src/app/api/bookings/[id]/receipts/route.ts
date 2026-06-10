@@ -122,6 +122,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     clientPhone: client?.phone,
     bookingTitle: booking.title,
     destination: booking.destination,
+    tripId: booking.trip_id || undefined,
     amount: Number(amount),
     paymentMode: payment_mode || undefined,
     referenceNumber: reference_number || undefined,

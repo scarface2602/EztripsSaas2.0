@@ -61,6 +61,19 @@ export async function PATCH(request: NextRequest) {
     orgData.auto_assign_strategy = body.auto_assign_strategy;
   }
 
+  // Trip ID config (optional)
+  if (body.trip_id_config) {
+    const c = body.trip_id_config;
+    // Validate shape
+    if (typeof c.prefix === 'string' && /^[A-Za-z0-9]{1,10}$/.test(c.prefix) &&
+        typeof c.separator === 'string' && c.separator.length <= 1 &&
+        ['YYMMDD', 'YYYYMMDD'].includes(c.date_format) &&
+        typeof c.seq_digits === 'number' && c.seq_digits >= 2 && c.seq_digits <= 6 &&
+        typeof c.type_codes === 'object') {
+      orgData.trip_id_config = c;
+    }
+  }
+
   if (userData.org_id) {
     // Update existing
     const { data, error } = await supabase

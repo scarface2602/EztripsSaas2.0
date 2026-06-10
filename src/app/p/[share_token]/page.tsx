@@ -2,17 +2,24 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import { ShareLinkClient } from './share-link-client';
 
-/** Strip all cost-price fields before sending data to the client browser. */
-function stripHotelCP(h: Record<string, unknown>): Record<string, unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { cp_per_night, cwb_cp, cnb_cp, ...safe } = h;
-  return safe;
+/** SECURITY: Recursively strip all cost-price / internal-cost keys from any object or array. */
+const CP_KEY_PATTERNS = [/^cp$/i, /cp_/i, /_cp$/i, /cost_price/i, /internal_cost/i, /^cp_per_night$/i, /^cp_total$/i];
+
+function isCpKey(key: string): boolean {
+  return CP_KEY_PATTERNS.some((rx) => rx.test(key));
 }
 
-function stripFlightCP(f: Record<string, unknown>): Record<string, unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { cp_total, ...safe } = f;
-  return safe;
+function stripCpFields(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(stripCpFields);
+  if (obj !== null && typeof obj === 'object') {
+    const clean: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      if (isCpKey(key)) continue;
+      clean[key] = stripCpFields(value);
+    }
+    return clean;
+  }
+  return obj;
 }
 
 export default async function PublicProposalPage({ params }: { params: Promise<{ share_token: string }> }) {
@@ -82,8 +89,10 @@ export default async function PublicProposalPage({ params }: { params: Promise<{
   }
 
   // --- Strip CP fields (SECURITY: cost prices must never reach the client browser) ---
-  const safeHotels = hotels.map(stripHotelCP);
-  const safeFlights = flights.map(stripFlightCP);
+  const safeHotels = stripCpFields(hotels) as Record<string, unknown>[];
+  const safeFlights = stripCpFields(flights) as Record<string, unknown>[];
+  const safeActivities = stripCpFields(activities) as Record<string, unknown>[];
+  const safeLineItems = stripCpFields(lineItems) as Record<string, unknown>[];
 
   // --- Client and agent info always read from live DB (not stored in snapshot) ---
   const [
@@ -102,8 +111,8 @@ export default async function PublicProposalPage({ params }: { params: Promise<{
       hotels={safeHotels}
       flights={safeFlights}
       itineraryDays={itineraryDays}
-      activities={activities}
-      lineItems={lineItems}
+      activities={safeActivities}
+      lineItems={safeLineItems}
       versions={versions || []}
       client={client}
       agent={agent}

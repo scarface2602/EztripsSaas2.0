@@ -9,7 +9,8 @@ import Link from 'next/link';
 import {
   FileText, Users, Clock, ArrowDownLeft, ArrowUpRight, Plus,
   TrendingUp, Search, Edit, Copy, ExternalLink, ChevronDown, ChevronRight,
-  Inbox, ArrowRight, CalendarCheck, CheckCircle2, HelpCircle,
+  Inbox, ArrowRight, CalendarCheck, CheckCircle2, HelpCircle, Wallet,
+  Activity, MapPin, Send, Eye, XCircle, Calendar, RefreshCw
 } from 'lucide-react';
 import { differenceInHours, format } from 'date-fns';
 import { useRouter } from 'next/navigation';
@@ -35,6 +36,14 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
+const STATUS_CONFIG: Record<string, { icon: any, color: string, bg: string, text: string }> = {
+  draft: { icon: Edit, color: 'text-slate-700', bg: 'text-slate-600', text: 'text-slate-500' },
+  sent: { icon: Send, color: 'text-blue-600', bg: 'text-blue-600', text: 'text-slate-500' },
+  viewed: { icon: Eye, color: 'text-purple-600', bg: 'text-purple-600', text: 'text-slate-500' },
+  confirmed: { icon: CheckCircle2, color: 'text-emerald-600', bg: 'text-emerald-600', text: 'text-slate-500' },
+  cancelled: { icon: XCircle, color: 'text-slate-400', bg: 'text-red-600', text: 'text-slate-500' },
+};
+
 interface DashboardClientProps {
   proposals: Proposal[];
   receivables: Record<string, unknown>[];
@@ -57,6 +66,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [followUps, setFollowUps] = useState(todayFollowUps);
   const [markingDone, setMarkingDone] = useState<string | null>(null);
+  const [revalidating, setRevalidating] = useState<string | null>(null);
 
   const allProposals = useMemo(() => proposals || [], [proposals]);
   const now = new Date();
@@ -82,8 +92,8 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
   const statusCounts: Record<string, number> = {};
   STATUS_ORDER.forEach(s => { statusCounts[s] = allProposals.filter(p => p.status === s).length; });
 
-  const outstandingReceivables = (receivables || []).reduce((s, r) => s + Number(r.amount), 0);
-  const outstandingPayables = (payables || []).reduce((s, p) => s + Number(p.amount), 0);
+  const outstandingReceivables = (receivables || []).reduce((s, r) => s + (Number(r.amount) - Number(r.amount_paid || 0)), 0);
+  const outstandingPayables = (payables || []).reduce((s, p) => s + Number(p.cost_price || 0), 0);
 
   const expiringSoon = allProposals.filter(p => {
     if (p.status === 'confirmed' || p.status === 'cancelled') return false;
@@ -103,6 +113,22 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
     setCopyFeedback(p.id);
     toast.success('Share link copied to clipboard');
     setTimeout(() => setCopyFeedback(null), 1500);
+  }
+
+  async function handleRevalidate(id: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setRevalidating(id);
+    try {
+      const res = await fetch(`/api/proposals/${id}/revalidate`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to revalidate');
+      toast.success('Proposal prices revalidated for 24h');
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to revalidate');
+    } finally {
+      setRevalidating(null);
+    }
   }
 
   async function handleDuplicate(p: Proposal) {
@@ -216,22 +242,19 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-2">
         <Link href="/proposals/new">
-          <Button size="sm"><Plus className="h-4 w-4 mr-1" /> New Proposal</Button>
+          <Button className="rounded-full shadow-sm" size="sm"><Plus className="h-4 w-4 mr-1" /> New Proposal</Button>
         </Link>
         <Link href="/leads">
-          <Button size="sm" variant="outline"><Inbox className="h-4 w-4 mr-1" /> Enquiries</Button>
+          <Button size="sm" variant="outline" className="rounded-full shadow-sm bg-white hover:bg-slate-50 text-slate-700 border-slate-200"><Inbox className="h-4 w-4 mr-1 text-slate-400" /> Enquiries</Button>
         </Link>
         <Link href="/clients">
-          <Button size="sm" variant="outline"><Users className="h-4 w-4 mr-1" /> Clients</Button>
+          <Button size="sm" variant="outline" className="rounded-full shadow-sm bg-white hover:bg-slate-50 text-slate-700 border-slate-200"><Users className="h-4 w-4 mr-1 text-slate-400" /> Clients</Button>
         </Link>
-        <Link href="/receivables">
-          <Button size="sm" variant="outline"><ArrowDownLeft className="h-4 w-4 mr-1" /> Receivables</Button>
-        </Link>
-        <Link href="/payables">
-          <Button size="sm" variant="outline"><ArrowUpRight className="h-4 w-4 mr-1" /> Payables</Button>
+        <Link href="/accounts">
+          <Button size="sm" variant="outline" className="rounded-full shadow-sm bg-white hover:bg-slate-50 text-slate-700 border-slate-200"><Wallet className="h-4 w-4 mr-1 text-slate-400" /> Treasury</Button>
         </Link>
         <Link href="/bookings">
-          <Button size="sm" variant="outline"><FileText className="h-4 w-4 mr-1" /> Bookings</Button>
+          <Button size="sm" variant="outline" className="rounded-full shadow-sm bg-white hover:bg-slate-50 text-slate-700 border-slate-200"><FileText className="h-4 w-4 mr-1 text-slate-400" /> Bookings</Button>
         </Link>
       </div>
 
@@ -286,27 +309,31 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
       )}
 
       {/* Stats bar — enquiries + status counts */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         <Link href="/admin/website/enquiries?status=new">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer border-orange-200 bg-orange-50/50">
-            <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-orange-700 uppercase tracking-wide mb-1 font-medium">New Enquiries</p>
-              <p className="text-3xl font-bold text-orange-700">{newEnquiryCount}</p>
-            </CardContent>
-          </Card>
+          <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden h-full">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Inbox className="w-12 h-12 text-orange-600" />
+            </div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">New Enquiries</p>
+            <p className="text-3xl font-bold text-orange-600">{newEnquiryCount}</p>
+          </div>
         </Link>
         {STATUS_ORDER.map(status => {
           const count = status === 'draft'
             ? allProposals.filter(p => p.status === 'draft' && !p.published_data).length
             : statusCounts[status];
+          const config = STATUS_CONFIG[status];
+          const IconComponent = config.icon;
           return (
             <Link key={status} href={`/proposals?status=${status}`}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardContent className="pt-5 pb-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{STATUS_LABELS[status]}</p>
-                  <p className="text-3xl font-bold">{count}</p>
-                </CardContent>
-              </Card>
+              <div className="bg-white rounded-xl p-5 border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative overflow-hidden h-full">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <IconComponent className={`w-12 h-12 ${config.bg}`} />
+                </div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{STATUS_LABELS[status]}</p>
+                <p className={`text-3xl font-bold ${config.color}`}>{count}</p>
+              </div>
             </Link>
           );
         })}
@@ -319,7 +346,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
             <div className="flex items-center gap-3">
               <ArrowDownLeft className="h-7 w-7 text-green-600 shrink-0" />
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Receivables (pending)</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Client Invoiced (Uncollected)</p>
                 <p className="text-xl font-bold">{outstandingReceivables.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}</p>
               </div>
             </div>
@@ -330,7 +357,7 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
             <div className="flex items-center gap-3">
               <ArrowUpRight className="h-7 w-7 text-red-600 shrink-0" />
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Payables (pending)</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Supplier Liabilities</p>
                 <p className="text-xl font-bold">{outstandingPayables.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}</p>
               </div>
             </div>
@@ -351,27 +378,37 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
 
       {/* Expiring soon alert */}
       {expiringSoon.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2 text-amber-800">
-              <Clock className="h-4 w-4" /> {expiringSoon.length} proposal{expiringSoon.length > 1 ? 's' : ''} expiring within 48 hours
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {expiringSoon.map(p => {
-                const flightHrs = p.flight_expires_at ? differenceInHours(new Date(p.flight_expires_at), now) : null;
-                return (
-                  <Link key={p.id} href={`/proposals/${p.id}`}>
-                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-200 cursor-pointer py-1 px-2 text-xs">
-                      {p.title || 'Untitled'} {flightHrs !== null && flightHrs >= 0 ? `· ${flightHrs}h` : '· EXPIRED'}
-                    </Badge>
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-amber-800 font-medium mb-3 text-sm">
+            <Clock className="w-4 h-4 animate-pulse text-amber-600" />
+            {expiringSoon.length} proposal{expiringSoon.length > 1 ? 's' : ''} expiring within 48 hours
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {expiringSoon.map(p => {
+              const flightHrs = p.flight_expires_at ? differenceInHours(new Date(p.flight_expires_at), now) : null;
+              return (
+                <div key={p.id} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-amber-200 text-amber-800 text-xs font-medium shadow-sm transition-colors">
+                  <Link href={`/proposals/${p.id}`} className="hover:underline cursor-pointer">
+                    {p.title || 'Untitled'} 
                   </Link>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                  <span className={flightHrs !== null && flightHrs >= 0 ? "text-amber-600 font-semibold ml-1" : "text-red-600 font-semibold ml-1"}>
+                    {flightHrs !== null && flightHrs >= 0 ? `${flightHrs}h` : 'EXPIRED'}
+                  </span>
+                  {flightHrs !== null && flightHrs < 0 && (
+                    <button 
+                      onClick={(e) => handleRevalidate(p.id, e)}
+                      disabled={revalidating === p.id}
+                      className="ml-1 text-slate-400 hover:text-blue-600 transition-colors"
+                      title="Revalidate for 24h"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${revalidating === p.id ? 'animate-spin text-blue-600' : ''}`} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Recent Enquiries */}
@@ -394,6 +431,11 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm truncate">{eq.name || 'Unknown'}</span>
+                      {eq.query_id && (
+                        <span className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded border">
+                          {eq.query_id}
+                        </span>
+                      )}
                       <Badge className={eq.status === 'new' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-700'} variant="secondary">
                         {eq.status}
                       </Badge>
@@ -416,157 +458,93 @@ export function DashboardClient({ proposals, receivables, payables, newEnquiryCo
         </Card>
       )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search proposals by title or destination..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-10"
-        />
+      {/* Recently Updated Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-8 gap-3">
+        <h2 className="text-lg font-semibold flex items-center gap-2 text-slate-800">
+          <Activity className="w-5 h-5 text-blue-600" />
+          Recently Updated
+        </h2>
+        
+        {/* Search */}
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            placeholder="Search proposals..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9 pr-4 py-2 bg-white border-slate-200 rounded-full text-sm shadow-sm transition-all h-9"
+          />
+        </div>
       </div>
 
-      {/* Status legend */}
-      <details className="text-xs text-muted-foreground">
-        <summary className="cursor-pointer inline-flex items-center gap-1.5 hover:text-foreground transition-colors">
-          <HelpCircle className="h-3.5 w-3.5" />
-          What do these statuses mean?
-        </summary>
-        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 pl-5">
-          <div className="flex items-start gap-2">
-            <Badge className={`${STATUS_COLORS.draft} text-xs shrink-0`}>Draft</Badge>
-            <span>Work-in-progress. Only you can see it.</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <Badge className={`${STATUS_COLORS.sent} text-xs shrink-0`}>Sent</Badge>
-            <span>Published. Share link is live, client hasn&apos;t opened it yet.</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <Badge className={`${STATUS_COLORS.viewed} text-xs shrink-0`}>Viewed</Badge>
-            <span>Client opened the share link. Follow up if no reply.</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <Badge className={`${STATUS_COLORS.confirmed} text-xs shrink-0`}>Confirmed</Badge>
-            <span>Client accepted. Bookings &amp; payments tracked under Operations.</span>
-          </div>
-          <div className="flex items-start gap-2 md:col-span-2">
-            <Badge className={`${STATUS_COLORS.cancelled} text-xs shrink-0`}>Cancelled</Badge>
-            <span>Lost or withdrawn — kept for record.</span>
+      {/* Proposal List */}
+      {filtered.length > 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="divide-y divide-slate-100">
+            {filtered.slice(0, search ? undefined : 15).map(p => {
+              const flightHrs = p.flight_expires_at ? differenceInHours(new Date(p.flight_expires_at), now) : null;
+              const isExpiring = flightHrs !== null && flightHrs >= 0 && flightHrs < 48;
+              
+              return (
+                <div key={p.id} className="p-4 hover:bg-slate-50/80 transition-colors group flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1.5">
+                      <Link href={`/proposals/${p.id}`} className="font-semibold text-slate-900 hover:text-blue-600 text-base truncate">
+                        {p.title || 'Untitled'}
+                      </Link>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 uppercase tracking-wider">
+                        V{p.version}
+                      </span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${p.status === 'confirmed' ? "bg-emerald-100 text-emerald-700" : p.status === 'sent' ? "bg-blue-100 text-blue-700" : p.status === 'viewed' ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-700"}`}>
+                        {STATUS_LABELS[p.status] || p.status}
+                      </span>
+                      {isExpiring && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 uppercase tracking-wider">
+                          <Clock className="h-3 w-3 mr-1" /> {flightHrs}h
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center flex-wrap gap-x-4 gap-y-2 text-sm text-slate-500">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" /> 
+                        {p.destination || 'No destination'}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-slate-400" /> 
+                        {p.pax_adults}A{p.pax_children > 0 ? ` + ${p.pax_children}C` : ''}
+                      </div>
+                      {p.travel_start && (
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" /> 
+                          {format(new Date(p.travel_start), 'dd MMM yyyy')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Hover Actions */}
+                  <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
+                    <button onClick={() => router.push(`/proposals/${p.id}`)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handlePdf(p)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="PDF">
+                      <FileText className="w-4 h-4" />
+                    </button>
+                    {p.share_token && (
+                      <button onClick={() => handleCopyLink(p)} className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors" title="Copy Link">
+                        {copyFeedback === p.id ? <CheckCircle2 className="w-4 h-4 text-green-600" /> : <ExternalLink className="w-4 h-4" />}
+                      </button>
+                    )}
+                    <button onClick={() => handleDuplicate(p)} disabled={duplicating === p.id} className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50" title="Duplicate">
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </details>
-
-      {/* Grouped proposal lists */}
-      {STATUS_ORDER.map(status => {
-        const group = grouped[status];
-        if (group.length === 0) return null;
-        const isCollapsed = collapsedGroups[status];
-
-        return (
-          <Card key={status}>
-            <CardHeader className="pb-0 pt-4 px-4 cursor-pointer" onClick={() => toggleGroup(status)}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                  <span className="font-semibold text-sm uppercase tracking-wide">{STATUS_LABELS[status]}</span>
-                  <Badge className={`${STATUS_COLORS[status]} text-xs`}>{group.length}</Badge>
-                </div>
-              </div>
-            </CardHeader>
-
-            {!isCollapsed && (
-              <CardContent className="pt-3 px-0 pb-0">
-                <div className="divide-y">
-                  {group.map(p => {
-                    const flightHrs = p.flight_expires_at ? differenceInHours(new Date(p.flight_expires_at), now) : null;
-                    const isExpiring = flightHrs !== null && flightHrs >= 0 && flightHrs < 48;
-
-                    return (
-                      <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 hover:bg-muted/30 group gap-2">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <Link href={`/proposals/${p.id}`} className="font-medium text-sm hover:underline truncate">
-                                {p.title || 'Untitled'}
-                              </Link>
-                              <Badge variant="outline" className="text-xs shrink-0">V{p.version}</Badge>
-                              {isExpiring && (
-                                <Badge className="bg-amber-100 text-amber-700 text-xs shrink-0">
-                                  <Clock className="h-2.5 w-2.5 mr-1" />{flightHrs}h
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
-                              <span>{p.destination || 'No destination'}</span>
-                              <span>·</span>
-                              <span>{p.pax_adults}A{p.pax_children > 0 ? ` + ${p.pax_children}C` : ''}</span>
-                              {p.travel_start && (
-                                <>
-                                  <span>·</span>
-                                  <span>{format(new Date(p.travel_start), 'dd MMM yyyy')}</span>
-                                </>
-                              )}
-                              <span>·</span>
-                              <span>Created {format(new Date(p.created_at), 'dd/MM/yy')}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Quick actions */}
-                        <div className="flex items-center gap-1 shrink-0 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => router.push(`/proposals/${p.id}`)}
-                          >
-                            <Edit className="h-3 w-3 mr-1" /> Edit
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => handlePdf(p)}
-                          >
-                            <FileText className="h-3 w-3 mr-1" /> PDF
-                          </Button>
-                          {p.share_token && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => handleCopyLink(p)}
-                            >
-                              {copyFeedback === p.id ? (
-                                <><Copy className="h-3 w-3 mr-1" /> Copied!</>
-                              ) : (
-                                <><ExternalLink className="h-3 w-3 mr-1" /> Copy Link</>
-                              )}
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => handleDuplicate(p)}
-                            disabled={duplicating === p.id}
-                          >
-                            <Copy className="h-3 w-3 mr-1" />
-                            {duplicating === p.id ? 'Duplicating...' : 'Duplicate'}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        );
-      })}
-
-      {filtered.length === 0 && (
+      ) : (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             {search ? `No proposals matching "${search}"` : 'No proposals yet. Create your first proposal!'}

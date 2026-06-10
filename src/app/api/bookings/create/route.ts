@@ -1,5 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { withAuth } from '@/lib/api/with-auth';
+import { generateTripIdFromDb } from '@/lib/utils/generateId';
+import { getTripIdConfig } from '@/lib/utils/getTripIdConfig';
 import { NextRequest, NextResponse } from 'next/server';
 
 interface CreateBookingRequest {
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
     // Verify user owns the proposal
     const { data: proposal } = await supabase
       .from('proposals')
-      .select('id, destination, travel_start, travel_end, pax_adults, pax_children, currency')
+      .select('id, destination, travel_start, travel_end, pax_adults, pax_children, currency, trip_id')
       .eq('id', proposal_id)
       .eq('created_by', auth.user.id)
       .single();
@@ -44,8 +46,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
     }
 
+    // Use proposal's trip_id or generate a new one
+    const tripIdConfig = await getTripIdConfig(supabase, auth.user.org_id);
+    const tripId = proposal.trip_id || await generateTripIdFromDb(supabase, 'PKG', tripIdConfig);
+
     // Calculate total booking cost
     const totalBookingCost = packages.reduce((sum, pkg) => sum + pkg.total_cost, 0);
+
+    // Create trip record
+    const { data: trip } = await supabase
+      .from('trips')
+      .insert({
+        trip_id: tripId,
+        status: 'ACTIVE_BOOKING',
+        client_id,
+        destination: proposal.destination || '',
+        travel_start: proposal.travel_start,
+        travel_end: proposal.travel_end,
+        pax_adults: proposal.pax_adults || 1,
+        pax_children: proposal.pax_children || 0,
+        created_by: auth.user.id,
+      })
+      .select()
+      .single();
 
     // Create booking
     const { data: booking, error: bookingError } = await supabase
@@ -66,12 +89,18 @@ export async function POST(request: NextRequest) {
           cost_price: totalBookingCost,
           sell_price: clientSellPrice || totalBookingCost,
           status: 'pending',
+          trip_id: tripId,
         },
       ])
       .select()
       .single();
 
     if (bookingError || !booking) throw bookingError || new Error('Failed to create booking');
+
+    // Link trip to booking
+    if (trip) {
+      await supabase.from('trips').update({ booking_id: booking.id }).eq('id', trip.id);
+    }
 
     // Create booking packages
     const packageIds: string[] = [];

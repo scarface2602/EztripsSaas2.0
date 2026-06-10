@@ -13,11 +13,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Flame, Thermometer, Snowflake, Archive, FileText, Plus, Search, Phone, ChevronDown, ChevronRight, Eye, Edit2, Share2, Download, BookOpen, X, MoreHorizontal } from 'lucide-react';
+import { Flame, Thermometer, Snowflake, Archive, FileText, Plus, Search, Phone, ChevronDown, ChevronRight, Eye, Edit2, Share2, Download, BookOpen, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Pagination, paginateArray } from '@/components/pagination';
 import { FollowUpModal } from '@/components/follow-up-modal';
-import { NewEnquiryDialog } from '@/components/leads/NewEnquiryDialog';
 import { differenceInHours, differenceInDays, format } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { useLookup } from '@/lib/hooks/use-lookup';
@@ -136,7 +135,6 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
   const [reqTypeFilter, setReqTypeFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [newEnquiryOpen, setNewEnquiryOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -169,7 +167,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
   const [proposalsCache, setProposalsCache] = useState<Record<string, any[]>>({});
   const supabaseClient = useMemo(() => createClient(), []);
 
-  const opsAgents = agents.filter(a => ['manager', 'super_admin'].includes(a.role));
+  const opsAgents = agents;
 
   async function handleCreate() {
     setFormError('');
@@ -371,11 +369,8 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
 
   return (
     <>
-      {/* Add Enquiry buttons */}
+      {/* Add Enquiry button */}
       <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={() => setNewEnquiryOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" /> Quick Add
-        </Button>
         <Button onClick={() => setSheetOpen(true)}>
           <Plus className="h-4 w-4 mr-2" /> Add Enquiry
         </Button>
@@ -423,16 +418,6 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
         })}
       </div>
 
-      {/* New Enquiry Dialog (rapid entry) */}
-      <NewEnquiryDialog
-        open={newEnquiryOpen}
-        onOpenChange={setNewEnquiryOpen}
-        onCreated={(created) => {
-          setEnquiries(prev => [created, ...prev]);
-          router.refresh();
-        }}
-      />
-
       {/* Add Enquiry Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="p-0 flex flex-col sm:max-w-lg">
@@ -474,6 +459,11 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
               <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Optional" />
             </div>
 
+            {/* Shared datalist for destination inputs */}
+            <datalist id="destination-list">
+              {destinations.map(t => <option key={t.value} value={t.label} />)}
+            </datalist>
+
             {/* Package-specific */}
             {form.requirement_type === 'package' && (
               <>
@@ -481,9 +471,6 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                   <div>
                     <Label>Destination</Label>
                     <Input list="destination-list" value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))} placeholder="e.g. Bali" />
-                    <datalist id="destination-list">
-                      {destinations.map(t => <option key={t.value} value={t.label} />)}
-                    </datalist>
                   </div>
                   <div>
                     <Label>Travel Date</Label>
@@ -584,7 +571,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Destination</Label>
-                    <Input list="destination-list" value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))} placeholder="City" />
+                    <Input list="destination-list" value={form.destination} onChange={e => setForm(f => ({ ...f, destination: e.target.value }))} placeholder="e.g. Bali" />
                   </div>
                   <div>
                     <Label>Hotel Category</Label>
@@ -725,15 +712,23 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
             )}
 
             {/* Common bottom fields */}
-            <div>
-              <Label>Budget Range</Label>
-              <Select value={form.budget_range || undefined} onValueChange={v => setForm(f => ({ ...f, budget_range: v || '' }))}>
-                <SelectTrigger><SelectValue placeholder="Select budget" /></SelectTrigger>
-                <SelectContent>
-                  {budgetRanges.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {form.requirement_type === 'package' && (
+              <div>
+                <Label>Budget Range</Label>
+                <Select value={form.budget_range || undefined} onValueChange={v => setForm(f => ({ ...f, budget_range: v || '' }))}>
+                  <SelectTrigger><SelectValue placeholder="Select budget" /></SelectTrigger>
+                  <SelectContent>
+                    {budgetRanges.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {form.requirement_type === 'hotel' && (
+              <div>
+                <Label>Budget (per night)</Label>
+                <Input value={form.budget_range} onChange={e => setForm(f => ({ ...f, budget_range: e.target.value }))} placeholder="e.g. ₹5,000 - ₹8,000" />
+              </div>
+            )}
             <div>
               <Label>Source</Label>
               <Select value={form.source} onValueChange={v => setForm(f => ({ ...f, source: v || 'offline' }))}>
@@ -834,7 +829,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
       )}
 
       {/* Table */}
-      <Card>
+      <Card className="min-w-0 overflow-hidden">
         <CardContent className="pt-4 overflow-x-auto">
           <Table>
             <TableHeader>
@@ -890,7 +885,8 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                     <TableCell>
                       <div>
                         <span className="font-medium">{e.name as string}</span>
-                        <span className="block text-[11px] text-muted-foreground font-mono">{(e.id as string).slice(0, 8)}</span>
+                        {(e.trip_id as string) && <span className="block text-[10px] text-blue-600 font-mono">{e.trip_id as string}</span>}
+                        <span className="block text-[11px] text-muted-foreground font-mono">{(e.query_id as string) || (e.id as string).slice(0, 8)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -942,7 +938,9 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                         value={(e.assigned_to as string) || 'unassigned'}
                         onValueChange={v => { if (v) handleAssign(e.id as string, v === 'unassigned' ? '' : v); }}
                       >
-                        <SelectTrigger className="w-[130px] h-7 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-[130px] h-7 text-xs">
+                          <span className="truncate">{e.assigned_to ? (agents.find(a => a.id === e.assigned_to)?.full_name || 'Unknown') : 'Unassigned'}</span>
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unassigned">Unassigned</SelectItem>
                           {agents.map(a => (<SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>))}
@@ -955,7 +953,9 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                         value={(e.assigned_to_ops as string) || 'unassigned'}
                         onValueChange={v => { if (v) handleAssign(e.id as string, v === 'unassigned' ? '' : v, 'assigned_to_ops'); }}
                       >
-                        <SelectTrigger className="w-[130px] h-7 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-[130px] h-7 text-xs">
+                          <span className="truncate">{e.assigned_to_ops ? (opsAgents.find(a => a.id === e.assigned_to_ops)?.full_name || 'Unknown') : 'Unassigned'}</span>
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unassigned">Unassigned</SelectItem>
                           {opsAgents.map(a => (<SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>))}
@@ -995,8 +995,9 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
                     {/* Actions */}
                     <TableCell onClick={ev => ev.stopPropagation()}>
                       <DropdownMenu>
-                        <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent hover:text-accent-foreground">
-                          <MoreHorizontal className="h-4 w-4" />
+                        <DropdownMenuTrigger className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors">
+                          Actions
+                          <ChevronDown className="h-3.5 w-3.5" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => router.push(`/admin/website/enquiries/${e.id}`)}>

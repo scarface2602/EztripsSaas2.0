@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
     }
     const { user, supabaseResponse } = await updateSession(request);
     if (user) {
-      return NextResponse.redirect(new URL('/', request.url));
+      return NextResponse.redirect(new URL('/leads', request.url));
     }
     return supabaseResponse;
   }

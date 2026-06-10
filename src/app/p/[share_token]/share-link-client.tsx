@@ -68,10 +68,10 @@ export function ShareLinkClient({
   const daysUntilTravel = travelStart ? Math.ceil((travelStart.getTime() - now.getTime()) / 86400000) : 999;
   const isDynamicPricing = hasFlights || daysUntilTravel <= 7;
 
-  // 48hr validity for land-only proposals with travel > 7 days
+  // 24hr validity for land-only proposals with travel > 7 days
   const publishedAt = proposal.published_at || proposal.updated_at;
   const priceValidUntil = publishedAt
-    ? new Date(new Date(publishedAt as string).getTime() + 48 * 3600000)
+    ? new Date(new Date(publishedAt as string).getTime() + 24 * 3600000)
     : null;
   const priceExpired = !isDynamicPricing && priceValidUntil && priceValidUntil < now;
 
@@ -102,14 +102,17 @@ export function ShareLinkClient({
 
   const afterDiscount = grandTotal - discountAmount;
 
-  // TCS — flat 2% on international tour packages (Budget 2026, effective April 2026)
-  // Rate is editable per proposal via tcs_rate field (default 2%)
-  const tcsRate = Number(proposal.tcs_rate ?? 0); // 0 means TCS disabled for this proposal
-  const tcsAmount = tcsRate > 0 ? Math.round(afterDiscount * tcsRate / 100) : 0;
+  // TCS — only apply if explicitly enabled by the agent
+  const tcsEnabled = proposal.tcs_enabled === true;
+  const tcsRate = tcsEnabled ? (Number(proposal.tcs_rate) || 0) : 0;
+  const tcsAmount = tcsEnabled && tcsRate > 0 ? Math.round(afterDiscount * tcsRate / 100) : 0;
 
   const finalTotal = afterDiscount + tcsAmount;
 
   const cur = getCurrencySymbol(proposal.currency as string);
+  const draftData = (proposal.draft_data || {}) as Record<string, unknown>;
+  const vehicleType = draftData.vehicle_type as string | undefined;
+  const vehicleModel = draftData.vehicle_model as string | undefined;
 
   const applyCoupon = async () => {
     if (!couponCode.trim()) return;
@@ -142,8 +145,8 @@ export function ShareLinkClient({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   async function handleAccept() {
-    const shareToken = window.location.pathname.split('/p/')[1];
-    fetch(`/api/proposals/${shareToken}/log-event`, {
+    const st = (proposal.share_token as string) || '';
+    fetch(`/api/proposals/${st}/log-event`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event_type: 'tc_accepted' }),
@@ -188,7 +191,11 @@ export function ShareLinkClient({
         {isDynamicPricing && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-            <span className="text-sm text-amber-800">Prices are indicative and subject to availability at the time of booking confirmation.</span>
+            <span className="text-sm text-amber-800">
+              {hasFlights
+                ? 'Note: Prices dynamic and subject to change.'
+                : 'Prices are indicative and subject to availability at the time of booking confirmation.'}
+            </span>
           </div>
         )}
         {!isDynamicPricing && priceExpired && (
@@ -217,6 +224,18 @@ export function ShareLinkClient({
                 {(proposal.pax_children as number) > 0 && `, ${proposal.pax_children as number} child${(proposal.pax_children as number) !== 1 ? 'ren' : ''}`}
               </span>
             </div>
+            {vehicleType && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <span className="text-muted-foreground">Vehicle Type:</span>
+                <span className="font-medium capitalize">{vehicleType.replace(/_/g, ' ')}</span>
+              </div>
+            )}
+            {vehicleModel && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <span className="text-muted-foreground">Vehicle Model:</span>
+                <span className="font-medium">{vehicleModel}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -478,7 +497,7 @@ export function ShareLinkClient({
       <CheckoutDialog
         open={checkoutOpen}
         onOpenChange={setCheckoutOpen}
-        shareToken={window.location.pathname.split('/p/')[1]}
+        shareToken={(proposal.share_token as string) || ''}
         totalAmount={finalTotal}
         currency={(proposal.currency as string) || 'INR'}
         paxAdults={(proposal.pax_adults as number) || 2}

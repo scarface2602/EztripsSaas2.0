@@ -125,7 +125,14 @@
       "Bash(npx supabase:*)",
       "Read(//Users/sudeepsharma/Desktop/EztripsWebsite/src/**)",
       "Read(//Users/sudeepsharma/Desktop/eztripswebsite/src/**)",
-      "Read(//Users/sudeepsharma/Desktop/**)"
+      "Read(//Users/sudeepsharma/Desktop/**)",
+      "Bash([ ! -f \"/Users/sudeepsharma/Desktop/EztripsSaas/src/components/$file.tsx\" ])",
+      "Bash(kill 19747)",
+      "Bash(kill 27178 34120)",
+      "Bash(lsof -ti:3001)",
+      "Bash(xargs kill:*)",
+      "Bash(npx eslint:*)",
+      "Bash(lsof -ti:3000,3001,3002)"
     ]
   }
 }

@@ -11,11 +11,24 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Settings, Save, Building2, Upload, Loader2, UserRoundCog } from 'lucide-react';
+import { Settings, Save, Building2, Upload, Loader2, UserRoundCog, Hash } from 'lucide-react';
 import { toast } from 'sonner';
 import { PaymentAccountsSection } from './payment-accounts';
 import { DiscountCodesSection } from './discount-codes';
 import { LookupListsSection } from './lookup-lists';
+
+interface TripIdConfig {
+  prefix: string;
+  separator: string;
+  date_format: 'YYMMDD' | 'YYYYMMDD';
+  seq_digits: number;
+  type_codes: Record<string, string>;
+}
+
+const DEFAULT_TRIP_ID_CONFIG: TripIdConfig = {
+  prefix: 'EZQ', separator: '', date_format: 'YYMMDD', seq_digits: 3,
+  type_codes: { PKG: 'PKG', HTL: 'HTL', FLT: 'FLT', VSA: 'VSA', TRF: 'TRF', MISC: 'MISC' },
+};
 
 interface OrgData {
   id?: string;
@@ -28,6 +41,7 @@ interface OrgData {
   terms_and_conditions: string | null;
   auto_assign_enabled?: boolean;
   auto_assign_strategy?: string | null;
+  trip_id_config?: TripIdConfig;
 }
 
 interface SettingsData {
@@ -306,6 +320,106 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Trip ID Format (admin only) */}
+        {userRole === 'super_admin' && (() => {
+          const raw = org.trip_id_config;
+          const c: TripIdConfig = {
+            prefix: raw?.prefix || DEFAULT_TRIP_ID_CONFIG.prefix,
+            separator: raw?.separator ?? DEFAULT_TRIP_ID_CONFIG.separator,
+            date_format: raw?.date_format || DEFAULT_TRIP_ID_CONFIG.date_format,
+            seq_digits: raw?.seq_digits || DEFAULT_TRIP_ID_CONFIG.seq_digits,
+            type_codes: raw?.type_codes || DEFAULT_TRIP_ID_CONFIG.type_codes,
+          };
+          const sep = c.separator;
+          const now = new Date();
+          const yy = String(now.getFullYear()).slice(2);
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const dd = String(now.getDate()).padStart(2, '0');
+          const datePart = c.date_format === 'YYYYMMDD' ? `${now.getFullYear()}${mm}${dd}` : `${yy}${mm}${dd}`;
+          const seqPart = '1'.padStart(c.seq_digits, '0');
+          const preview = `${c.prefix}${sep}${c.type_codes?.PKG || 'PKG'}${sep}${datePart}${sep}${seqPart}`;
+          const updateConfig = (patch: Partial<TripIdConfig>) => setOrg({ ...org, trip_id_config: { ...c, ...patch } });
+
+          return (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2"><Hash className="h-5 w-5" /> Trip ID Format</CardTitle>
+                <Button size="sm" onClick={handleSaveOrg} disabled={savingOrg}>
+                  <Save className="h-4 w-4 mr-1" /> {savingOrg ? 'Saving...' : 'Save'}
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-3 bg-muted rounded-md text-center font-mono text-lg tracking-wider">
+                  {preview}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label>Prefix</Label>
+                    <Input
+                      value={c.prefix}
+                      onChange={(e) => updateConfig({ prefix: e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 10) })}
+                      placeholder="EZQ"
+                      maxLength={10}
+                    />
+                    <p className="text-xs text-muted-foreground">1-10 alphanumeric</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Separator</Label>
+                    <Select value={c.separator || 'none'} onValueChange={(v) => updateConfig({ separator: (!v || v === 'none') ? '' : v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="-">Hyphen (-)</SelectItem>
+                        <SelectItem value="/">Slash (/)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Date Format</Label>
+                    <Select value={c.date_format} onValueChange={(v) => v && updateConfig({ date_format: v as TripIdConfig['date_format'] })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="YYMMDD">YYMMDD (260609)</SelectItem>
+                        <SelectItem value="YYYYMMDD">YYYYMMDD (20260609)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Sequence Digits</Label>
+                    <Select value={String(c.seq_digits)} onValueChange={(v) => v && updateConfig({ seq_digits: parseInt(v) })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2">2 (01)</SelectItem>
+                        <SelectItem value="3">3 (001)</SelectItem>
+                        <SelectItem value="4">4 (0001)</SelectItem>
+                        <SelectItem value="5">5 (00001)</SelectItem>
+                        <SelectItem value="6">6 (000001)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Separator />
+                <div>
+                  <Label className="mb-2 block">Type Codes</Label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {(['PKG', 'HTL', 'FLT', 'VSA', 'TRF', 'MISC'] as const).map((key) => (
+                      <div key={key} className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">{key === 'PKG' ? 'Package' : key === 'HTL' ? 'Hotel' : key === 'FLT' ? 'Flight' : key === 'VSA' ? 'Visa' : key === 'TRF' ? 'Transfer' : 'Misc'}</Label>
+                        <Input
+                          value={c.type_codes?.[key] || key}
+                          onChange={(e) => updateConfig({ type_codes: { ...c.type_codes, [key]: e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 5).toUpperCase() } })}
+                          maxLength={5}
+                          className="font-mono"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* Agency Profile */}
         <Card>

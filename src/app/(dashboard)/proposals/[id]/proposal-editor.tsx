@@ -2,14 +2,20 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useForm, FormProvider } from 'react-hook-form';
 import { createClient } from '@/lib/supabase/client';
-import type { Proposal, Hotel, Flight, ItineraryDay, ItineraryActivity, LineItem, Supplier, User } from '@/lib/types/database';
+import type { Proposal, Hotel, Flight, ItineraryDay, LineItem, Supplier, User } from '@/lib/types/database';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Save, Upload, Undo2, Eye, ArrowLeft, AlertTriangle, History, ClipboardList } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Save, Upload, Undo2, Eye, ArrowLeft, ArrowRight, AlertTriangle, History, ClipboardList, Plus, Trash2, Sparkles, Search, ChevronRight, Download, Share2 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 
-import { applyRounding } from '@/lib/utils/pricing';
+
+import { applyRounding, formatCurrency } from '@/lib/utils/pricing';
+import { prepareForExport } from '@/lib/utils/export';
 import { CoverPageSection } from './sections/cover-page';
 import { TripSummarySection } from './sections/trip-summary';
 import { HotelsSection } from './sections/hotels';
@@ -17,18 +23,40 @@ import { FlightsSection } from './sections/flights';
 import { ItinerarySection } from './sections/itinerary';
 import { AncillariesSection } from './sections/ancillaries';
 import { InclusionsExclusionsSection } from './sections/inclusions-exclusions';
-import { PricingSummarySection } from './sections/pricing-summary';
 import { CancellationPolicySection } from './sections/cancellation-policy';
 import { PaymentTermsSection } from './sections/payment-terms';
 import { CommentsSection } from './sections/comments';
 import { ConvertToBookingButton } from '@/components/convert-to-booking-button';
+import { AIAutoFillModal } from '@/components/proposals/AIAutoFillModal';
+import { FlightSearchModal } from '@/components/proposals/FlightSearchModal';
+
+interface CustomSection {
+  id: string;
+  title: string;
+  content: string;
+}
+
+export interface ProposalFormValues {
+  proposal: Proposal;
+  hotels: Hotel[];
+  flights: Flight[];
+  itineraryDays: ItineraryDay[];
+  lineItems: LineItem[];
+  customSections: CustomSection[];
+  includeFlights: boolean;
+  globalMarkupPct: number;
+  pricingMode: 'package' | 'itemised';
+  landMarkupPct: number;
+  flightMarkupPct: number;
+  gstAmountOverride: number | null;
+  tcsAmountOverride: number | null;
+}
 
 interface ProposalEditorProps {
   proposal: Proposal;
   hotels: Hotel[];
   flights: Flight[];
   itineraryDays: ItineraryDay[];
-  activities: ItineraryActivity[];
   lineItems: LineItem[];
   suppliers: Supplier[];
   comments: (Record<string, unknown>)[];
@@ -41,7 +69,6 @@ export function ProposalEditor({
   hotels: initialHotels,
   flights: initialFlights,
   itineraryDays: initialDays,
-  activities: initialActivities,
   lineItems: initialLineItems,
   suppliers,
   comments: initialComments,
@@ -50,28 +77,144 @@ export function ProposalEditor({
 }: ProposalEditorProps) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const autoSaveRef = useRef<NodeJS.Timeout>();
-  const saveDraftRef = useRef<() => Promise<void>>();
 
-  const [proposal, setProposal] = useState(initialProposal);
-  const [hotels, setHotels] = useState(initialHotels);
-  const [flights, setFlights] = useState(initialFlights);
-  const [itineraryDays, setItineraryDays] = useState(initialDays);
-  const [activities, setActivities] = useState(initialActivities);
-  const [lineItems, setLineItems] = useState(initialLineItems);
-  const [comments, setComments] = useState(initialComments);
+  // ── Form State (replaces all data useState) ──────────────────
+  const draftInit = (initialProposal.draft_data || {}) as Record<string, unknown>;
+
+  const form = useForm<ProposalFormValues>({
+    defaultValues: {
+      proposal: initialProposal,
+      hotels: initialHotels,
+      flights: initialFlights,
+      itineraryDays: initialDays,
+      lineItems: initialLineItems,
+      customSections: (draftInit.custom_sections as CustomSection[]) || [],
+      includeFlights: draftInit.include_flights !== false,
+      globalMarkupPct: (draftInit.global_markup_pct as number) || 15,
+      pricingMode: (draftInit.pricing_mode as 'package' | 'itemised') || 'package',
+      landMarkupPct: (draftInit.land_markup_pct as number) ?? 15,
+      flightMarkupPct: (draftInit.flight_markup_pct as number) ?? 5,
+      gstAmountOverride: (draftInit.gst_amount_override as number) ?? null,
+      tcsAmountOverride: (draftInit.tcs_amount_override as number) ?? null,
+    },
+  });
+
+  const { watch, setValue, getValues, register } = form;
+
+  // Watched values for pricing bar + section props
+  const proposal = watch('proposal');
+  const hotels = watch('hotels');
+  const flights = watch('flights');
+  const lineItems = watch('lineItems');
+  const includeFlights = watch('includeFlights');
+  const globalMarkupPct = Number(watch('globalMarkupPct')) || 0;
+  const customSections = watch('customSections');
+  const pricingMode = watch('pricingMode');
+  const landMarkupPct = Number(watch('landMarkupPct')) || 0;
+  const flightMarkupPct = Number(watch('flightMarkupPct')) || 0;
+  const gstAmountOverride = watch('gstAmountOverride');
+  const tcsAmountOverride = watch('tcsAmountOverride');
+
+  // ── UI-only state (not in form) ──────────────────────────────
   const [saving, setSaving] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [itineraryDirty, setItineraryDirty] = useState(false);
-  const [activeTab, setActiveTab] = useState('cover');
-  const [summaryValidationError, setSummaryValidationError] = useState<string | null>(null);
+  const [comments, setComments] = useState(initialComments);
+  const [showInternalCosts, setShowInternalCosts] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [enquiry, setEnquiry] = useState<any | null>(null);
+
+  useEffect(() => {
+    const enquiryId = (proposal as { enquiry_id?: string | null }).enquiry_id;
+    if (enquiryId) {
+      supabase
+        .from('website_enquiries')
+        .select('*')
+        .eq('id', enquiryId)
+        .single()
+        .then(({ data }) => {
+          if (data) setEnquiry(data);
+        });
+    }
+  }, [proposal, supabase]);
+
+  // Stepper navigation
+  const [activeSection, setActiveSection] = useState<number>(0);
+  
+  const SECTIONS = [
+    { id: 'cover', title: 'Cover Page' },
+    { id: 'summary', title: 'Trip Summary' },
+    { id: 'hotels', title: 'Accommodations' },
+    { id: 'flights', title: 'Flights' },
+    { id: 'ancillaries', title: 'Land Services & Package Pricing' },
+    { id: 'itinerary', title: 'Itinerary' },
+    { id: 'inclusions', title: 'Inclusions / Exclusions' },
+    { id: 'custom', title: 'Custom Sections' },
+    { id: 'cancellation', title: 'Cancellation Policy' },
+    { id: 'payment', title: 'Payment Terms' },
+    { id: 'comments', title: 'Comments' },
+  ];
+
+  // Modal states
+  const [showAIAutoFill, setShowAIAutoFill] = useState(false);
+  const [showFlightSearch, setShowFlightSearch] = useState(false);
 
   const hasDraft = proposal.draft_differs_from_published;
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const versionDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close version history dropdown when clicking outside
+  // ── Pricing calculations ──────────────────────────────────
+  const landSupplierCost = useMemo(() => {
+    const hotelCost = hotels.reduce((s, h) => s + (Number(h.cp_per_night) || 0) * (Number(h.nights) || 1), 0);
+    const serviceCost = lineItems
+      .filter(li => li.type === 'ancillary' && li.include_in_total)
+      .reduce((s, li) => s + (Number(li.cp) || 0), 0);
+    return hotelCost + serviceCost;
+  }, [hotels, lineItems]);
+
+  const flightSupplierCost = useMemo(() => {
+    return includeFlights ? flights.reduce((s, f) => s + (Number(f.cp_total) || 0), 0) : 0;
+  }, [flights, includeFlights]);
+
+  const totalSupplierCost = landSupplierCost + flightSupplierCost;
+
+  const pricingBreakdown = useMemo(() => {
+    let landSalePrice: number;
+    let flightSalePrice: number;
+
+    if (pricingMode === 'itemised') {
+      landSalePrice = landSupplierCost * (1 + landMarkupPct / 100);
+      flightSalePrice = flightSupplierCost * (1 + flightMarkupPct / 100);
+    } else {
+      const combined = totalSupplierCost * (1 + globalMarkupPct / 100);
+      landSalePrice = totalSupplierCost > 0 ? combined * (landSupplierCost / totalSupplierCost) : 0;
+      flightSalePrice = totalSupplierCost > 0 ? combined * (flightSupplierCost / totalSupplierCost) : 0;
+    }
+
+    const subtotal = landSalePrice + flightSalePrice;
+    const discount = Number(proposal.discount_amount) || 0;
+    const afterDiscount = subtotal - discount;
+
+    // GST: use override amount if set, otherwise calculate from rate. 0 if disabled.
+    const safeGstOverride = gstAmountOverride !== null && Number.isFinite(Number(gstAmountOverride)) ? Number(gstAmountOverride) : null;
+    const gstAmt = !proposal.gst_enabled ? 0
+      : safeGstOverride !== null ? safeGstOverride
+      : afterDiscount * (Number(proposal.gst_rate) || 0) / 100;
+
+    // TCS: use override amount if set, otherwise calculate from rate. 0 if disabled.
+    const safeTcsOverride = tcsAmountOverride !== null && Number.isFinite(Number(tcsAmountOverride)) ? Number(tcsAmountOverride) : null;
+    const tcsAmt = !proposal.tcs_enabled ? 0
+      : safeTcsOverride !== null ? safeTcsOverride
+      : (afterDiscount + gstAmt) * (Number(proposal.tcs_rate) || 0) / 100;
+
+    const raw = afterDiscount + gstAmt + tcsAmt;
+    const clientTotal = applyRounding(raw, Number(proposal.rounding_unit) || Number(currentUser.rounding_unit) || 0);
+
+    return { landSalePrice, flightSalePrice, subtotal, afterDiscount, gstAmt, tcsAmt, clientTotal };
+  }, [pricingMode, landSupplierCost, flightSupplierCost, totalSupplierCost, globalMarkupPct, landMarkupPct, flightMarkupPct, proposal, currentUser, gstAmountOverride, tcsAmountOverride]);
+
+  const clientTotal = pricingBreakdown.clientTotal;
+
+  // ── Close version history dropdown ────────────────────────
   useEffect(() => {
     if (!showVersionHistory) return;
     function handleClickOutside(e: MouseEvent) {
@@ -82,130 +225,129 @@ export function ProposalEditor({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showVersionHistory]);
+
   useEffect(() => {
     if (proposal.share_token) {
       setShareUrl(`${window.location.origin}/p/${proposal.share_token}`);
     }
   }, [proposal.share_token]);
 
+  // ── Draft save function ────────────────────────────────────
+  const saveDraftRef = useRef<() => Promise<void>>();
+
   const saveDraft = useCallback(async () => {
     setSaving(true);
+
+    const v = getValues();
     const draftData = {
-      proposal,
-      hotels,
-      flights,
-      itineraryDays,
-      activities,
-      lineItems,
+      proposal: v.proposal,
+      hotels: v.hotels,
+      flights: v.flights,
+      itineraryDays: v.itineraryDays,
+      lineItems: v.lineItems,
+      include_flights: v.includeFlights,
+      custom_sections: v.customSections,
+      global_markup_pct: v.globalMarkupPct,
+      pricing_mode: v.pricingMode,
+      land_markup_pct: v.landMarkupPct,
+      flight_markup_pct: v.flightMarkupPct,
+      gst_amount_override: v.gstAmountOverride,
+      tcs_amount_override: v.tcsAmountOverride,
     };
 
     await supabase.from('proposals').update({
       draft_data: draftData,
-      draft_differs_from_published: proposal.status !== 'draft',
-      // For draft proposals, update fields directly
-      ...(proposal.status === 'draft' ? {
-        title: proposal.title,
-        destination: proposal.destination,
-        travel_start: proposal.travel_start,
-        travel_end: proposal.travel_end,
-        pax_adults: proposal.pax_adults,
-        pax_children: proposal.pax_children,
-        children_ages: proposal.children_ages,
-        currency: proposal.currency,
-        special_notes: proposal.special_notes,
-        dietary_notes: proposal.dietary_notes,
-        gst_enabled: proposal.gst_enabled,
-        gst_rate: proposal.gst_rate,
-        tcs_enabled: proposal.tcs_enabled,
-        tcs_rate: proposal.tcs_rate,
-        rounding_unit: proposal.rounding_unit,
-        discount_amount: proposal.discount_amount,
-        discount_note: proposal.discount_note,
-        cover_image_url: proposal.cover_image_url,
-        cover_image_source: proposal.cover_image_source,
-        payment_terms: proposal.payment_terms,
-        visa_section_enabled: proposal.visa_section_enabled,
-        quote_type: proposal.quote_type,
-        package_cp_per_person: proposal.package_cp_per_person,
-        package_sp_per_person: proposal.package_sp_per_person,
-        package_cwb_sp: proposal.package_cwb_sp,
-        package_cnb_sp: proposal.package_cnb_sp,
-        land_cp: proposal.land_cp,
-        land_sp: proposal.land_sp,
-        pricing_display_mode: proposal.pricing_display_mode,
-        total_sp: (() => {
-          // Derive grand total from actual item SPs so the number is consistent
-          // across all proposal types (land, itemised hotels, flights, mixed).
-          const hotelSP = hotels
-            .filter(h => (Number(h.sp_per_night) || 0) > 0)
-            .reduce((s, h) => s + (Number(h.sp_per_night) || 0) * (Number(h.nights) || 1), 0);
-          const flightSP = flights
-            .reduce((s, f) => s + (Number(f.sp_total) || 0), 0);
-          // Use itemised hotel SP when available, else fall back to manual land_sp
-          const landSP = hotelSP > 0 ? hotelSP : Number(proposal.land_sp) || 0;
-          const subtotal = landSP + flightSP;
-          const discount = Number(proposal.discount_amount) || 0;
-          const afterDiscount = subtotal - discount;
-          const gstAmt = proposal.gst_enabled ? afterDiscount * (Number(proposal.gst_rate) || 5) / 100 : 0;
-          const tcsAmt = proposal.tcs_enabled ? (afterDiscount + gstAmt) * (Number(proposal.tcs_rate) || 5) / 100 : 0;
-          const raw = afterDiscount + gstAmt + tcsAmt;
-          return applyRounding(raw, Number(proposal.rounding_unit) || Number(currentUser.rounding_unit) || 0);
-        })(),
-        trip_cities: proposal.trip_cities,
+      draft_differs_from_published: v.proposal.status !== 'draft',
+      ...(v.proposal.status === 'draft' ? {
+        title: v.proposal.title,
+        destination: v.proposal.destination,
+        travel_start: v.proposal.travel_start,
+        travel_end: v.proposal.travel_end,
+        pax_adults: v.proposal.pax_adults,
+        pax_children: v.proposal.pax_children,
+        children_ages: v.proposal.children_ages,
+        currency: v.proposal.currency,
+        special_notes: v.proposal.special_notes,
+        dietary_notes: v.proposal.dietary_notes,
+        gst_enabled: v.proposal.gst_enabled,
+        gst_rate: v.proposal.gst_rate,
+        tcs_enabled: v.proposal.tcs_enabled,
+        tcs_rate: v.proposal.tcs_rate,
+        rounding_unit: v.proposal.rounding_unit,
+        discount_amount: v.proposal.discount_amount,
+        discount_note: v.proposal.discount_note,
+        cover_image_url: v.proposal.cover_image_url,
+        cover_image_source: v.proposal.cover_image_source,
+        payment_terms: v.proposal.payment_terms,
+        visa_section_enabled: v.proposal.visa_section_enabled,
+        quote_type: v.proposal.quote_type,
+        package_cp_per_person: v.proposal.package_cp_per_person,
+        package_sp_per_person: v.proposal.package_sp_per_person,
+        package_cwb_sp: v.proposal.package_cwb_sp,
+        package_cnb_sp: v.proposal.package_cnb_sp,
+        land_cp: v.proposal.land_cp,
+        land_sp: pricingBreakdown.landSalePrice || v.proposal.land_sp,
+        pricing_display_mode: v.proposal.pricing_display_mode,
+        total_sp: clientTotal,
+        trip_cities: v.proposal.trip_cities,
       } : {}),
-    }).eq('id', proposal.id);
+    }).eq('id', v.proposal.id);
 
-    setHasUnsavedChanges(false);
     setSaving(false);
-  }, [proposal, hotels, flights, itineraryDays, activities, lineItems, supabase, currentUser]);
+  }, [getValues, supabase, clientTotal, pricingBreakdown]);
 
-  // Keep ref in sync so the interval always calls the latest version
   saveDraftRef.current = saveDraft;
 
-  // Auto-save every 30 seconds
+  // ── Debounced auto-save on any form change ─────────────────
+  const debouncedSaveTimer = useRef<NodeJS.Timeout>();
+  const mounted = useRef(false);
+  useEffect(() => { mounted.current = true; }, []);
+
   useEffect(() => {
-    if (!hasUnsavedChanges) return;
-
-    autoSaveRef.current = setInterval(() => {
-      saveDraftRef.current?.();
-    }, 30000);
-
-    return () => {
-      if (autoSaveRef.current) clearInterval(autoSaveRef.current);
-    };
-  }, [hasUnsavedChanges]);
-
-  function updateProposal(updates: Partial<Proposal>) {
-    setProposal(prev => {
-      const next = { ...prev, ...updates };
-      // Clear validation error once the required fields are filled
-      if (next.destination && next.travel_start && next.travel_end) {
-        setSummaryValidationError(null);
-      }
-      return next;
+    const subscription = watch(() => {
+      if (!mounted.current) return;
+      if (debouncedSaveTimer.current) clearTimeout(debouncedSaveTimer.current);
+      debouncedSaveTimer.current = setTimeout(() => {
+        saveDraftRef.current?.();
+      }, 3000);
     });
-    setHasUnsavedChanges(true);
+    return () => {
+      subscription.unsubscribe();
+      if (debouncedSaveTimer.current) clearTimeout(debouncedSaveTimer.current);
+    };
+  }, [watch]);
+
+  // ── Helpers for child sections ─────────────────────────────
+  const updateProposal = useCallback((updates: Partial<Proposal>) => {
+    const current = getValues('proposal');
+    setValue('proposal', { ...current, ...updates }, { shouldDirty: true });
+  }, [getValues, setValue]);
+
+  const setHotels = useCallback((h: Hotel[]) => {
+    setValue('hotels', h, { shouldDirty: true });
+  }, [setValue]);
+
+  const setFlights = useCallback((f: Flight[]) => {
+    setValue('flights', f, { shouldDirty: true });
+  }, [setValue]);
+
+  const setItineraryDays = useCallback((d: ItineraryDay[]) => {
+    setValue('itineraryDays', d, { shouldDirty: true });
+  }, [setValue]);
+
+  const setLineItems = useCallback((li: LineItem[]) => {
+    setValue('lineItems', li, { shouldDirty: true });
+  }, [setValue]);
+
+  // Custom sections helpers
+  function addCustomSection() {
+    const current = getValues('customSections');
+    setValue('customSections', [...current, { id: crypto.randomUUID(), title: '', content: '' }], { shouldDirty: true });
   }
 
-  function handleTabChange(tab: string) {
-    // Allow Cover and Summary tabs freely
-    if (tab === 'cover' || tab === 'summary') {
-      setActiveTab(tab);
-      setSummaryValidationError(null);
-      return;
-    }
-    // Validate required fields before leaving Summary
-    const missing: string[] = [];
-    if (!proposal.destination) missing.push('Destination');
-    if (!proposal.travel_start) missing.push('Travel Start');
-    if (!proposal.travel_end) missing.push('Travel End');
-    if (missing.length > 0) {
-      setSummaryValidationError(`Please fill in required fields before continuing: ${missing.join(', ')}`);
-      setActiveTab('summary');
-      return;
-    }
-    setSummaryValidationError(null);
-    setActiveTab(tab);
+  function removeCustomSection(index: number) {
+    const current = getValues('customSections');
+    setValue('customSections', current.filter((_, i) => i !== index), { shouldDirty: true });
   }
 
   async function handlePublish() {
@@ -216,21 +358,9 @@ export function ProposalEditor({
       headers: { 'Content-Type': 'application/json' },
     });
 
-    // Re-fetch proposal to update client state (router.refresh alone won't update useState)
-    const { data: freshProposal } = await supabase
-      .from('proposals')
-      .select('*')
-      .eq('id', proposal.id)
-      .single();
-    if (freshProposal) {
-      setProposal(freshProposal as Proposal);
-      if (freshProposal.share_token) {
-        setShareUrl(`${window.location.origin}/p/${freshProposal.share_token}`);
-      }
-    }
-    setHasUnsavedChanges(false);
-    router.refresh();
     setSaving(false);
+    toast.success('Proposal published and sent to the guest.');
+    router.push('/proposals');
   }
 
   async function handleDiscard() {
@@ -243,273 +373,599 @@ export function ProposalEditor({
   }
 
   async function handleGeneratePdf(type?: string) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const exportPayload = prepareForExport({ hotels: hotels as any, flights: flights as any, lineItems: lineItems as any });
+    console.log('[PDF Export] Cleaned payload ready:', exportPayload);
     const url = `/api/proposals/${proposal.id}/pdf${type ? `?type=${type}` : ''}`;
     window.open(url, '_blank');
   }
 
+  const currency = proposal.currency || 'INR';
+
   return (
-    <div className="space-y-4 w-full max-w-none">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.push('/proposals')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="text-xl font-bold">{proposal.title || 'Untitled Proposal'}</h1>
-          <Badge className={
-            proposal.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-            proposal.status === 'sent' ? 'bg-blue-100 text-blue-700' :
-            proposal.status === 'viewed' ? 'bg-yellow-100 text-yellow-700' :
-            proposal.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-            'bg-gray-100 text-gray-700'
-          }>
-            {proposal.status}
-          </Badge>
-          <div className="relative" ref={versionDropdownRef}>
-            <button
-              onClick={() => setShowVersionHistory(v => !v)}
-              className="flex items-center gap-1 px-2 py-0.5 border rounded text-xs font-medium hover:bg-muted transition-colors"
-              title="Version history"
-            >
-              <History className="h-3 w-3" />
-              V{proposal.version}
-              {versions.length > 0 && <span className="text-muted-foreground">({versions.length} prev)</span>}
-            </button>
-            {showVersionHistory && (
-              <div className="absolute top-full left-0 mt-1 z-50 bg-background border rounded-lg shadow-lg w-64 py-1">
-                <div className="px-3 py-1.5 border-b">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Version History</p>
-                </div>
-                <div className="max-h-60 overflow-y-auto">
-                  {/* Current version */}
-                  <div className="px-3 py-2 flex items-center justify-between bg-blue-50">
-                    <div>
-                      <span className="text-sm font-medium">V{proposal.version}</span>
-                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Current</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {proposal.updated_at ? new Date(proposal.updated_at as string).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                    </span>
-                  </div>
-                  {/* Previous versions */}
-                  {versions.length === 0 ? (
-                    <p className="px-3 py-3 text-xs text-muted-foreground">No previous versions</p>
-                  ) : (
-                    versions.map((v) => (
-                      <div key={v.id as string} className="px-3 py-2 flex items-center justify-between hover:bg-muted/50 border-t">
-                        <span className="text-sm font-medium">V{v.version as number}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {v.published_at ? new Date(v.published_at as string).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
-        </div>
-        <div className="flex items-center gap-2">
-          {proposal.status === 'confirmed' && (
-            <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" onClick={async () => {
-              // Ensure bookings exist (idempotent — API rejects if already created)
-              await fetch('/api/bookings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ proposal_id: proposal.id }),
-              });
-              router.push(`/bookings?proposal_id=${proposal.id}`);
-            }}>
-              <ClipboardList className="h-4 w-4 mr-1" /> View Bookings
+    <FormProvider {...form}>
+      <div className="space-y-4 w-full max-w-none pb-24">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => router.push('/proposals')}>
+              <ArrowLeft className="h-4 w-4" />
             </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={() => window.open(`/proposals/${proposal.id}/preview`, '_blank')}>
-            <Eye className="h-4 w-4 mr-1" /> Preview
-          </Button>
-          <ConvertToBookingButton proposal={proposal} clientId={proposal.client_id || ''} />
-          {shareUrl && (
-            <>
-              <Button variant="outline" size="sm" onClick={async () => {
-                await navigator.clipboard.writeText(shareUrl);
-                toast.success('Share link copied to clipboard');
-              }}>
-                <Eye className="h-4 w-4 mr-1" /> Copy Link
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-green-600 border-green-300 hover:bg-green-50"
-                onClick={() => {
-                  const text = `Hi! Here's your travel proposal for ${proposal.destination || 'your trip'}:\n${shareUrl}`;
-                  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-                }}
+            <h1 className="text-xl font-bold">{proposal.title || 'Untitled Proposal'}</h1>
+            <Badge className={
+              proposal.status === 'confirmed' ? 'bg-green-100 text-green-700' :
+              proposal.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+              proposal.status === 'viewed' ? 'bg-yellow-100 text-yellow-700' :
+              proposal.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+              'bg-gray-100 text-gray-700'
+            }>
+              {proposal.status}
+            </Badge>
+            <div className="relative" ref={versionDropdownRef}>
+              <button
+                onClick={() => setShowVersionHistory(v => !v)}
+                className="flex items-center gap-1 px-2 py-0.5 border rounded text-xs font-medium hover:bg-muted transition-colors"
+                title="Version history"
               >
-                <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                WhatsApp
-              </Button>
-            </>
-          )}
-          <Button variant="outline" size="sm" onClick={() => handleGeneratePdf()}>PDF</Button>
-          <Button variant="outline" size="sm" onClick={() => handleGeneratePdf('hotel_only')}>PDF (Hotels Only)</Button>
-          <Button variant="outline" size="sm" onClick={() => handleGeneratePdf('flight_only')}>PDF (Flights Only)</Button>
-          <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
-            <Save className="h-4 w-4 mr-1" /> Save Draft
-          </Button>
-          {hasDraft && (
-            <Button variant="outline" size="sm" onClick={handleDiscard}>
-              <Undo2 className="h-4 w-4 mr-1" /> Discard
-            </Button>
-          )}
-          <Button size="sm" onClick={handlePublish} disabled={saving}>
-            <Upload className="h-4 w-4 mr-1" />
-            {proposal.status === 'draft' ? 'Publish & Send' : `Publish V${proposal.version + 1}`}
-          </Button>
-        </div>
-      </div>
-
-      {/* Unpublished changes banner */}
-      {hasDraft && (
-        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-yellow-600" />
-          <span className="text-sm text-yellow-800">You have unpublished changes. The client still sees the previous version.</span>
-        </div>
-      )}
-
-      {/* Section navigation + content — manual tab implementation to avoid
-          the Tabs component's built-in flex layout which creates a 3-column look */}
-      <div className="w-full">
-        {/* Horizontal tab bar */}
-        <div className="sticky top-0 z-10 flex flex-wrap gap-1 bg-muted p-1 rounded-lg">
-          {([
-            ['cover', 'Cover'],
-            ['summary', 'Trip Summary'],
-            ['hotels', 'Hotels'],
-            ['flights', 'Flights'],
-            ['ancillaries', 'Ancillaries'],
-            ['itinerary', 'Itinerary'],
-            ['inclusions', 'Incl/Excl'],
-            ['pricing', 'Pricing'],
-            ['cancellation', 'Cancellation'],
-            ['payment', 'Payment'],
-            ['comments', 'Comments'],
-          ] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => handleTabChange(key)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors flex items-center gap-1 ${
-                activeTab === key
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {label}
-              {key === 'itinerary' && itineraryDirty && (
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" title="Unsaved itinerary changes" />
+                <History className="h-3 w-3" />
+                V{proposal.version}
+                {versions.length > 0 && <span className="text-muted-foreground">({versions.length} prev)</span>}
+              </button>
+              {showVersionHistory && (
+                <div className="absolute top-full left-0 mt-1 z-50 bg-background border rounded-lg shadow-lg w-64 py-1">
+                  <div className="px-3 py-1.5 border-b">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Version History</p>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    <div className="px-3 py-2 flex items-center justify-between bg-blue-50">
+                      <div>
+                        <span className="text-sm font-medium">V{proposal.version}</span>
+                        <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Current</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {proposal.updated_at ? new Date(proposal.updated_at as string).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      </span>
+                    </div>
+                    {versions.length === 0 ? (
+                      <p className="px-3 py-3 text-xs text-muted-foreground">No previous versions</p>
+                    ) : (
+                      versions.map((v) => (
+                        <div key={v.id as string} className="px-3 py-2 flex items-center justify-between hover:bg-muted/50 border-t">
+                          <span className="text-sm font-medium">V{v.version as number}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {v.published_at ? new Date(v.published_at as string).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               )}
-            </button>
-          ))}
+            </div>
+            {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+
+            <Button variant="outline" size="sm" onClick={() => setShowAIAutoFill(true)}>
+              <Sparkles className="h-4 w-4 mr-1" /> AI Auto-Fill
+            </Button>
+            {/* Download/Export Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center justify-center whitespace-nowrap font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md px-3 text-xs h-8">
+                <Download className="h-4 w-4 mr-2" /> Export
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleGeneratePdf()}>
+                  PDF (Full Proposal)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleGeneratePdf('hotel_only')}>
+                  PDF (Hotels Only)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleGeneratePdf('flight_only')}>
+                  PDF (Flights Only)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Share Dropdown */}
+            {shareUrl && (
+              <DropdownMenu>
+                <DropdownMenuTrigger className="inline-flex items-center justify-center whitespace-nowrap font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md px-3 text-xs h-8">
+                  <Share2 className="h-4 w-4 mr-2" /> Share
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => window.open(`/proposals/${proposal.id}/preview`, '_blank')}>
+                    Preview Client View
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={async () => {
+                    await navigator.clipboard.writeText(shareUrl);
+                    toast.success('Share link copied to clipboard');
+                  }}>
+                    Copy Share Link
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-green-600 font-medium" onClick={() => {
+                    const text = `Hi! Here's your travel proposal for ${proposal.destination || 'your trip'}:\n${shareUrl}`;
+                    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                  }}>
+                    Send via WhatsApp
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {!shareUrl && (
+              <Button variant="outline" size="sm" onClick={() => window.open(`/proposals/${proposal.id}/preview`, '_blank')}>
+                <Eye className="h-4 w-4 mr-2" /> Preview
+              </Button>
+            )}
+
+            <div className="h-6 w-px bg-border mx-1" />
+
+            {/* Editor Actions */}
+            <Button variant="ghost" size="sm" onClick={saveDraft} disabled={saving}>
+              <Save className="h-4 w-4 mr-2" /> Save Draft
+            </Button>
+            {hasDraft && (
+              <Button variant="ghost" size="sm" onClick={handleDiscard} className="text-red-600 hover:text-red-700 hover:bg-red-50">
+                <Undo2 className="h-4 w-4 mr-2" /> Discard
+              </Button>
+            )}
+            
+            <ConvertToBookingButton proposal={proposal} clientId={proposal.client_id || ''} />
+            <Button size="sm" onClick={handlePublish} disabled={saving}>
+              <Upload className="h-4 w-4 mr-2" />
+              {proposal.status === 'draft' ? 'Publish & Send' : `Publish V${proposal.version + 1}`}
+            </Button>
+          </div>
         </div>
 
-        {/* Validation error banner */}
-        {summaryValidationError && (
-          <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
-            <span className="text-sm text-red-700">{summaryValidationError}</span>
+        {/* Unpublished changes banner */}
+        {hasDraft && (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            <span className="text-sm text-yellow-800">You have unpublished changes. The client still sees the previous version.</span>
           </div>
         )}
 
-        {/* Section content — full width below tabs */}
-        <div className="mt-4 w-full">
-          {activeTab === 'cover' && (
-            <CoverPageSection proposal={proposal} updateProposal={updateProposal} />
-          )}
-          {activeTab === 'summary' && (
-            <TripSummarySection proposal={proposal} updateProposal={updateProposal} setHotels={setHotels} />
-          )}
-          {activeTab === 'hotels' && (
-            <HotelsSection
-              proposal={proposal}
-              hotels={hotels}
-              setHotels={setHotels}
-              suppliers={suppliers}
-              setHasUnsavedChanges={setHasUnsavedChanges}
-            />
-          )}
-          {activeTab === 'flights' && (
-            <FlightsSection
-              proposal={proposal}
-              flights={flights}
-              setFlights={setFlights}
-              suppliers={suppliers}
-              setHasUnsavedChanges={setHasUnsavedChanges}
-            />
-          )}
-          {activeTab === 'ancillaries' && (
-            <AncillariesSection
-              proposalId={proposal.id}
-              lineItems={lineItems}
-              setLineItems={setLineItems}
-              suppliers={suppliers}
-              setHasUnsavedChanges={setHasUnsavedChanges}
-            />
-          )}
-          {activeTab === 'itinerary' && (
-            <ItinerarySection
-              proposal={proposal}
-              itineraryDays={itineraryDays}
-              setItineraryDays={setItineraryDays}
-              activities={activities}
-              setActivities={setActivities}
-              hotels={hotels}
-              flights={flights}
-              suppliers={suppliers}
-              setHasUnsavedChanges={setHasUnsavedChanges}
-              onDirtyChange={setItineraryDirty}
-            />
-          )}
-          {activeTab === 'inclusions' && (
-            <InclusionsExclusionsSection
-              proposalId={proposal.id}
-              lineItems={lineItems}
-              setLineItems={setLineItems}
-              setHasUnsavedChanges={setHasUnsavedChanges}
-            />
-          )}
-          {activeTab === 'pricing' && (
-            <PricingSummarySection
-              proposal={proposal}
-              updateProposal={updateProposal}
-              hotels={hotels}
-              lineItems={lineItems}
-              currentUser={currentUser}
-            />
-          )}
-          {activeTab === 'cancellation' && (
-            <CancellationPolicySection
-              proposal={proposal}
-              updateProposal={updateProposal}
-              hotels={hotels}
-              flights={flights}
-            />
-          )}
-          {activeTab === 'payment' && (
-            <PaymentTermsSection
-              proposal={proposal}
-              updateProposal={updateProposal}
-              currentUser={currentUser}
-            />
-          )}
-          {activeTab === 'comments' && (
-            <CommentsSection
-              proposalId={proposal.id}
-              comments={comments}
-              setComments={setComments}
-              currentUser={currentUser}
-            />
-          )}
+        {enquiry?.requirement_details && (
+          <div className="border border-blue-200 bg-blue-50/50 p-4 rounded-xl">
+            <div className="flex items-start gap-3">
+              <Sparkles className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-blue-900">Original Website Enquiry Preferences</h4>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">
+                    {enquiry.requirement_details.is_pilgrimage ? 'Pilgrimage Lead' : 'Holiday Lead'}
+                  </span>
+                </div>
+                <div className="text-xs text-blue-800 space-y-1">
+                  <p>
+                    <span className="font-semibold">Client Name:</span> {enquiry.name} &bull;{' '}
+                    <span className="font-semibold">WhatsApp:</span> {enquiry.phone} &bull;{' '}
+                    <span className="font-semibold">Origin Hub:</span> {enquiry.requirement_details.departure_city || 'Not specified'}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Planned Timeline:</span> {enquiry.travel_date || enquiry.requirement_details.travel_month || 'Flexible'} &bull;{' '}
+                    <span className="font-semibold">Duration:</span> {enquiry.number_of_nights || enquiry.requirement_details.duration_nights || 'Flexible'} Night(s) &bull;{' '}
+                    <span className="font-semibold">Pax:</span> {enquiry.adults || 1} Adult(s) {enquiry.children > 0 ? `, ${enquiry.children} Child(ren)` : ''}
+                  </p>
+                  {Array.isArray(enquiry.requirement_details.cities) && enquiry.requirement_details.cities.length > 0 && (
+                    <p>
+                      <span className="font-semibold">
+                        {enquiry.requirement_details.is_pilgrimage ? 'Sites/Shrines Chosen:' : 'Cities/Regions Chosen:'}
+                      </span>{' '}
+                      {enquiry.requirement_details.cities.join(', ')}
+                    </p>
+                  )}
+                  {Array.isArray(enquiry.requirement_details.special_services) && enquiry.requirement_details.special_services.length > 0 && (
+                    <p>
+                      <span className="font-semibold">Special Services Requested:</span>{' '}
+                      <span className="underline decoration-amber-500 font-medium">
+                        {enquiry.requirement_details.special_services.join(', ')}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── SIDEBAR STEPPER BUILDER ─────────────────────────────── */}
+        <div className="flex flex-col lg:flex-row gap-6 mt-6">
+          {/* Left Sidebar */}
+          <div className="w-full lg:w-64 shrink-0">
+            <div className="sticky top-24 space-y-1 bg-white p-4 border border-border rounded-xl shadow-sm">
+              <h3 className="font-semibold text-sm mb-3 px-2 text-muted-foreground uppercase tracking-wider">Proposal Builder</h3>
+              {SECTIONS.map((sec, i) => (
+                <button
+                  key={sec.id}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setActiveSection(i);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center justify-between ${activeSection === i ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+                >
+                  {sec.title}
+                  {activeSection === i && <ChevronRight className="w-4 h-4" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Content */}
+          <div className="flex-1 min-w-0">
+            <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b bg-slate-50/50 flex flex-wrap items-center justify-between gap-4">
+                <h2 className="text-lg font-semibold">{SECTIONS[activeSection].title}</h2>
+                {/* Specific header controls based on section */}
+                {activeSection === 2 && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-xs text-muted-foreground">Show Costs & Suppliers</span>
+                    <input
+                      type="checkbox"
+                      checked={showInternalCosts}
+                      onChange={(e) => setShowInternalCosts(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-gray-300 accent-primary"
+                    />
+                  </label>
+                )}
+                {activeSection === 3 && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-sm font-medium">Include Flights</span>
+                    <input
+                      type="checkbox"
+                      checked={includeFlights}
+                      onChange={(e) => setValue('includeFlights', e.target.checked, { shouldDirty: true })}
+                      className="h-4 w-4 rounded border-gray-300 accent-primary"
+                    />
+                  </label>
+                )}
+              </div>
+              
+              <div className="p-6 min-h-[400px]">
+                {activeSection === 0 && (
+                  <CoverPageSection proposal={proposal} updateProposal={updateProposal} />
+                )}
+                {activeSection === 1 && (
+                  <TripSummarySection proposal={proposal} updateProposal={updateProposal} setHotels={setHotels} />
+                )}
+                {activeSection === 2 && (
+                  <HotelsSection
+                    proposal={proposal}
+                    hotels={hotels}
+                    setHotels={setHotels}
+                    suppliers={suppliers}
+                    showInternalCosts={showInternalCosts}
+                  />
+                )}
+                {activeSection === 3 && (
+                  <>
+                    <div className={includeFlights ? '' : 'hidden'}>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                            <p className="text-sm text-muted-foreground">Upload Screenshot (Vision AI)</p>
+                            <p className="text-xs text-muted-foreground mt-1">Drop a screenshot of flight details here to auto-fill</p>
+                          </div>
+                          <div className="flex items-center justify-center">
+                            <Button type="button" variant="outline" onClick={() => setShowFlightSearch(true)}>
+                              <Search className="h-4 w-4 mr-2" /> Search Live Flights
+                            </Button>
+                          </div>
+                        </div>
+                        <FlightsSection
+                          proposal={proposal}
+                          flights={flights}
+                          setFlights={setFlights}
+                          suppliers={suppliers}
+                        />
+                        <p className="text-xs text-amber-600 font-medium bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                          Note: Flight fares are dynamic and subject to change daily.
+                        </p>
+                      </div>
+                    </div>
+                    {!includeFlights && (
+                      <p className="text-sm text-muted-foreground py-4 text-center">Flights are excluded from this proposal. Toggle above to include.</p>
+                    )}
+                  </>
+                )}
+                {activeSection === 4 && (
+                  <AncillariesSection
+                    proposalId={proposal.id}
+                    lineItems={lineItems}
+                    setLineItems={setLineItems}
+                    suppliers={suppliers}
+                    paxAdults={proposal.pax_adults || 2}
+                    paxChildren={proposal.pax_children || 0}
+                  />
+                )}
+                {activeSection === 5 && (
+                  <ItinerarySection
+                    proposal={proposal}
+                    itineraryDays={watch('itineraryDays')}
+                    setItineraryDays={setItineraryDays}
+                    hotels={hotels}
+                    flights={flights}
+                  />
+                )}
+                {activeSection === 6 && (
+                  <InclusionsExclusionsSection
+                    proposalId={proposal.id}
+                    lineItems={lineItems}
+                    setLineItems={setLineItems}
+                  />
+                )}
+                {activeSection === 7 && (
+                  <div className="space-y-4">
+                    <div className="flex justify-end">
+                      <Button type="button" size="sm" variant="outline" onClick={addCustomSection}>
+                        <Plus className="h-4 w-4 mr-1" /> Add Custom Section
+                      </Button>
+                    </div>
+                    {customSections.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No custom sections yet. Add sections for Cancellation Policy, Terms & Conditions, Notes, etc.
+                      </p>
+                    )}
+                    {customSections.map((section, index) => (
+                      <div key={section.id} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <Input
+                            {...register(`customSections.${index}.title`)}
+                            placeholder="Section title (e.g. Cancellation Policy, Terms & Conditions)"
+                            className="flex-1 font-medium"
+                          />
+                          <Button type="button" size="sm" variant="ghost" onClick={() => removeCustomSection(index)}>
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                        <Textarea
+                          {...register(`customSections.${index}.content`)}
+                          placeholder="Enter section content..."
+                          rows={4}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {activeSection === 8 && (
+                  <CancellationPolicySection
+                    proposal={proposal}
+                    updateProposal={updateProposal}
+                    hotels={hotels}
+                    flights={flights}
+                  />
+                )}
+                {activeSection === 9 && (
+                  <PaymentTermsSection
+                    proposal={proposal}
+                    updateProposal={updateProposal}
+                    currentUser={currentUser}
+                  />
+                )}
+                {activeSection === 10 && (
+                  <CommentsSection
+                    proposalId={proposal.id}
+                    comments={comments}
+                    setComments={setComments}
+                    currentUser={currentUser}
+                  />
+                )}
+              </div>
+
+              {/* Next Button Footer */}
+              {activeSection < SECTIONS.length - 1 && (
+                <div className="px-6 py-4 border-t bg-slate-50 flex justify-end">
+                  <Button 
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setActiveSection(activeSection + 1);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                  >
+                    Next: {SECTIONS[activeSection + 1].title} <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* ── END-OF-BUILDER ACTIONS ─────────────────────────────── */}
+        <div className="flex items-center justify-end gap-3 py-6 pb-28">
+          <Button variant="outline" size="default" onClick={() => window.open(`/proposals/${proposal.id}/preview`, '_blank')}>
+            <Eye className="h-4 w-4 mr-2" /> Preview
+          </Button>
+          <Button size="default" onClick={handlePublish} disabled={saving}>
+            <Upload className="h-4 w-4 mr-2" />
+            {proposal.status === 'draft' ? 'Publish & Send' : `Publish V${proposal.version + 1}`}
+          </Button>
+        </div>
+
+        {/* ── GLOBAL PRICING BAR (sticky bottom) ──────────────────── */}
+        <div className="fixed bottom-0 left-0 lg:left-64 right-0 z-40 bg-background border-t shadow-lg">
+          <div className="max-w-screen-2xl mx-auto px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
+            {/* Mode toggle */}
+            <div className="inline-flex rounded-md border bg-muted p-0.5 shrink-0">
+              <button
+                type="button"
+                className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${pricingMode === 'package' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setValue('pricingMode', 'package', { shouldDirty: true })}
+              >
+                Package
+              </button>
+              <button
+                type="button"
+                className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors ${pricingMode === 'itemised' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setValue('pricingMode', 'itemised', { shouldDirty: true })}
+              >
+                Itemised
+              </button>
+            </div>
+
+            {/* Pricing calculation */}
+            {pricingMode === 'package' ? (
+              <div className="flex items-center gap-3 text-sm">
+                <div>
+                  <span className="text-muted-foreground text-xs block">Supplier Cost</span>
+                  <span className="font-bold text-sm">{formatCurrency(totalSupplierCost, currency)}</span>
+                </div>
+                <span className="text-muted-foreground">→</span>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={watch('globalMarkupPct') ?? ''}
+                    onChange={(e) => setValue('globalMarkupPct', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0, { shouldDirty: true })}
+                    className="w-16 h-7 text-xs text-center"
+                  />
+                  <span className="text-xs">%</span>
+                </div>
+                <span className="text-muted-foreground">→</span>
+                <div>
+                  <span className="text-muted-foreground text-xs block">Client Total</span>
+                  <span className="font-bold text-sm text-green-700">{formatCurrency(clientTotal, currency)}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-50 rounded">
+                  <span className="text-[10px] text-muted-foreground">Land</span>
+                  <span className="text-xs font-semibold">{formatCurrency(landSupplierCost, currency)}</span>
+                  <span className="text-muted-foreground text-[10px]">+</span>
+                  <Input type="number" min={0} max={100} value={watch('landMarkupPct') ?? ''} onChange={(e) => setValue('landMarkupPct', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0, { shouldDirty: true })} className="w-12 h-6 text-[11px] text-center" />
+                  <span className="text-[10px]">%</span>
+                  <span className="text-muted-foreground text-[10px]">=</span>
+                  <span className="text-xs font-semibold text-blue-700">{formatCurrency(pricingBreakdown.landSalePrice, currency)}</span>
+                </div>
+                <span className="text-muted-foreground font-bold text-xs">+</span>
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-amber-50 rounded">
+                  <span className="text-[10px] text-muted-foreground">Flight</span>
+                  <span className="text-xs font-semibold">{formatCurrency(flightSupplierCost, currency)}</span>
+                  <span className="text-muted-foreground text-[10px]">+</span>
+                  <Input type="number" min={0} max={100} value={watch('flightMarkupPct') ?? ''} onChange={(e) => setValue('flightMarkupPct', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0, { shouldDirty: true })} className="w-12 h-6 text-[11px] text-center" />
+                  <span className="text-[10px]">%</span>
+                  <span className="text-muted-foreground text-[10px]">=</span>
+                  <span className="text-xs font-semibold text-amber-700">{formatCurrency(pricingBreakdown.flightSalePrice, currency)}</span>
+                </div>
+                <span className="text-muted-foreground">→</span>
+                <span className="font-bold text-sm text-green-700">{formatCurrency(clientTotal, currency)}</span>
+              </div>
+            )}
+
+            {/* GST / TCS + Margin */}
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={proposal.gst_enabled}
+                  onChange={(e) => {
+                    updateProposal({ gst_enabled: e.target.checked });
+                    if (!e.target.checked) setValue('gstAmountOverride', null, { shouldDirty: true });
+                  }}
+                  className="h-3 w-3 rounded border-gray-300 accent-primary"
+                />
+                <span className="text-[11px] font-medium">GST</span>
+              </label>
+              {proposal.gst_enabled && (
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number" min={0} max={100} step="0.1"
+                    value={proposal.gst_rate ?? ''}
+                    onChange={(e) => { updateProposal({ gst_rate: Number(e.target.value) }); setValue('gstAmountOverride', null, { shouldDirty: true }); }}
+                    className="w-12 h-6 text-[11px] text-center"
+                  />
+                  <span className="text-[10px]">%</span>
+                  <span className="text-[10px] text-muted-foreground">/</span>
+                  <Input
+                    type="number" min={0} step="1" placeholder="₹"
+                    value={gstAmountOverride ?? ''}
+                    onChange={(e) => setValue('gstAmountOverride', e.target.value ? Number(e.target.value) : null, { shouldDirty: true })}
+                    className="w-16 h-6 text-[11px] text-center"
+                  />
+                </div>
+              )}
+
+              <div className="h-4 w-px bg-border" />
+
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={proposal.tcs_enabled}
+                  onChange={(e) => {
+                    updateProposal({ tcs_enabled: e.target.checked });
+                    if (!e.target.checked) setValue('tcsAmountOverride', null, { shouldDirty: true });
+                  }}
+                  className="h-3 w-3 rounded border-gray-300 accent-primary"
+                />
+                <span className="text-[11px] font-medium">TCS</span>
+              </label>
+              {proposal.tcs_enabled && (
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number" min={0} max={100} step="0.1"
+                    value={proposal.tcs_rate ?? ''}
+                    onChange={(e) => { updateProposal({ tcs_rate: Number(e.target.value) }); setValue('tcsAmountOverride', null, { shouldDirty: true }); }}
+                    className="w-12 h-6 text-[11px] text-center"
+                  />
+                  <span className="text-[10px]">%</span>
+                  <span className="text-[10px] text-muted-foreground">/</span>
+                  <Input
+                    type="number" min={0} step="1" placeholder="₹"
+                    value={tcsAmountOverride ?? ''}
+                    onChange={(e) => setValue('tcsAmountOverride', e.target.value ? Number(e.target.value) : null, { shouldDirty: true })}
+                    className="w-16 h-6 text-[11px] text-center"
+                  />
+                </div>
+              )}
+
+              <div className="h-4 w-px bg-border" />
+              <span className="text-[11px] text-muted-foreground">
+                Margin: {formatCurrency(pricingBreakdown.afterDiscount - totalSupplierCost, currency)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Modals */}
+        <AIAutoFillModal
+          open={showAIAutoFill}
+          onClose={() => setShowAIAutoFill(false)}
+          proposalId={proposal.id}
+          onDataParsed={(parsed) => {
+            if (parsed.destination) updateProposal({ destination: parsed.destination as string });
+            if (parsed.travel_start) updateProposal({ travel_start: parsed.travel_start as string });
+            if (parsed.travel_end) updateProposal({ travel_end: parsed.travel_end as string });
+            if (parsed.pax_adults) updateProposal({ pax_adults: parsed.pax_adults as number });
+            if (parsed.pax_children) updateProposal({ pax_children: parsed.pax_children as number });
+          }}
+        />
+        <FlightSearchModal
+          open={showFlightSearch}
+          onClose={() => setShowFlightSearch(false)}
+          currency={currency}
+          onSelectFlight={(flight) => {
+            const newFlight = {
+              id: crypto.randomUUID(),
+              proposal_id: proposal.id,
+              flight_number: flight.flight_number,
+              airline: flight.airline,
+              origin: flight.origin,
+              destination: flight.destination,
+              departure_time: flight.departure_time,
+              arrival_time: flight.arrival_time,
+              sp_total: flight.sp_total,
+              sort_order: flights.length,
+            } as unknown as typeof flights[number];
+            setFlights([...flights, newFlight]);
+            toast.success(`Flight ${flight.flight_number} added`);
+          }}
+        />
       </div>
-    </div>
+    </FormProvider>
   );
 }

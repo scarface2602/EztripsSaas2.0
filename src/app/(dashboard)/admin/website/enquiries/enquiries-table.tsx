@@ -117,6 +117,8 @@ export default function EnquiriesTable({ initialData, agents = [] }: { initialDa
                   const waPhone = phone.startsWith('91') ? phone : `91${phone}`;
                   const pri = PRIORITY_ICONS[(e.priority as string) || 'medium'];
                   const PriIcon = pri?.icon || Thermometer;
+                  const reqDetails = e.requirement_details as Record<string, unknown> | undefined;
+                  const displayTravelDate = (e.travel_date as string) || (reqDetails?.travel_month as string) || '—';
                   return (
                     <TableRow
                       key={e.id as string}
@@ -126,7 +128,14 @@ export default function EnquiriesTable({ initialData, agents = [] }: { initialDa
                       <TableCell className="w-8">
                         <PriIcon className={`h-4 w-4 ${pri?.color || 'text-yellow-500'}`} />
                       </TableCell>
-                      <TableCell className="font-medium">{e.name as string}</TableCell>
+                      <TableCell>
+                        <div>
+                          <span className="font-medium">{e.name as string}</span>
+                          {(e.query_id as string) && (
+                            <span className="block text-[11px] text-muted-foreground font-mono">{e.query_id as string}</span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <a
                           href={`https://wa.me/${waPhone}`}
@@ -139,7 +148,7 @@ export default function EnquiriesTable({ initialData, agents = [] }: { initialDa
                         </a>
                       </TableCell>
                       <TableCell>{e.destination as string}</TableCell>
-                      <TableCell className="text-sm">{(e.travel_date as string) || '—'}</TableCell>
+                      <TableCell className="text-sm">{displayTravelDate}</TableCell>
                       <TableCell>{e.adults as number}{(e.children as number) > 0 ? ` + ${e.children}C` : ''}</TableCell>
                       <TableCell className="text-sm">{(e.budget_range as string) || '—'}</TableCell>
                       <TableCell>

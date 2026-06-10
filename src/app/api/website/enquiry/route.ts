@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { generateTripIdFromDb, requirementToServiceType, type TripIdConfig, DEFAULT_TRIP_ID_CONFIG } from '@/lib/utils/generateId';
 import nodemailer from 'nodemailer';
 
 // Simple in-memory rate limiter: max 5 submissions per IP per 15 minutes
@@ -23,6 +24,8 @@ const ALLOWED_ORIGINS = [
   'https://eztrips.in',
   'https://www.eztrips.in',
   'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
 ];
 
 function getAllowedOrigin(request: NextRequest): string | null {
@@ -121,6 +124,17 @@ export async function POST(request: NextRequest) {
       client_id = newClient.id;
     }
 
+    // Fetch org config for trip ID format (public route — no auth, use first org)
+    const { data: orgForConfig } = await supabase
+      .from('organisations')
+      .select('trip_id_config')
+      .limit(1)
+      .single();
+    const tripIdConfig = (orgForConfig?.trip_id_config as TripIdConfig) ?? DEFAULT_TRIP_ID_CONFIG;
+
+    // Generate trip_id
+    const tripId = await generateTripIdFromDb(supabase, requirementToServiceType(requirement_type), tripIdConfig);
+
     // Insert enquiry
     const { data: enquiry, error: enquiryErr } = await supabase
       .from('website_enquiries')
@@ -131,6 +145,7 @@ export async function POST(request: NextRequest) {
         budget_type, special_requirements, whatsapp_opted,
         source, number_of_nights, hotel_category,
         requirement_type, requirement_details,
+        trip_id: tripId,
       })
       .select('id')
       .single();

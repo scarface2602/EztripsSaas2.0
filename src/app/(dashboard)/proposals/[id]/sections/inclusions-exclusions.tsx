@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { LineItem } from '@/lib/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,12 +12,36 @@ interface InclusionsExclusionsSectionProps {
   proposalId: string;
   lineItems: LineItem[];
   setLineItems: (items: LineItem[]) => void;
-  setHasUnsavedChanges: (v: boolean) => void;
 }
 
-export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItems, setHasUnsavedChanges }: InclusionsExclusionsSectionProps) {
-  const supabase = createClient();
+export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItems }: InclusionsExclusionsSectionProps) {
+  const supabase = useMemo(() => createClient(), []);
   const [loadingAI, setLoadingAI] = useState(false);
+
+  // ── Debounced auto-save per item on blur ───────────────────
+  const saveTimers = useRef<Record<string, NodeJS.Timeout>>({});
+  const lineItemsRef = useRef(lineItems);
+  lineItemsRef.current = lineItems;
+
+  useEffect(() => {
+    return () => {
+      Object.values(saveTimers.current).forEach(clearTimeout);
+    };
+  }, []);
+
+  function scheduleItemSave(itemId: string) {
+    if (saveTimers.current[itemId]) clearTimeout(saveTimers.current[itemId]);
+    saveTimers.current[itemId] = setTimeout(async () => {
+      const item = lineItemsRef.current.find(li => li.id === itemId);
+      if (!item) return;
+      await supabase.from('line_items').update({
+        description: item.description,
+        is_included: item.is_included,
+        cp: item.cp,
+        sp: item.sp,
+      }).eq('id', item.id);
+    }, 1500);
+  }
 
   const inclusions = lineItems.filter(li => li.is_included);
   const exclusions = lineItems.filter(li => !li.is_included);
@@ -32,19 +56,15 @@ export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItem
     }).select().single();
     if (data) {
       setLineItems([...lineItems, data as LineItem]);
-      setHasUnsavedChanges(true);
       return data as LineItem;
     }
     return null;
   }
 
-  // Parse pasted text into individual bullet items
   function parsePastedBullets(text: string): string[] {
-    // Split on newlines first
     const lines = text.split(/\r?\n/);
     const items: string[] = [];
     for (const line of lines) {
-      // Strip leading bullet/dash/number prefix (•, -, *, –, 1., 2., etc.)
       const cleaned = line.replace(/^\s*(?:[•\-*–]|\d+[.):])\s*/, '').trim();
       if (cleaned) items.push(cleaned);
     }
@@ -59,18 +79,15 @@ export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItem
     const text = e.clipboardData.getData('text');
     const lines = text.split(/\r?\n/).filter(l => l.trim());
 
-    // Only intercept if there are multiple non-empty lines
     if (lines.length < 2) return;
 
     e.preventDefault();
     const items = parsePastedBullets(text);
     if (items.length === 0) return;
 
-    // Update current item with first line
     const updatedCurrent = { ...currentItem, description: items[0] };
     const updatedLineItems = lineItems.map(li => li.id === currentItem.id ? updatedCurrent : li);
 
-    // Batch insert remaining items
     const toInsert = items.slice(1).map((desc, i) => ({
       proposal_id: proposalId,
       type: 'other' as const,
@@ -85,29 +102,15 @@ export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItem
       .select();
 
     setLineItems([...updatedLineItems, ...((inserted as LineItem[]) || [])]);
-    setHasUnsavedChanges(true);
   }
 
   function updateItem(id: string, updates: Partial<LineItem>) {
     setLineItems(lineItems.map(li => li.id === id ? { ...li, ...updates } : li));
-    setHasUnsavedChanges(true);
   }
 
   async function deleteItem(id: string) {
     await supabase.from('line_items').delete().eq('id', id);
     setLineItems(lineItems.filter(li => li.id !== id));
-    setHasUnsavedChanges(true);
-  }
-
-  async function saveItems() {
-    for (const item of lineItems) {
-      await supabase.from('line_items').update({
-        description: item.description,
-        is_included: item.is_included,
-        cp: item.cp,
-        sp: item.sp,
-      }).eq('id', item.id);
-    }
   }
 
   async function aiSuggest() {
@@ -148,7 +151,6 @@ export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItem
       }
       if (newItems.length > 0) {
         setLineItems([...lineItems, ...newItems]);
-        setHasUnsavedChanges(true);
       }
     } finally {
       setLoadingAI(false);
@@ -169,6 +171,7 @@ export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItem
             <Input
               value={item.description}
               onChange={(e) => updateItem(item.id, { description: e.target.value })}
+              onBlur={() => scheduleItemSave(item.id)}
               onPaste={(e) => handlePaste(e, item, isIncluded)}
               placeholder="Item description… (paste multiple lines to create multiple bullets)"
             />
@@ -186,13 +189,10 @@ export function InclusionsExclusionsSection({ proposalId, lineItems, setLineItem
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Inclusions & Exclusions</CardTitle>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={aiSuggest} disabled={loadingAI}>
-            {loadingAI ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Wand2 className="h-4 w-4 mr-1" />}
-            AI Suggest
-          </Button>
-          <Button size="sm" variant="outline" onClick={saveItems}>Save All</Button>
-        </div>
+        <Button size="sm" variant="outline" onClick={aiSuggest} disabled={loadingAI}>
+          {loadingAI ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Wand2 className="h-4 w-4 mr-1" />}
+          AI Suggest
+        </Button>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">

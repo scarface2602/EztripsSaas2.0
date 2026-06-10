@@ -39,6 +39,7 @@ const CATEGORIES: { key: string; label: string; hasGroups?: boolean }[] = [
   { key: 'budget_range', label: 'Budget Ranges' },
   { key: 'lead_source', label: 'Lead Sources' },
   { key: 'food_preference', label: 'Food Preferences' },
+  { key: 'vehicle_type', label: 'Vehicle Types' },
 ];
 
 interface ItemForm {

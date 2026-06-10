@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { Proposal } from '@/lib/types/database';
@@ -26,6 +26,14 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ProposalsPage() {
+  return (
+    <Suspense fallback={<div className="py-8 text-center text-muted-foreground">Loading proposals...</div>}>
+      <ProposalsContent />
+    </Suspense>
+  );
+}
+
+function ProposalsContent() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -83,6 +91,7 @@ export default function ProposalsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead label="Title" column="destination" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
+              <TableHead>Trip ID</TableHead>
               <SortableHead label="Destination" column="destination" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
               <SortableHead label="Status" column="status" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
               <TableHead>Version</TableHead>
@@ -92,12 +101,13 @@ export default function ProposalsPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
             ) : proposals.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No proposals found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No proposals found</TableCell></TableRow>
             ) : proposals.map((p) => (
               <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/proposals/${p.id}`)}>
                 <TableCell className="font-medium">{(p as Proposal & { clients?: { full_name: string } }).clients?.full_name ? `${(p as Proposal & { clients?: { full_name: string } }).clients!.full_name.split(' ')[0]}'s Trip to ${p.destination}` : `Trip to ${p.destination}`}</TableCell>
+                <TableCell><span className="text-[11px] font-mono text-blue-600">{(p as unknown as Record<string, unknown>).trip_id as string || '—'}</span></TableCell>
                 <TableCell>{p.destination || 'N/A'}</TableCell>
                 <TableCell><Badge className={STATUS_COLORS[p.status]}>{p.status}</Badge></TableCell>
                 <TableCell>V{p.version}</TableCell>

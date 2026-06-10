@@ -57,6 +57,7 @@ export function calculateMarginPct(sp: number, cp: number): number {
 }
 
 export function applyRounding(amount: number, roundingUnit: number): number {
+  if (!Number.isFinite(amount)) return 0;
   if (roundingUnit <= 0) return amount;
   return Math.ceil(amount / roundingUnit) * roundingUnit;
 }
@@ -92,7 +93,8 @@ export const CURRENCY_OPTIONS: { code: string; label: string }[] = [
 
 /** Format amount with currency symbol in en-IN locale */
 export function formatCurrency(amount: number, currency?: string | null): string {
-  return `${getCurrencySymbol(currency)}${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  const safe = Number.isFinite(amount) ? amount : 0;
+  return `${getCurrencySymbol(currency)}${safe.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
 export function calculateProposalTotal(input: ProposalTotalInput): ProposalTotalResult {
