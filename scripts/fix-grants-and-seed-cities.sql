@@ -26,6 +26,26 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 -- 2. CITY LOOKUPS for the proposal editor dropdowns
 -- ============================================================
 
+-- The cloned table lost its UNIQUE (category, value) constraint, which
+-- ON CONFLICT below depends on. De-duplicate, then restore it.
+DELETE FROM lookup_items a
+USING lookup_items b
+WHERE a.category = b.category
+  AND a.value = b.value
+  AND a.id > b.id;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'lookup_items'::regclass
+      AND contype = 'u'
+  ) THEN
+    ALTER TABLE lookup_items
+      ADD CONSTRAINT lookup_items_category_value_key UNIQUE (category, value);
+  END IF;
+END $$;
+
 INSERT INTO lookup_items (category, value, label, group_name, sort_order) VALUES
 ('city', 'delhi', 'Delhi', 'India', 1),
 ('city', 'mumbai', 'Mumbai', 'India', 2),
