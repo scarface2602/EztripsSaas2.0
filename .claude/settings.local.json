@@ -162,7 +162,8 @@
       "Bash(echo \"SAAS BUILD EXIT:$?\")",
       "Bash(echo \"TSC EXIT: $?\")",
       "Bash(supabase projects *)",
-      "Bash(echo \"BUILD:$?\")"
+      "Bash(echo \"BUILD:$?\")",
+      "Bash(echo \"TSC:$?\")"
     ]
   }
 }

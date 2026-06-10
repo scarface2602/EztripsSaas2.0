@@ -27,6 +27,7 @@ import {
   Headset,
   CheckSquare,
   Wallet,
+  UploadCloud,
   TrendingUp,
   ChevronDown,
   ChevronRight,
@@ -62,15 +63,18 @@ const OPS_ITEMS = [
 const FINANCE_ITEMS = [
   { href: '/accounts', label: 'Treasury', icon: Wallet, roles: ['accounts', 'manager', 'super_admin'] },
   { href: '/accounts/payments', label: 'Payments', icon: CreditCard, roles: ['accounts', 'manager', 'super_admin'] },
+  { href: '/reports', label: 'Reports', icon: BarChart3, roles: ['accounts', 'manager', 'super_admin'] },
 ];
 
 const ADMIN_ITEMS = [
   { href: '/admin', label: 'Admin', icon: Shield },
   { href: '/admin/users', label: 'Team', icon: Users },
+  { href: '/admin/import', label: 'Import Data', icon: UploadCloud },
 ];
 
 const WEBSITE_ITEMS = [
   { href: '/admin/website', label: 'Overview', icon: Globe },
+  { href: '/admin/website/homepage', label: 'Homepage & Reviews', icon: LayoutDashboard },
   { href: '/admin/website/pages', label: 'Pages', icon: LayoutList },
   { href: '/admin/website/destinations', label: 'Destinations & Packages', icon: MapPin },
   { href: '/admin/website/blog', label: 'Blog', icon: BookOpen },
