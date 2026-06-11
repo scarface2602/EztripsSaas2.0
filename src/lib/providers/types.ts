@@ -10,6 +10,8 @@
 export interface HotelSearchParams {
   cityName: string;
   countryCode?: string;
+  /** Narrow to a specific property (fuzzy name match). */
+  hotelName?: string;
   checkIn: string; // ISO date
   checkOut: string;
   rooms: { adults: number; children?: number[] }[];

@@ -6,12 +6,14 @@ export * from './types';
 // env keys are absent, so the builder works fully manual until keys
 // arrive (LITEAPI_KEY / DUFFEL_TOKEN — later TBO_*, TRIPJACK_*).
 
+import { LiteApiProvider } from './liteapi';
+
 const hotelProviders: HotelProvider[] = [];
 const flightProviders: FlightProvider[] = [];
 
-// Adapters register here as they're implemented, e.g.:
-//   if (process.env.LITEAPI_KEY) hotelProviders.push(new LiteApiProvider(process.env.LITEAPI_KEY));
-//   if (process.env.DUFFEL_TOKEN) flightProviders.push(new DuffelProvider(process.env.DUFFEL_TOKEN));
+if (process.env.LITEAPI_KEY) hotelProviders.push(new LiteApiProvider(process.env.LITEAPI_KEY));
+// Flights: Duffel doesn't onboard Indian businesses — slot stays open
+// for TBO/Tripjack credentials when they arrive.
 
 export function getHotelProvider(id?: string): HotelProvider | null {
   if (id) return hotelProviders.find((p) => p.id === id) ?? null;
