@@ -34,9 +34,10 @@ export async function POST(request: NextRequest) {
       .eq('id', parsed.data.enquiry_id)
       .single();
     if (enquiry) insert.enquiry_id = parsed.data.enquiry_id;
+    // trip_id is the canonical chain field; the live proposals table has
+    // no query_id column (that legacy alias lives on enquiries only).
     if (enquiry?.trip_id || enquiry?.query_id) {
       insert.trip_id = enquiry.trip_id ?? enquiry.query_id;
-      insert.query_id = enquiry.query_id ?? enquiry.trip_id;
     }
     // Working on a proposal means the lead is qualified — don't leave it "new".
     if (enquiry && ['new', 'contacted'].includes(enquiry.status ?? '')) {
