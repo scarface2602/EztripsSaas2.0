@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, Check, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
 import type { BuilderData, DestinationRow, ItemRow } from './types';
 import { rollupTotals, destinationDates, syncItinerarySkeleton } from './types';
+import { buildWarnings } from './validation';
 import { AiFillDialog } from './ai-fill-dialog';
 import { TripStep } from './steps/trip-step';
 import { StaysStep } from './steps/stays-step';
@@ -167,6 +168,7 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
   }, [data.destinations, data.proposal.travel_start]);
 
   const totals = useMemo(() => rollupTotals(data), [data]);
+  const warnings = useMemo(() => buildWarnings(data), [data]);
   const stepIdx = STEPS.findIndex((s) => s.key === step);
 
   return (
@@ -204,6 +206,24 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
       {readOnly && (
         <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900">
           This proposal is {proposalStatus} and read-only.
+        </div>
+      )}
+
+      {warnings.length > 0 && (
+        <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-900 space-y-1">
+          {warnings.map((w) => (
+            <button
+              key={w.id}
+              className="flex items-start gap-2 w-full text-left hover:underline"
+              onClick={() => setStep(w.step === 'review' ? 'review' : w.step)}
+            >
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>
+                {w.message}
+                <span className="text-xs opacity-60 ml-1">({STEPS.find((s) => s.key === w.step)?.label})</span>
+              </span>
+            </button>
+          ))}
         </div>
       )}
 

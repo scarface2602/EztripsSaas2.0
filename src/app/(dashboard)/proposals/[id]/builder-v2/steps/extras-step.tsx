@@ -225,6 +225,7 @@ function FlightParseButton({
 }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -232,11 +233,10 @@ function FlightParseButton({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/flights/parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
+      const form = new FormData();
+      form.append('text', text);
+      files.forEach((f) => form.append('files', f));
+      const res = await fetch('/api/flights/parse', { method: 'POST', body: form });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? 'Parse failed');
       const flights = (body.flights ?? []) as (FlightDetails & { price?: number | null })[];
@@ -254,6 +254,7 @@ function FlightParseButton({
       }));
       setOpen(false);
       setText('');
+      setFiles([]);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -273,13 +274,29 @@ function FlightParseButton({
       <div className="bg-background rounded-xl shadow-xl max-w-2xl w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-semibold">Paste flight details</h3>
         <p className="text-sm text-muted-foreground">
-          Airline email, OTA confirmation, GDS dump, WhatsApp — segments, timings, layovers, fare type and baggage get extracted.
+          Paste text (airline email, GDS dump, WhatsApp) and/or attach booking screenshots or a PDF —
+          segments, timings, layovers, fare type and baggage get extracted.
         </p>
-        <Textarea rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste here…" />
+        <Textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste here…" />
+        <div className="space-y-1">
+          <input
+            type="file"
+            accept="image/*,.pdf"
+            multiple
+            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+            className="text-sm file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:bg-background file:text-sm file:font-medium hover:file:bg-muted file:cursor-pointer"
+          />
+          {files.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {files.map((f) => f.name).join(', ')}{' '}
+              <button className="underline" onClick={() => setFiles([])}>clear</button>
+            </p>
+          )}
+        </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button size="sm" onClick={() => void parse()} disabled={busy || text.trim().length < 10}>
+          <Button size="sm" onClick={() => void parse()} disabled={busy || (text.trim().length < 10 && files.length === 0)}>
             {busy ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Wand2 className="h-4 w-4 mr-1.5" />}
             Parse flights
           </Button>
