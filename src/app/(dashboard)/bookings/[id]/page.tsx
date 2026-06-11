@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, use } from 'react';
+import { useState } from 'react';
 import { BookingProvider, useBooking } from './booking-context';
 import { BookingHeader } from './components/booking-header';
 import { BookingWarningsBanner } from './components/booking-warnings-banner';
@@ -98,11 +98,11 @@ function BookingPageInner() {
   );
 }
 
-export default function BookingsPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-
+// Next 14: client pages receive params as a plain object — calling
+// React's use() on it throws #438. (Promise params is Next 15 only.)
+export default function BookingsPage({ params }: { params: { id: string } }) {
   return (
-    <BookingProvider bookingId={id}>
+    <BookingProvider bookingId={params.id}>
       <BookingPageInner />
     </BookingProvider>
   );
