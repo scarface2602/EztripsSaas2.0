@@ -45,6 +45,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
         <BuilderV2
           proposalId={id}
           proposalStatus={proposal.status}
+          shareToken={proposal.share_token}
           initialData={{
             proposal: {
               title: proposal.title,

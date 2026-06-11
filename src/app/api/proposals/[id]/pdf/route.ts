@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { cleanText } from '@/lib/utils/text-sanitise';
+import { buildV2Snapshot } from '@/lib/proposals/v2-snapshot';
 import { getCurrencySymbol } from '@/lib/utils/pricing';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
@@ -129,6 +130,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   if (!proposal) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  // Builder v2 proposals keep components in the v2 tables; map them to
+  // the legacy shapes this template renders.
+  let pdfHotels = hotels;
+  let pdfFlights = flights;
+  let pdfLineItems = lineItems;
+  if (proposal.builder_version === 2) {
+    const snap = await buildV2Snapshot(supabase, id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pdfHotels = snap.hotels as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pdfFlights = snap.flights as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pdfLineItems = snap.lineItems as any;
+  }
+
   const draftData = (proposal.draft_data || {}) as Record<string, unknown>;
   const vehicleType = draftData.vehicle_type as string | undefined;
   const vehicleModel = draftData.vehicle_model as string | undefined;
@@ -162,8 +178,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const orgLogoDataUri = fetchedLogoDataUri || await getBundledLogo();
 
   const optionalAddons = (activities || []).filter((a: Record<string, unknown>) => a.is_optional);
-  const inclusions     = (lineItems || []).filter((li: Record<string, unknown>) => li.is_included && li.description);
-  const exclusions     = (lineItems || []).filter((li: Record<string, unknown>) => !li.is_included && li.description);
+  const inclusions     = (pdfLineItems || []).filter((li: Record<string, unknown>) => li.is_included && li.description);
+  const exclusions     = (pdfLineItems || []).filter((li: Record<string, unknown>) => !li.is_included && li.description);
 
   const showHotels      = pdfType !== 'flight_only';
   const showFlights     = pdfType !== 'hotel_only';
@@ -182,13 +198,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     : 'background: linear-gradient(135deg, #1e3a5f, #2d5f8a);';
 
   // ── Pricing breakdown ─────────────────────────────────────────────────────
-  const hotelSPTotal = (hotels || [])
+  const hotelSPTotal = (pdfHotels || [])
     .filter(h => (Number(h.sp_per_night) || 0) > 0)
     .reduce((s, h) => s + (Number(h.sp_per_night) || 0) * (Number(h.nights) || 1), 0);
-  const lineItemSPTotal = (lineItems || [])
+  const lineItemSPTotal = (pdfLineItems || [])
     .filter((li: Record<string, unknown>) => li.type === 'ancillary' && li.include_in_total)
     .reduce((s: number, li: Record<string, unknown>) => s + (Number(li.sp) || Number(li.cp) || 0), 0);
-  const flightSPTotal = (flights || [])
+  const flightSPTotal = (pdfFlights || [])
     .reduce((s, f) => s + (Number(f.sp_total) || 0), 0);
 
   // For package proposals, use the client-facing pricing fields (total_sp or per-person * pax)
@@ -259,10 +275,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   // ── FIX 2: Flights — redesigned layout ───────────────────────────────────
   // FIX 1: IATA codes UPPERCASE, airline name Title Case, flight number UPPERCASE
-  const flightsHtml = showFlights && (flights || []).length > 0 ? `
+  const flightsHtml = showFlights && (pdfFlights || []).length > 0 ? `
 <div class="section">
   <h2>Flights</h2>
-  ${(flights || []).map((f: Record<string, unknown>) => {
+  ${(pdfFlights || []).map((f: Record<string, unknown>) => {
     const fLayovers = (f.layovers as Array<{ city: string; airport_code: string; duration_hours: number; duration_minutes: number }>) || [];
 
     // Duration: stored minutes → "Xh Ym". Fallback: calculate from dep/arr timestamps.
@@ -341,7 +357,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 ` : '';
 
   // ── Hotels ────────────────────────────────────────────────────────────────
-  const hotelsHtml = showHotels && (hotels || []).length > 0 ? `
+  const hotelsHtml = showHotels && (pdfHotels || []).length > 0 ? `
 <div class="section">
   <h2>Hotels</h2>
   <table>
@@ -356,7 +372,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       </tr>
     </thead>
     <tbody>
-    ${(hotels || []).map((h: Record<string, unknown>) => `
+    ${(pdfHotels || []).map((h: Record<string, unknown>) => `
       <tr>
         <td>
           <strong>${toTitleCase(String(h.name || ''))}</strong><br/>
@@ -519,12 +535,12 @@ ${showCancellation ? `
 <!-- Cancellation Policy -->
 <div class="section">
   <h2>Cancellation Policy</h2>
-  ${showFlights && (flights || []).length > 0 ? `
+  ${showFlights && (pdfFlights || []).length > 0 ? `
   <h3>Flights</h3>
   <table>
     <thead><tr><th>Flight</th><th>Baggage</th><th>Status</th><th>Policy</th></tr></thead>
     <tbody>
-    ${(flights || []).map((f: Record<string, unknown>) => `
+    ${(pdfFlights || []).map((f: Record<string, unknown>) => `
       <tr>
         <td>${String(f.flight_number || '').toUpperCase()}${f.airline ? ` (${toTitleCase(String(f.airline))})` : ''}</td>
         <td>${f.baggage_allowance ? formatBaggage(f.baggage_allowance) : '&#8212;'}</td>
@@ -535,12 +551,12 @@ ${showCancellation ? `
     </tbody>
   </table>
   ` : ''}
-  ${showHotels && (hotels || []).length > 0 ? `
+  ${showHotels && (pdfHotels || []).length > 0 ? `
   <h3>Hotels</h3>
   <table>
     <thead><tr><th>Hotel</th><th>Status</th><th>Cancellation Slabs</th></tr></thead>
     <tbody>
-    ${(hotels || []).map((h: Record<string, unknown>) => {
+    ${(pdfHotels || []).map((h: Record<string, unknown>) => {
       const slabs = (h.hotel_cancellation_slabs as Array<{ days_before: number; charge_pct: number }>) || [];
       return `
       <tr>

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send, ExternalLink } from 'lucide-react';
+import { Loader2, Send, ExternalLink, MessageCircle, FileDown } from 'lucide-react';
 import type { BuilderData } from '../types';
 import type { rollupTotals } from '../types';
 
@@ -13,12 +13,13 @@ interface ReviewStepProps {
   totals: ReturnType<typeof rollupTotals>;
   proposalId: string;
   save: () => Promise<void>;
+  shareToken?: string | null;
 }
 
-export function ReviewStep({ data, totals, proposalId, save }: ReviewStepProps) {
+export function ReviewStep({ data, totals, proposalId, save, shareToken }: ReviewStepProps) {
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(shareToken ? `/p/${shareToken}` : null);
   const [error, setError] = useState<string | null>(null);
   const cur = data.proposal.currency;
   const fmt = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
@@ -112,17 +113,52 @@ export function ReviewStep({ data, totals, proposalId, save }: ReviewStepProps) 
         </Card>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Button onClick={() => void publish()} disabled={publishing || destinations.length === 0}>
           {publishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-          Publish &amp; get share link
+          {shareUrl ? 'Republish (new link)' : 'Publish & get share link'}
         </Button>
         {shareUrl && (
-          <a href={shareUrl} target="_blank" rel="noreferrer" className="text-sm text-primary flex items-center gap-1">
-            <ExternalLink className="h-4 w-4" /> Open share link
-          </a>
+          <>
+            <a href={shareUrl} target="_blank" rel="noreferrer" className="text-sm text-primary flex items-center gap-1">
+              <ExternalLink className="h-4 w-4" /> Preview
+            </a>
+            <a
+              className="text-sm text-primary flex items-center gap-1"
+              href={`https://wa.me/?text=${encodeURIComponent(
+                `${data.proposal.title ?? 'Your travel proposal'} — ${typeof window !== 'undefined' ? window.location.origin : ''}${shareUrl}`,
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircle className="h-4 w-4" /> Share on WhatsApp
+            </a>
+          </>
         )}
         {error && <span className="text-sm text-destructive">{error}</span>}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted-foreground flex items-center gap-1">
+          <FileDown className="h-4 w-4" /> PDF:
+        </span>
+        {(
+          [
+            ['full', 'Full proposal'],
+            ['hotel_only', 'Hotels only'],
+            ['flight_only', 'Flights only'],
+          ] as const
+        ).map(([type, label]) => (
+          <a
+            key={type}
+            href={`/api/proposals/${proposalId}/pdf?type=${type}`}
+            target="_blank"
+            rel="noreferrer"
+            className="px-2.5 py-1 rounded-md border hover:bg-muted"
+          >
+            {label}
+          </a>
+        ))}
       </div>
     </div>
   );

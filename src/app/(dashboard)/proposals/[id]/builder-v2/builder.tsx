@@ -28,9 +28,10 @@ interface BuilderV2Props {
   proposalId: string;
   initialData: BuilderData;
   proposalStatus: string;
+  shareToken?: string | null;
 }
 
-export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2Props) {
+export function BuilderV2({ proposalId, initialData, proposalStatus, shareToken }: BuilderV2Props) {
   const [data, setData] = useState<BuilderData>(initialData);
   const [step, setStep] = useState<StepKey>('trip');
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved');
@@ -233,7 +234,7 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
       {step === 'extras' && <ExtrasStep data={data} update={update} />}
       {step === 'pricing' && <PricingStep data={data} update={update} />}
       {step === 'review' && (
-        <ReviewStep data={data} totals={totals} proposalId={proposalId} save={save} />
+        <ReviewStep data={data} totals={totals} proposalId={proposalId} save={save} shareToken={shareToken} />
       )}
 
       {/* Sticky footer: running total + step nav */}

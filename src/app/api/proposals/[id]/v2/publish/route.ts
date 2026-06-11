@@ -4,6 +4,7 @@ import { withAuth } from '@/lib/api/with-auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendShareLinkEmail } from '@/lib/email/mailer';
 import { blocksForDay } from '@/lib/proposals/v2-blocks';
+import { buildV2Snapshot } from '@/lib/proposals/v2-snapshot';
 
 // Publish a Builder v2 proposal: freeze quoted costs, snapshot
 // published_data in the share-page shape (sell side ONLY — cost/markup
@@ -14,27 +15,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (auth instanceof NextResponse) return auth;
 
   const supabase = createServiceClient();
-  const [{ data: proposal }, { data: destinations }, { data: groups }, { data: items }, { data: itineraryDays }] =
-    await Promise.all([
-      supabase.from('proposals').select('*').eq('id', id).single(),
-      supabase.from('proposal_destinations').select('*').eq('proposal_id', id).order('sort_order'),
-      supabase.from('proposal_price_groups').select('*').eq('proposal_id', id).order('sort_order'),
-      supabase.from('proposal_items').select('*').eq('proposal_id', id).order('sort_order'),
-      supabase.from('itinerary_days').select('*').eq('proposal_id', id).order('day_number'),
-    ]);
-  const { data: dayBlocks } = await supabase
-    .from('itinerary_activities')
-    .select('*')
-    .eq('proposal_id', id)
-    .order('sort_order');
+  const [{ data: proposal }, { data: itineraryDays }, { data: dayBlocks }] = await Promise.all([
+    supabase.from('proposals').select('*').eq('id', id).single(),
+    supabase.from('itinerary_days').select('*').eq('proposal_id', id).order('day_number'),
+    supabase.from('itinerary_activities').select('*').eq('proposal_id', id).order('sort_order'),
+  ]);
   if (!proposal) return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
   if (proposal.builder_version !== 2) {
     return NextResponse.json({ error: 'Not a builder v2 proposal' }, { status: 400 });
   }
 
-  const dests = destinations ?? [];
-  const allItems = items ?? [];
-  const allGroups = groups ?? [];
+  // Same v2 → legacy-shape mapping the PDF uses — one source of truth.
+  const snap = await buildV2Snapshot(supabase, id);
+  const dests = snap.destinations;
+  const allItems = snap.items;
+  const allGroups = snap.groups;
 
   // First publish freezes the quoted baseline (quoted-vs-actual chip in ops).
   await Promise.all([
@@ -47,67 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   ]);
 
   // ── Snapshot in the shape the share page / PDF already render ──
-  const destById = new Map(dests.map((d) => [d.id, d]));
-  const hotels = allItems
-    .filter((i) => i.item_type === 'hotel')
-    .map((i, idx) => {
-      const details = (i.details ?? {}) as Record<string, unknown>;
-      return {
-        id: i.id,
-        name: i.title,
-        city: i.destination_id ? destById.get(i.destination_id)?.city_name ?? '' : '',
-        check_in: i.check_in,
-        check_out: i.check_out,
-        nights: i.nights,
-        room_type: (details.room_type as string) ?? null,
-        meal_plan: (details.meal_plan as string) ?? null,
-        sort_order: idx,
-      };
-    });
-  // Flights are their own snapshot array with their own sell prices —
-  // never folded into the land/package price.
-  const flights = allItems
-    .filter((i) => i.item_type === 'flight')
-    .map((i, idx) => {
-      const d = (i.details ?? {}) as Record<string, unknown>;
-      return {
-        id: i.id,
-        flight_number: (d.flight_number as string) ?? i.title,
-        airline: (d.airline as string) ?? null,
-        origin_iata: (d.origin as string) ?? null,
-        destination_iata: (d.destination as string) ?? null,
-        departure_at: (d.depart_at as string) ?? null,
-        arrival_at: (d.arrive_at as string) ?? null,
-        cabin_class: (d.fare_type as string) ?? null,
-        baggage_allowance: (d.baggage as string) ?? null,
-        duration: (d.duration as string) ?? null,
-        layover: (d.layover as string) ?? null,
-        operated_by: (d.operated_by as string) ?? null,
-        sp_total: Number(i.sell_amount) || 0,
-        sort_order: idx,
-      };
-    });
-
-  const lineItems = allItems
-    .filter((i) => i.item_type !== 'hotel' && i.item_type !== 'flight' && i.title.trim())
-    .map((i, idx) => ({
-      id: i.id,
-      type: ['transfer', 'activity', 'visa'].includes(i.item_type) ? i.item_type : 'other',
-      description: i.title,
-      date: i.check_in,
-      sp: i.price_group_id ? 0 : Number(i.sell_amount) || 0,
-      is_included: true,
-      is_optional: false,
-      show_in_pdf: true,
-      sort_order: idx,
-    }));
-
-  const flightSell = allItems
-    .filter((i) => i.item_type === 'flight')
-    .reduce((s, i) => s + (Number(i.sell_amount) || 0), 0);
-  const totalSell =
-    allGroups.reduce((s, g) => s + (Number(g.sell_amount) || 0), 0) +
-    allItems.reduce((s, i) => s + (i.price_group_id ? 0 : Number(i.sell_amount) || 0), 0);
+  const { hotels, flights, lineItems, flightSell, totalSell } = snap;
 
   const publishedData = {
     proposal: { ...proposal, draft_data: null },

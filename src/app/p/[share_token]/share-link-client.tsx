@@ -102,12 +102,17 @@ export function ShareLinkClient({
 
   const afterDiscount = grandTotal - discountAmount;
 
-  // TCS — only apply if explicitly enabled by the agent
+  // Taxes — only when explicitly enabled by the agent. GST applies on the
+  // package value; TCS (LRS) applies on the GST-inclusive amount, same as
+  // the PDF and the builder.
+  const gstEnabled = proposal.gst_enabled === true;
+  const gstRate = gstEnabled ? (Number(proposal.gst_rate) || 0) : 0;
+  const gstAmount = gstEnabled && gstRate > 0 ? Math.round(afterDiscount * gstRate / 100) : 0;
   const tcsEnabled = proposal.tcs_enabled === true;
   const tcsRate = tcsEnabled ? (Number(proposal.tcs_rate) || 0) : 0;
-  const tcsAmount = tcsEnabled && tcsRate > 0 ? Math.round(afterDiscount * tcsRate / 100) : 0;
+  const tcsAmount = tcsEnabled && tcsRate > 0 ? Math.round((afterDiscount + gstAmount) * tcsRate / 100) : 0;
 
-  const finalTotal = afterDiscount + tcsAmount;
+  const finalTotal = afterDiscount + gstAmount + tcsAmount;
 
   const cur = getCurrencySymbol(proposal.currency as string);
   const draftData = (proposal.draft_data || {}) as Record<string, unknown>;
@@ -374,14 +379,18 @@ export function ShareLinkClient({
                 <span>-{cur}{discountAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
               </div>
             )}
+            {(gstAmount > 0 || tcsAmount > 0) && <Separator />}
+            {gstAmount > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <span>GST @{gstRate}%</span>
+                <span>+{cur}{gstAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              </div>
+            )}
             {tcsAmount > 0 && (
-              <>
-                <Separator />
-                <div className="flex justify-between text-muted-foreground">
-                  <span>TCS @{tcsRate}%</span>
-                  <span>+{cur}{tcsAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-                </div>
-              </>
+              <div className="flex justify-between text-muted-foreground">
+                <span>TCS @{tcsRate}%</span>
+                <span>+{cur}{tcsAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              </div>
             )}
             <Separator />
             <div className="flex justify-between text-lg font-bold pt-1">

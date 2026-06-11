@@ -175,8 +175,10 @@ export function rollupTotals(data: BuilderData) {
   const sell = landSell + flightSell;
   const cost = landCost + flightCost;
   const p = data.proposal;
+  // GST on the package value; TCS (LRS) on the GST-inclusive amount —
+  // same rule as the PDF and share page.
   const gst = p.gst_enabled ? (sell * p.gst_rate) / 100 : 0;
-  const tcs = p.tcs_enabled ? (sell * p.tcs_rate) / 100 : 0;
+  const tcs = p.tcs_enabled ? ((sell + gst) * p.tcs_rate) / 100 : 0;
   const grand = sell + gst + tcs;
   const pax = p.pax_adults + p.pax_children;
   return {
