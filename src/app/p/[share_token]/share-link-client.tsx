@@ -80,6 +80,9 @@ export function ShareLinkClient({
   // pricing tab on every save. We read it directly so PDF and share link always
   // show the same number.
   const baseTotal = Number(proposal.total_sp) || 0;
+  const v2Pricing = ((proposal.published_data as Record<string, unknown> | null)?.builder_v2 ?? null) as
+    | { land_sell: number; flight_sell: number; total_sell: number }
+    | null;
   const addOnTotal = Array.from(selectedAddons).reduce((sum, id) => {
     const act = activities.find(a => a.id === id);
     return sum + (Number(act?.pvt_sp) || Number(act?.sic_sp) || 0);
@@ -273,12 +276,37 @@ export function ShareLinkClient({
             <CardContent className="space-y-3">
               {flights.map((f) => (
                 <div key={f.id as string} className="pb-3 border-b last:border-0">
-                  <p className="font-semibold text-sm">{f.flight_number as string} ({f.airline as string})</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-sm">
+                      {f.flight_number as string}
+                      {!!f.airline && ` (${f.airline as string})`}
+                      {!!f.operated_by && (
+                        <span className="text-xs font-normal text-muted-foreground"> · operated by {String(f.operated_by)}</span>
+                      )}
+                    </p>
+                    {Number(f.sp_total) > 0 && (
+                      <span className="text-sm font-semibold whitespace-nowrap">
+                        {cur}{Number(f.sp_total).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    {f.origin_city as string} ({f.origin_iata as string}) → {f.destination_city as string} ({f.destination_iata as string})
+                    {[f.origin_city, f.origin_iata].filter(Boolean).length > 0 &&
+                      `${(f.origin_city as string) || ''}${f.origin_iata ? ` (${f.origin_iata})` : ''}`}
+                    {' → '}
+                    {`${(f.destination_city as string) || ''}${f.destination_iata ? ` (${f.destination_iata})` : ''}`}
                   </p>
-                  {Boolean(f.departure_at) && <p className="text-xs text-muted-foreground">{fmt(f.departure_at as string)}</p>}
-                  {Boolean(f.cabin_class) && <p className="text-xs text-muted-foreground">{f.cabin_class as string}</p>}
+                  <p className="text-xs text-muted-foreground">
+                    {[
+                      f.departure_at ? fmt(f.departure_at as string) : null,
+                      f.duration ? `${f.duration}` : null,
+                      f.layover ? `layover ${f.layover}` : null,
+                    ].filter(Boolean).join(' · ')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {[f.cabin_class, f.baggage_allowance ? `Baggage: ${f.baggage_allowance}` : null]
+                      .filter(Boolean).join(' · ')}
+                  </p>
                 </div>
               ))}
             </CardContent>
@@ -290,16 +318,42 @@ export function ShareLinkClient({
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-lg">Day-wise Itinerary</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {itineraryDays.map((day) => (
-                <div key={day.id as string} className="pb-3 border-b last:border-0">
-                  <h3 className="font-semibold text-sm">
-                    <Badge className="mr-2">Day {day.day_number as number}</Badge>
-                    {day.heading as string || `Day ${day.day_number}`}
-                    {!!day.city && <span className="text-muted-foreground font-normal"> — {String(day.city)}</span>}
-                  </h3>
-                  {!!day.description && <p className="mt-1 text-sm text-muted-foreground">{String(day.description)}</p>}
-                </div>
-              ))}
+              {itineraryDays.map((day) => {
+                const blocks = (day.blocks as Array<Record<string, unknown>> | undefined) ?? [];
+                return (
+                  <div key={day.id as string} className="pb-3 border-b last:border-0">
+                    <h3 className="font-semibold text-sm">
+                      <Badge className="mr-2">Day {day.day_number as number}</Badge>
+                      {day.heading as string || `Day ${day.day_number}`}
+                      {!!day.city && <span className="text-muted-foreground font-normal"> — {String(day.city)}</span>}
+                    </h3>
+                    {!!day.description && <p className="mt-1 text-sm text-muted-foreground">{String(day.description)}</p>}
+                    {blocks.length > 0 && (
+                      <div className="mt-2 space-y-1.5">
+                        {blocks.map((b) => (
+                          <div key={b.id as string} className="flex items-start gap-2 text-sm">
+                            <span className="mt-0.5 px-1.5 py-0.5 rounded bg-muted text-[10px] uppercase tracking-wide shrink-0">
+                              {String(b.type ?? 'activity').replace('_', ' ')}
+                            </span>
+                            <div className="min-w-0">
+                              <span className="font-medium">{String(b.title ?? '')}</span>
+                              {Boolean(b.transfer_mode || b.start_time) && (
+                                <span className="text-xs text-muted-foreground ml-1.5">
+                                  {[b.start_time as string | null, b.transfer_mode === 'PVT' ? 'Private' : b.transfer_mode === 'SIC' ? 'Shared (SIC)' : null]
+                                    .filter(Boolean).join(' · ')}
+                                </span>
+                              )}
+                              {!!b.description && (
+                                <p className="text-xs text-muted-foreground">{String(b.description)}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
         )}
@@ -363,10 +417,28 @@ export function ShareLinkClient({
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-lg">Pricing</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span>Package Total</span>
-              <span>{cur}{baseTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-            </div>
+            {/* Builder v2: land vs flights shown separately, always. */}
+            {v2Pricing && v2Pricing.flight_sell > 0 ? (
+              <>
+                <div className="flex justify-between">
+                  <span>Land Package</span>
+                  <span>{cur}{v2Pricing.land_sell.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Flights</span>
+                  <span>{cur}{v2Pricing.flight_sell.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                </div>
+                <div className="flex justify-between border-t pt-2">
+                  <span>Package Total</span>
+                  <span>{cur}{baseTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between">
+                <span>Package Total</span>
+                <span>{cur}{baseTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              </div>
+            )}
             {addOnTotal > 0 && (
               <div className="flex justify-between text-green-700">
                 <span>Add-ons</span>

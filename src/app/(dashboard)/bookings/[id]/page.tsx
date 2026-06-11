@@ -3,6 +3,7 @@
 import { useState, use } from 'react';
 import { BookingProvider, useBooking } from './booking-context';
 import { BookingHeader } from './components/booking-header';
+import { BookingWarningsBanner } from './components/booking-warnings-banner';
 import { BookingSummaryCards } from './components/booking-summary-cards';
 import { BookingItemsTab } from './components/tabs/booking-items-tab';
 import { BookingPaymentsTab } from './components/tabs/booking-payments-tab';
@@ -52,6 +53,7 @@ function BookingPageInner() {
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6">
       <BookingHeader />
+      <BookingWarningsBanner />
       <BookingSummaryCards />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

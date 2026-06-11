@@ -135,6 +135,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   let pdfHotels = hotels;
   let pdfFlights = flights;
   let pdfLineItems = lineItems;
+  let v2LandSell: number | null = null; // total_sp includes flights in v2 — split it
   if (proposal.builder_version === 2) {
     const snap = await buildV2Snapshot(supabase, id);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -143,6 +144,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     pdfFlights = snap.flights as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     pdfLineItems = snap.lineItems as any;
+    v2LandSell = snap.totalSell - snap.flightSell;
   }
 
   const draftData = (proposal.draft_data || {}) as Record<string, unknown>;
@@ -213,10 +215,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ? (Number(proposal.total_sp) || (Number(proposal.package_sp_per_person) || 0) * (Number(proposal.pax_adults) || 1) + (Number(proposal.package_cwb_sp) || 0) * (Number(proposal.pax_children) || 0))
     : 0;
   // land_sp from the editor already includes markup. Fall back to summing item-level SPs.
+  // Builder v2: total_sp includes flights, so land is the computed split.
   const itemLevelLandSP = hotelSPTotal + lineItemSPTotal;
-  const effectiveLandSP = isPackage
-    ? (packageTotal > 0 ? packageTotal : Number(proposal.land_sp) || itemLevelLandSP)
-    : (Number(proposal.land_sp) || itemLevelLandSP);
+  const effectiveLandSP = v2LandSell != null
+    ? v2LandSell
+    : isPackage
+      ? (packageTotal > 0 ? packageTotal : Number(proposal.land_sp) || itemLevelLandSP)
+      : (Number(proposal.land_sp) || itemLevelLandSP);
 
   // Per-type totals
   const pricingLandSP   = pdfType === 'flight_only' ? 0 : effectiveLandSP;
@@ -311,6 +316,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         <div style="display:flex;align-items:center;gap:12px;">
           ${airlineName ? `<strong style="font-size:1.05rem;color:#1e3a5f;">${airlineName}</strong>` : ''}
           ${flightNum ? `<span style="background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:4px;font-size:0.85rem;font-weight:600;">${flightNum}</span>` : ''}
+          ${f.operated_by ? `<span style="font-size:0.78rem;color:#64748b;">operated by ${toTitleCase(String(f.operated_by))}</span>` : ''}
         </div>
         ${cabinClass ? `<span style="background:#e0e7ff;color:#3730a3;padding:2px 10px;border-radius:4px;font-size:0.8rem;font-weight:600;">${cabinClass}</span>` : ''}
       </div>
@@ -349,6 +355,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             <strong>Layover:</strong>&nbsp;${toTitleCase(l.city)}${l.airport_code ? ` (${l.airport_code.toUpperCase()})` : ''} &#8212; ${Number(l.duration_hours) || 0}h${Number(l.duration_minutes) > 0 ? ` ${Number(l.duration_minutes)}m` : ''}
           </div>
         `).join('')}
+      </div>
+      ` : f.layover ? `
+      <div style="margin-top:10px;display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f8f9fa;border-left:3px solid #94a3b8;font-size:0.83rem;">
+        <span style="color:#64748b;">&#x23F1;</span><strong>Layover:</strong>&nbsp;${cleanText(String(f.layover))}
       </div>
       ` : ''}
     </div>`;
@@ -501,7 +511,11 @@ ${showItinerary ? `
       <div class="day-card">
         <h3><span class="day-number">${day.day_number}</span>${heading}${day.city ? ` &#8212; ${toTitleCase(String(day.city))}` : ''}</h3>
         <p style="margin:8px 0 12px;color:#555;font-size:0.88rem;line-height:1.5;">${desc}</p>
-        ${dayActs.length > 0 ? `<div style="margin-top:8px;"><strong style="font-size:0.85rem;color:#1a1a1a;">Activities:</strong><ul style="margin:4px 0 0 0;">${dayActs.map((a: Record<string, unknown>) => `<li style="margin-bottom:4px;"><strong>${toTitleCase(cleanText(a.type as string))}</strong>: ${cleanText((a.details as Record<string, unknown>)?.title as string || (a.details as Record<string, unknown>)?.from_location as string || a.location as string || '')}</li>`).join('')}</ul></div>` : ''}
+        ${dayActs.length > 0 ? `<div style="margin-top:8px;"><strong style="font-size:0.85rem;color:#1a1a1a;">Activities:</strong><ul style="margin:4px 0 0 0;">${dayActs.map((a: Record<string, unknown>) => {
+          const mode = a.option_mode === 'pvt_only' ? ' <span style="color:#3730a3;font-size:0.78rem;">(Private)</span>' : a.option_mode === 'sic_only' ? ' <span style="color:#64748b;font-size:0.78rem;">(Shared/SIC)</span>' : '';
+          const blockDesc = cleanText((a.details as Record<string, unknown>)?.description as string || '');
+          return `<li style="margin-bottom:4px;"><strong>${toTitleCase(cleanText(a.type as string))}</strong>: ${cleanText((a.details as Record<string, unknown>)?.title as string || (a.details as Record<string, unknown>)?.from_location as string || a.location as string || '')}${mode}${blockDesc ? `<br/><span style="font-size:0.82rem;color:#666;">${blockDesc}</span>` : ''}</li>`;
+        }).join('')}</ul></div>` : ''}
       </div>
     `;
   }).join('')}

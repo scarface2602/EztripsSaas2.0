@@ -42,6 +42,45 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   logger.info('create', 'Adding payment installment', { bookingId: id, amount: body.amount });
 
   const supabase = createServiceClient();
+
+  if (!(Number(body.amount) > 0)) {
+    return NextResponse.json({ error: 'Payment amount must be greater than zero' }, { status: 400 });
+  }
+
+  // Error-prevention guard: don't silently collect more than the client
+  // owes, or pay a vendor more than the booking costs. `override: true`
+  // bypasses for legitimate cases (tips, fare difference, goodwill).
+  const override = body.override === true;
+  delete body.override;
+  if (!override && (body.direction === 'receivable' || body.direction === 'payable')) {
+    const [{ data: booking }, { data: existing }] = await Promise.all([
+      supabase.from('bookings').select('sell_price, cost_price, currency').eq('id', id).single(),
+      supabase
+        .from('booking_payments')
+        .select('amount')
+        .eq('booking_id', id)
+        .eq('direction', body.direction)
+        .neq('status', 'cancelled'),
+    ]);
+    const cap = body.direction === 'receivable' ? Number(booking?.sell_price) : Number(booking?.cost_price);
+    if (cap > 0) {
+      const already = (existing ?? []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const after = already + Number(body.amount);
+      if (after > cap + 0.5) {
+        const who = body.direction === 'receivable' ? 'the client owes' : 'this booking costs';
+        return NextResponse.json(
+          {
+            error: `This would take total ${body.direction} payments to ${booking?.currency ?? 'INR'} ${after.toLocaleString('en-IN')} — more than ${who} (${booking?.currency ?? 'INR'} ${cap.toLocaleString('en-IN')}). Check the amount, or resend with override if intentional.`,
+            code: 'OVERPAYMENT',
+            cap,
+            already,
+          },
+          { status: 409 },
+        );
+      }
+    }
+  }
+
   const { data, error } = await supabase.from('booking_payments').insert(body).select().single();
 
   if (error) {
