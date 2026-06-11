@@ -7,13 +7,15 @@ export * from './types';
 // arrive (LITEAPI_KEY / DUFFEL_TOKEN — later TBO_*, TRIPJACK_*).
 
 import { LiteApiProvider } from './liteapi';
+import { TravelPayoutsProvider } from './travelpayouts';
 
 const hotelProviders: HotelProvider[] = [];
 const flightProviders: FlightProvider[] = [];
 
 if (process.env.LITEAPI_KEY) hotelProviders.push(new LiteApiProvider(process.env.LITEAPI_KEY));
-// Flights: Duffel doesn't onboard Indian businesses — slot stays open
-// for TBO/Tripjack credentials when they arrive.
+// TravelPayouts = schedules + indicative cached fares; agents verify the
+// fare manually. Bookable live fares slot stays open for TBO/Tripjack.
+if (process.env.TRAVELPAYOUTS_TOKEN) flightProviders.push(new TravelPayoutsProvider(process.env.TRAVELPAYOUTS_TOKEN));
 
 export function getHotelProvider(id?: string): HotelProvider | null {
   if (id) return hotelProviders.find((p) => p.id === id) ?? null;

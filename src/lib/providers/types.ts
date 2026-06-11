@@ -45,8 +45,12 @@ export interface FlightOffer {
   carrier: string;
   flightNumbers: string[];
   departAt: string;
-  arriveAt: string;
+  /** May be estimated (depart + duration) for cached-data providers. */
+  arriveAt: string | null;
+  durationMinutes?: number;
+  transfers?: number;
   currency: string;
+  /** Indicative for cached-data providers — agents verify and overwrite. */
   netCost: number;
   raw: unknown;
 }
