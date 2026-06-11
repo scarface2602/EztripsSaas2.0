@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Wand2 } from 'lucide-react';
 import type { ParsedQuote } from '@/lib/types/database';
-import type { BuilderData, DestinationRow, ItemRow } from './types';
+import type { BuilderData, DestinationRow, ItemRow, ItineraryDayRow } from './types';
 
 // Paste a supplier/DMC quote → /api/quotes/parse → pre-fill the builder.
 // Replaces the old upfront "manual vs AI import" fork: the builder is the
@@ -129,6 +129,23 @@ export function AiFillDialog({ data, update }: AiFillDialogProps) {
           }]
         : [];
 
+      // Day-wise itinerary from the parse; the route-skeleton sync will
+      // reconcile dates/cities/count afterwards.
+      const itinerary: ItineraryDayRow[] = (parsed.itinerary_days ?? [])
+        .sort((a, b) => a.day_number - b.day_number)
+        .map((d, i) => ({
+          id: crypto.randomUUID(),
+          day_number: i + 1,
+          date: null,
+          city: d.city ?? null,
+          heading: d.heading ?? null,
+          description: d.description || null,
+          day_type: null,
+          transfer_mode: null,
+        }));
+
+      // Currency stays whatever the proposal uses (INR by default) — the
+      // supplier quoting in USD doesn't change what the client is billed in.
       update((d) => ({
         ...d,
         proposal: {
@@ -138,11 +155,11 @@ export function AiFillDialog({ data, update }: AiFillDialogProps) {
           travel_start: parsed.travel_start ?? d.proposal.travel_start,
           pax_adults: parsed.pax_adults ?? d.proposal.pax_adults,
           pax_children: parsed.pax_children ?? d.proposal.pax_children,
-          currency: parsed.currency || d.proposal.currency,
         },
         destinations,
         items,
         groups: groups.length ? groups : d.groups,
+        itinerary: itinerary.length ? itinerary : d.itinerary,
       }));
       setOpen(false);
       setText('');

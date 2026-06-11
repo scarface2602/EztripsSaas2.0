@@ -58,11 +58,83 @@ export interface ProposalCore {
   special_notes: string | null;
 }
 
+export type TransferMode = 'SIC' | 'PVT' | 'NONE';
+export type DayTypeDb = 'arrival' | 'tour' | 'transfer' | 'departure' | 'flight';
+
+export interface ItineraryDayRow {
+  id: string;
+  day_number: number;
+  date: string | null;
+  city: string | null;
+  heading: string | null;
+  description: string | null;
+  day_type: DayTypeDb | null;
+  transfer_mode: TransferMode | null;
+}
+
 export interface BuilderData {
   proposal: ProposalCore;
   destinations: DestinationRow[];
   groups: PriceGroupRow[];
   items: ItemRow[];
+  itinerary: ItineraryDayRow[];
+}
+
+export type DayType = 'arrival' | 'departure' | 'transfer' | 'tour';
+
+/** Day n's type and city, derived from the cities-first route. */
+export function dayMeta(destinations: DestinationRow[], dayNumber: number, totalDays: number) {
+  const sorted = [...destinations].filter((d) => d.nights > 0).sort((a, b) => a.sort_order - b.sort_order);
+  let acc = 0;
+  let city = sorted[sorted.length - 1]?.city_name ?? null;
+  let isCityChangeDay = false;
+  for (const d of sorted) {
+    if (dayNumber <= acc + d.nights) {
+      city = d.city_name;
+      isCityChangeDay = dayNumber === acc + 1 && acc > 0;
+      break;
+    }
+    acc += d.nights;
+  }
+  const type: DayType =
+    dayNumber === 1 ? 'arrival' : dayNumber >= totalDays ? 'departure' : isCityChangeDay ? 'transfer' : 'tour';
+  return { city, type };
+}
+
+/**
+ * Merge the route into the day list: day count = nights + 1, dates from
+ * travel_start, cities mapped per day. Existing headings/descriptions are
+ * preserved; only the derived fields (date, city, count) move.
+ */
+export function syncItinerarySkeleton(data: BuilderData): ItineraryDayRow[] | null {
+  const totalNights = data.destinations.reduce((s, d) => s + d.nights, 0);
+  if (totalNights === 0) return data.itinerary.length ? [] : null;
+  const totalDays = totalNights + 1;
+  const start = data.proposal.travel_start ? new Date(data.proposal.travel_start + 'T00:00:00Z') : null;
+
+  const next: ItineraryDayRow[] = [];
+  let changed = data.itinerary.length !== totalDays;
+  for (let n = 1; n <= totalDays; n++) {
+    const existing = data.itinerary[n - 1];
+    const { city } = dayMeta(data.destinations, n, totalDays);
+    const date = start ? new Date(start.getTime() + (n - 1) * 86400000).toISOString().slice(0, 10) : null;
+    const { type } = dayMeta(data.destinations, n, totalDays);
+    const row: ItineraryDayRow = existing
+      ? { ...existing, day_number: n, date, city }
+      : {
+          id: crypto.randomUUID(),
+          day_number: n,
+          date,
+          city,
+          heading: null,
+          description: null,
+          day_type: type,
+          transfer_mode: null,
+        };
+    if (!existing || existing.date !== date || existing.city !== city || existing.day_number !== n) changed = true;
+    next.push(row);
+  }
+  return changed ? next : null;
 }
 
 export function computeSell(cost: number, type: 'percent' | 'flat', value: number): number {
@@ -70,21 +142,34 @@ export function computeSell(cost: number, type: 'percent' | 'flat', value: numbe
   return Math.round(sell * 100) / 100;
 }
 
-/** Sells rolled up: groups + self-priced items (no group). */
+/**
+ * Sells rolled up: groups + self-priced items. Flights are ALWAYS priced
+ * separately (never inside a land/price group) and reported as their own
+ * subtotal — the client must see land vs flights split.
+ */
 export function rollupTotals(data: BuilderData) {
   const groupSell = data.groups.reduce((s, g) => s + g.sell_amount, 0);
   const groupCost = data.groups.reduce((s, g) => s + g.cost_amount, 0);
   const selfItems = data.items.filter((i) => !i.price_group_id && i.sell_amount != null);
-  const itemSell = selfItems.reduce((s, i) => s + (i.sell_amount ?? 0), 0);
-  const itemCost = selfItems.reduce((s, i) => s + (i.cost_amount ?? 0), 0);
-  const sell = groupSell + itemSell;
-  const cost = groupCost + itemCost;
+  const flightItems = selfItems.filter((i) => i.item_type === 'flight');
+  const otherItems = selfItems.filter((i) => i.item_type !== 'flight');
+  const flightSell = flightItems.reduce((s, i) => s + (i.sell_amount ?? 0), 0);
+  const flightCost = flightItems.reduce((s, i) => s + (i.cost_amount ?? 0), 0);
+  const landSell = groupSell + otherItems.reduce((s, i) => s + (i.sell_amount ?? 0), 0);
+  const landCost = groupCost + otherItems.reduce((s, i) => s + (i.cost_amount ?? 0), 0);
+  const sell = landSell + flightSell;
+  const cost = landCost + flightCost;
   const p = data.proposal;
   const gst = p.gst_enabled ? (sell * p.gst_rate) / 100 : 0;
   const tcs = p.tcs_enabled ? (sell * p.tcs_rate) / 100 : 0;
   const grand = sell + gst + tcs;
   const pax = p.pax_adults + p.pax_children;
-  return { cost, sell, gst, tcs, grand, margin: sell - cost, perPerson: pax > 0 ? grand / pax : null };
+  return {
+    cost, sell, gst, tcs, grand,
+    landSell, flightSell,
+    margin: sell - cost,
+    perPerson: pax > 0 ? grand / pax : null,
+  };
 }
 
 /** Stay date ranges derived from travel_start + cumulative nights. */

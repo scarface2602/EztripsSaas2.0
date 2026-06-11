@@ -19,10 +19,12 @@ interface AsyncComboboxProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  /** Minimum characters before searching (default 2). Use 0 for local lists. */
+  minChars?: number;
 }
 
-// Debounced server-backed combobox with inline create. Used for cities,
-// hotels, suppliers, and clients in the proposal builder.
+// Debounced server-backed combobox with inline create. The dropdown is
+// position:fixed so it escapes Card's overflow-hidden clipping.
 export function AsyncCombobox({
   value,
   onSelect,
@@ -31,13 +33,16 @@ export function AsyncCombobox({
   placeholder = 'Type to search…',
   className = '',
   disabled,
+  minChars = 2,
 }: AsyncComboboxProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value?.label ?? '');
   const [options, setOptions] = useState<AsyncOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queryRef = useRef('');
 
@@ -45,13 +50,31 @@ export function AsyncCombobox({
     setInputValue(value?.label ?? '');
   }, [value]);
 
+  const positionDropdown = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setRect({ top: r.bottom + 4, left: r.left, width: r.width });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    positionDropdown();
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', positionDropdown);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', positionDropdown);
+    };
+  }, [open, positionDropdown]);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        // Revert a half-typed query back to the committed selection.
-        setInputValue(value?.label ?? '');
-      }
+      const t = e.target as Node;
+      if (containerRef.current?.contains(t) || dropdownRef.current?.contains(t)) return;
+      setOpen(false);
+      setInputValue(value?.label ?? '');
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -62,7 +85,7 @@ export function AsyncCombobox({
       queryRef.current = q;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
-        if (q.trim().length < 2) {
+        if (q.trim().length < minChars) {
           setOptions([]);
           return;
         }
@@ -73,9 +96,9 @@ export function AsyncCombobox({
         } finally {
           setLoading(false);
         }
-      }, 300);
+      }, minChars === 0 ? 0 : 300);
     },
-    [search],
+    [search, minChars],
   );
 
   function handlePick(opt: AsyncOption) {
@@ -112,7 +135,7 @@ export function AsyncCombobox({
         }}
         onFocus={() => {
           setOpen(true);
-          if (inputValue.trim().length >= 2) runSearch(inputValue);
+          if (inputValue.trim().length >= minChars) runSearch(inputValue);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -127,8 +150,12 @@ export function AsyncCombobox({
       {loading && (
         <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
       )}
-      {open && (options.length > 0 || showCreate) && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-56 overflow-y-auto">
+      {open && rect && (options.length > 0 || showCreate) && (
+        <div
+          ref={dropdownRef}
+          style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width, zIndex: 100 }}
+          className="bg-background border rounded-md shadow-lg max-h-56 overflow-y-auto"
+        >
           {options.map((opt) => (
             <button
               key={opt.id}

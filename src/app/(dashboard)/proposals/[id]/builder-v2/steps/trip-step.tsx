@@ -19,7 +19,9 @@ interface StepProps {
 export function TripStep({ data, update }: StepProps) {
   const { proposal, destinations } = data;
   const [countries, setCountries] = useState<{ code: string; name: string }[]>([]);
-  const [country, setCountry] = useState(''); // scopes city search + inline create
+  // Scopes city search + inline create.
+  const [country, setCountry] = useState<AsyncOption | null>(null);
+  const countryCode = country ? String(country.id) : '';
   const [client, setClient] = useState<AsyncOption | null>(null);
 
   useEffect(() => {
@@ -148,15 +150,20 @@ export function TripStep({ data, update }: StepProps) {
           <CardTitle>Route — cities &amp; nights</CardTitle>
           <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground">Country</Label>
-            <Select value={country || 'all'} onValueChange={(v) => setCountry(!v || v === 'all' ? '' : v)}>
-              <SelectTrigger className="w-44 h-8"><SelectValue placeholder="All countries" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All countries</SelectItem>
-                {countries.map((c) => (
-                  <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AsyncCombobox
+              className="w-52"
+              value={country}
+              onSelect={setCountry}
+              minChars={0}
+              search={async (q) => {
+                const ql = q.trim().toLowerCase();
+                return countries
+                  .filter((c) => !ql || c.name.toLowerCase().includes(ql) || c.code.toLowerCase() === ql)
+                  .slice(0, 12)
+                  .map((c) => ({ id: c.code, label: c.name }));
+              }}
+              placeholder="Search country…"
+            />
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -206,7 +213,7 @@ export function TripStep({ data, update }: StepProps) {
                     id: crypto.randomUUID(),
                     city_id: meta.city_id ?? null,
                     city_name: opt.label,
-                    country_code: meta.country_code ?? (country || null),
+                    country_code: meta.country_code ?? (countryCode || null),
                     nights: 1,
                     sort_order: d.destinations.length,
                   },
@@ -215,7 +222,7 @@ export function TripStep({ data, update }: StepProps) {
             }}
             search={async (q) => {
               const params = new URLSearchParams({ q });
-              if (country) params.set('country', country);
+              if (countryCode) params.set('country', countryCode);
               const res = await fetch(`/api/geo/cities?${params}`);
               const d = res.ok ? await res.json() : { cities: [] };
               return (d.cities as { id: number; name: string; country_name: string | null; country_code: string; state_region: string | null }[]).map((c) => ({
@@ -227,12 +234,12 @@ export function TripStep({ data, update }: StepProps) {
               }));
             }}
             onCreate={
-              country
+              countryCode
                 ? async (name) => {
                     const res = await fetch('/api/geo/cities', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ name, country_code: country }),
+                      body: JSON.stringify({ name, country_code: countryCode }),
                     });
                     if (!res.ok) return null;
                     const { city } = await res.json();
@@ -240,7 +247,7 @@ export function TripStep({ data, update }: StepProps) {
                   }
                 : undefined
             }
-            placeholder={country ? 'Add a city…' : 'Search any city (pick a country to add new ones)…'}
+            placeholder={countryCode ? 'Add a city…' : 'Search any city (pick a country to add new ones)…'}
           />
 
           {totalNights > 0 && (

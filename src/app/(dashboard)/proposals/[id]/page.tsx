@@ -21,10 +21,11 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
 
   // Builder v2 proposals render the new cities-first builder.
   if (proposal.builder_version === 2) {
-    const [{ data: destinations }, { data: groups }, { data: items }] = await Promise.all([
+    const [{ data: destinations }, { data: groups }, { data: items }, { data: itineraryDays }] = await Promise.all([
       supabase.from('proposal_destinations').select('*').eq('proposal_id', id).order('sort_order'),
       supabase.from('proposal_price_groups').select('*').eq('proposal_id', id).order('sort_order'),
       supabase.from('proposal_items').select('*').eq('proposal_id', id).order('sort_order'),
+      supabase.from('itinerary_days').select('*').eq('proposal_id', id).order('day_number'),
     ]);
     return (
       <div>
@@ -69,6 +70,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
               cost_amount: i.cost_amount == null ? null : Number(i.cost_amount),
               sell_amount: i.sell_amount == null ? null : Number(i.sell_amount),
             })),
+            itinerary: itineraryDays || [],
           }}
         />
       </div>

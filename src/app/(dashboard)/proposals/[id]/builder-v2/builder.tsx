@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, Check, AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react';
 import type { BuilderData, DestinationRow, ItemRow } from './types';
-import { rollupTotals, destinationDates } from './types';
+import { rollupTotals, destinationDates, syncItinerarySkeleton } from './types';
 import { AiFillDialog } from './ai-fill-dialog';
 import { TripStep } from './steps/trip-step';
 import { StaysStep } from './steps/stays-step';
+import { ItineraryStep } from './steps/itinerary-step';
 import { ExtrasStep } from './steps/extras-step';
 import { PricingStep } from './steps/pricing-step';
 import { ReviewStep } from './steps/review-step';
@@ -15,6 +16,7 @@ import { ReviewStep } from './steps/review-step';
 const STEPS = [
   { key: 'trip', label: 'Trip' },
   { key: 'stays', label: 'Stays' },
+  { key: 'itinerary', label: 'Itinerary' },
   { key: 'extras', label: 'Travel & Extras' },
   { key: 'pricing', label: 'Pricing' },
   { key: 'review', label: 'Review' },
@@ -53,6 +55,7 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
         destinations: d.destinations,
         groups: d.groups,
         items: d.items.map(({ ...i }) => i),
+        itinerary: d.itinerary,
       }),
     });
     setSaveState(res.ok ? 'saved' : 'error');
@@ -122,6 +125,16 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
     });
   }, [data.destinations, data.proposal.travel_start]);
 
+  // Day-wise itinerary skeleton follows the route (count, dates, cities).
+  useEffect(() => {
+    setData((d) => {
+      const next = syncItinerarySkeleton(d);
+      if (!next) return d;
+      setSaveState('dirty');
+      return { ...d, itinerary: next };
+    });
+  }, [data.destinations, data.proposal.travel_start]);
+
   // Keep proposals.destination + travel_end in sync with the route.
   useEffect(() => {
     setData((d) => {
@@ -184,6 +197,7 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
 
       {step === 'trip' && <TripStep data={data} update={update} />}
       {step === 'stays' && <StaysStep data={data} update={update} />}
+      {step === 'itinerary' && <ItineraryStep data={data} update={update} />}
       {step === 'extras' && <ExtrasStep data={data} update={update} />}
       {step === 'pricing' && <PricingStep data={data} update={update} />}
       {step === 'review' && (

@@ -48,6 +48,17 @@ const itemSchema = z.object({
   sort_order: z.number().int(),
 });
 
+const itineraryDaySchema = z.object({
+  id: z.string().uuid(),
+  day_number: z.number().int().min(1),
+  date: z.string().nullable(),
+  city: z.string().nullable(),
+  heading: z.string().nullable(),
+  description: z.string().nullable(),
+  day_type: z.enum(['arrival', 'tour', 'transfer', 'departure', 'flight']).nullable(),
+  transfer_mode: z.enum(['SIC', 'PVT', 'NONE']).nullable(),
+});
+
 const saveSchema = z.object({
   proposal: z.object({
     title: z.string().trim().max(200).nullable(),
@@ -67,6 +78,7 @@ const saveSchema = z.object({
   destinations: z.array(destinationSchema),
   groups: z.array(groupSchema),
   items: z.array(itemSchema),
+  itinerary: z.array(itineraryDaySchema).default([]),
 });
 
 async function checkOwnership(proposalId: string, request: NextRequest) {
@@ -79,11 +91,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (auth instanceof NextResponse) return auth;
 
   const supabase = createServiceClient();
-  const [proposalRes, destRes, groupRes, itemRes] = await Promise.all([
+  const [proposalRes, destRes, groupRes, itemRes, dayRes] = await Promise.all([
     supabase.from('proposals').select('*').eq('id', id).single(),
     supabase.from('proposal_destinations').select('*').eq('proposal_id', id).order('sort_order'),
     supabase.from('proposal_price_groups').select('*').eq('proposal_id', id).order('sort_order'),
     supabase.from('proposal_items').select('*').eq('proposal_id', id).order('sort_order'),
+    supabase.from('itinerary_days').select('*').eq('proposal_id', id).order('day_number'),
   ]);
   if (proposalRes.error) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -92,6 +105,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     destinations: destRes.data ?? [],
     groups: groupRes.data ?? [],
     items: itemRes.data ?? [],
+    itinerary: dayRes.data ?? [],
   });
 }
 
@@ -104,7 +118,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid payload', details: parsed.error.flatten() }, { status: 400 });
   }
-  const { proposal, destinations, groups, items } = parsed.data;
+  const { proposal, destinations, groups, items, itinerary } = parsed.data;
   const supabase = createServiceClient();
 
   // Confirmed proposals are locked — quoted baselines must not move.
@@ -144,12 +158,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     await del('proposal_items', keepIds(items));
     await del('proposal_price_groups', keepIds(groups));
     await del('proposal_destinations', keepIds(destinations));
+    await del('itinerary_days', keepIds(itinerary));
     await upsert('proposal_destinations', tag(destinations));
     await upsert('proposal_price_groups', tag(groups));
     await upsert(
       'proposal_items',
       tag(items.map((i) => ({ ...i, updated_at: new Date().toISOString() }))),
     );
+    await upsert('itinerary_days', tag(itinerary));
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

@@ -91,7 +91,10 @@ export function ReviewStep({ data, totals, proposalId, save }: ReviewStepProps) 
             {data.items.filter((i) => !i.price_group_id && i.sell_amount != null).map((i) => (
               <p key={i.id} className="text-muted-foreground">{i.title}: {cur} {fmt(i.sell_amount ?? 0)}</p>
             ))}
-            <p className="font-semibold mt-1">
+            <p className="text-muted-foreground mt-1">
+              Land {cur} {fmt(totals.landSell)} · Flights {cur} {fmt(totals.flightSell)}
+            </p>
+            <p className="font-semibold">
               Grand total {cur} {fmt(totals.grand)}
               {totals.perPerson != null && ` (${cur} ${fmt(totals.perPerson)}/pax)`}
             </p>

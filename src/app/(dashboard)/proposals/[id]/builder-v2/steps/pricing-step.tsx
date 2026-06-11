@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AsyncCombobox, type AsyncOption } from '@/components/ui/async-combobox';
 import { createClient } from '@/lib/supabase/client';
@@ -98,31 +97,41 @@ export function PricingStep({ data, update }: StepProps) {
       <Card>
         <CardHeader><CardTitle>Taxes &amp; total</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Switch checked={data.proposal.gst_enabled} onCheckedChange={(v) => setProposal({ gst_enabled: v })} />
-              <Label>GST</Label>
+          <div className="flex items-center gap-8">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-primary"
+                checked={data.proposal.gst_enabled}
+                onChange={(e) => setProposal({ gst_enabled: e.target.checked })}
+              />
+              <Label className="cursor-pointer">GST</Label>
               <Input
                 type="number" className="w-20 h-8" min={0} max={100} step="0.1"
                 value={data.proposal.gst_rate}
-                onChange={(e) => setProposal({ gst_rate: parseFloat(e.target.value) || 0 })}
-                disabled={!data.proposal.gst_enabled}
+                onChange={(e) => setProposal({ gst_rate: parseFloat(e.target.value) || 0, gst_enabled: true })}
               />
               <span className="text-sm text-muted-foreground">%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={data.proposal.tcs_enabled} onCheckedChange={(v) => setProposal({ tcs_enabled: v })} />
-              <Label>TCS</Label>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-primary"
+                checked={data.proposal.tcs_enabled}
+                onChange={(e) => setProposal({ tcs_enabled: e.target.checked })}
+              />
+              <Label className="cursor-pointer">TCS</Label>
               <Input
                 type="number" className="w-20 h-8" min={0} max={100} step="0.1"
                 value={data.proposal.tcs_rate}
-                onChange={(e) => setProposal({ tcs_rate: parseFloat(e.target.value) || 0 })}
-                disabled={!data.proposal.tcs_enabled}
+                onChange={(e) => setProposal({ tcs_rate: parseFloat(e.target.value) || 0, tcs_enabled: true })}
               />
               <span className="text-sm text-muted-foreground">%</span>
-            </div>
+            </label>
           </div>
           <div className="border-t pt-3 grid gap-1 text-sm max-w-sm ml-auto">
+            <Row label="Land total" value={`${cur} ${fmt(totals.landSell)}`} />
+            <Row label="Flights total" value={`${cur} ${fmt(totals.flightSell)}`} />
             <Row label="Subtotal" value={`${cur} ${fmt(totals.sell)}`} />
             {data.proposal.gst_enabled && <Row label={`GST ${data.proposal.gst_rate}%`} value={`${cur} ${fmt(totals.gst)}`} />}
             {data.proposal.tcs_enabled && <Row label={`TCS ${data.proposal.tcs_rate}%`} value={`${cur} ${fmt(totals.tcs)}`} />}
@@ -261,7 +270,8 @@ function ItemCoverage({
   update: StepProps['update'];
   covered: BuilderData['items'];
 }) {
-  const uncovered = data.items.filter((i) => !i.price_group_id && i.title.trim());
+  // Flights never join a land group — their price is always shown separately.
+  const uncovered = data.items.filter((i) => !i.price_group_id && i.title.trim() && i.item_type !== 'flight');
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">Covers:</span>

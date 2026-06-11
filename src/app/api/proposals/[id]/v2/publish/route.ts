@@ -13,12 +13,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (auth instanceof NextResponse) return auth;
 
   const supabase = createServiceClient();
-  const [{ data: proposal }, { data: destinations }, { data: groups }, { data: items }] = await Promise.all([
-    supabase.from('proposals').select('*').eq('id', id).single(),
-    supabase.from('proposal_destinations').select('*').eq('proposal_id', id).order('sort_order'),
-    supabase.from('proposal_price_groups').select('*').eq('proposal_id', id).order('sort_order'),
-    supabase.from('proposal_items').select('*').eq('proposal_id', id).order('sort_order'),
-  ]);
+  const [{ data: proposal }, { data: destinations }, { data: groups }, { data: items }, { data: itineraryDays }] =
+    await Promise.all([
+      supabase.from('proposals').select('*').eq('id', id).single(),
+      supabase.from('proposal_destinations').select('*').eq('proposal_id', id).order('sort_order'),
+      supabase.from('proposal_price_groups').select('*').eq('proposal_id', id).order('sort_order'),
+      supabase.from('proposal_items').select('*').eq('proposal_id', id).order('sort_order'),
+      supabase.from('itinerary_days').select('*').eq('proposal_id', id).order('day_number'),
+    ]);
   if (!proposal) return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
   if (proposal.builder_version !== 2) {
     return NextResponse.json({ error: 'Not a builder v2 proposal' }, { status: 400 });
@@ -56,8 +58,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         sort_order: idx,
       };
     });
+  // Flights are their own snapshot array with their own sell prices —
+  // never folded into the land/package price.
+  const flights = allItems
+    .filter((i) => i.item_type === 'flight')
+    .map((i, idx) => {
+      const d = (i.details ?? {}) as Record<string, unknown>;
+      return {
+        id: i.id,
+        flight_number: (d.flight_number as string) ?? i.title,
+        airline: (d.airline as string) ?? null,
+        origin_iata: (d.origin as string) ?? null,
+        destination_iata: (d.destination as string) ?? null,
+        departure_at: (d.depart_at as string) ?? null,
+        arrival_at: (d.arrive_at as string) ?? null,
+        cabin_class: (d.fare_type as string) ?? null,
+        baggage_allowance: (d.baggage as string) ?? null,
+        duration: (d.duration as string) ?? null,
+        layover: (d.layover as string) ?? null,
+        operated_by: (d.operated_by as string) ?? null,
+        sp_total: Number(i.sell_amount) || 0,
+        sort_order: idx,
+      };
+    });
+
   const lineItems = allItems
-    .filter((i) => i.item_type !== 'hotel' && i.title.trim())
+    .filter((i) => i.item_type !== 'hotel' && i.item_type !== 'flight' && i.title.trim())
     .map((i, idx) => ({
       id: i.id,
       type: ['transfer', 'activity', 'visa'].includes(i.item_type) ? i.item_type : 'other',
@@ -70,6 +96,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       sort_order: idx,
     }));
 
+  const flightSell = allItems
+    .filter((i) => i.item_type === 'flight')
+    .reduce((s, i) => s + (Number(i.sell_amount) || 0), 0);
   const totalSell =
     allGroups.reduce((s, g) => s + (Number(g.sell_amount) || 0), 0) +
     allItems.reduce((s, i) => s + (i.price_group_id ? 0 : Number(i.sell_amount) || 0), 0);
@@ -77,8 +106,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const publishedData = {
     proposal: { ...proposal, draft_data: null },
     hotels,
-    flights: [],
-    itinerary_days: [],
+    flights,
+    itinerary_days: (itineraryDays ?? []).map((d) => ({
+      id: d.id,
+      day_number: d.day_number,
+      date: d.date,
+      city: d.city,
+      heading: d.heading,
+      description: d.description,
+      day_type: d.day_type,
+      transfer_mode: d.transfer_mode,
+    })),
     activities: [],
     line_items: lineItems,
     content_blocks: [],
@@ -86,6 +124,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       destinations: dests.map((d) => ({ city_name: d.city_name, nights: d.nights, sort_order: d.sort_order })),
       // Sell side only — never cost_amount/markup.
       price_groups: allGroups.map((g) => ({ name: g.name, sell_amount: Number(g.sell_amount) || 0 })),
+      land_sell: totalSell - flightSell,
+      flight_sell: flightSell,
       total_sell: totalSell,
     },
   };
