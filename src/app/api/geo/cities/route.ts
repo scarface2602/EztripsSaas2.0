@@ -13,14 +13,16 @@ export async function GET(request: NextRequest) {
   const q = (params.get('q') ?? '').trim();
   const country = (params.get('country') ?? '').trim().toUpperCase();
   const limit = Math.min(parseInt(params.get('limit') ?? '20', 10) || 20, 50);
-  if (q.length < 2) return NextResponse.json({ cities: [] });
+  // Empty query: suggest the country's cities on focus; without a country
+  // scope an unfiltered worldwide list is noise, so return nothing.
+  if (q.length === 0 && !country) return NextResponse.json({ cities: [] });
 
   let query = supabase
     .from('geo_cities')
     .select('id, name, state_region, country_code, geo_countries(name)')
-    .ilike('name', `%${q}%`)
     .order('name')
     .limit(limit);
+  if (q.length > 0) query = query.ilike('name', `%${q}%`);
   if (country) query = query.eq('country_code', country);
 
   const { data, error } = await query;

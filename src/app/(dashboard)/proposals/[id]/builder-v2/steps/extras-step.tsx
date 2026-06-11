@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plane, StampIcon, Package, Trash2, Plus, Wand2, Loader2, Search } from 'lucide-react';
+import { Plane, StampIcon, Package, Trash2, Plus, Wand2, Loader2 } from 'lucide-react';
 import type { BuilderData, ItemRow, ItemType } from '../types';
 
 interface StepProps {
@@ -82,7 +82,6 @@ export function ExtrasStep({ data, update }: StepProps) {
             <Plane className="h-4 w-4" /> Flights
           </CardTitle>
           <div className="flex gap-2">
-            <FlightSearchButton update={update} newItem={newItem} travelStart={data.proposal.travel_start} />
             <FlightParseButton update={update} newItem={newItem} />
             <Button variant="outline" size="sm" onClick={() => addItem('flight')}>
               <Plus className="h-4 w-4 mr-1" /> Add manually
@@ -91,9 +90,8 @@ export function ExtrasStep({ data, update }: StepProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-xs text-muted-foreground -mt-2">
-            <strong>Note:</strong> flight numbers &amp; timings from search are schedule data and reliable; the fare shown is an
-            indicative cached price — verify the fare with your consolidator and update the cost before quoting. Flight
-            prices always stay separate from the land package.
+            <strong>Note:</strong> add flights via AI parse (paste text or attach the booking screenshot/PDF) or manually.
+            Always verify the fare with your consolidator before quoting. Flight prices stay separate from the land package.
           </p>
           {flights.map((f) => (
             <FlightRow key={f.id} item={f} patchItem={patchItem} removeItem={removeItem} />
@@ -212,138 +210,6 @@ function FlightRow({
         <F label="Operated by (codeshare)" k="operated_by" placeholder="Scoot" />
         <F label="Fare type" k="fare_type" placeholder="Saver / Flexi" />
         <F label="Baggage" k="baggage" w="sm:col-span-2" placeholder="20kg check-in + 7kg cabin" />
-      </div>
-    </div>
-  );
-}
-
-interface FlightOfferRow {
-  providerRef: string;
-  carrier: string;
-  flightNumbers: string[];
-  departAt: string;
-  arriveAt: string | null;
-  durationMinutes?: number;
-  transfers?: number;
-  currency: string;
-  netCost: number;
-}
-
-// Schedule + indicative-fare search (TravelPayouts). Numbers/timings are
-// schedule data; the fare is a cached snapshot the agent verifies.
-function FlightSearchButton({
-  update,
-  newItem,
-  travelStart,
-}: {
-  update: StepProps['update'];
-  newItem: (type: ItemType, title?: string, details?: Record<string, unknown>) => ItemRow;
-  travelStart: string | null;
-}) {
-  const [open, setOpen] = useState(false);
-  const [origin, setOrigin] = useState('');
-  const [destination, setDestination] = useState('');
-  const [date, setDate] = useState(travelStart ?? '');
-  const [offers, setOffers] = useState<FlightOfferRow[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function search() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/flights/offers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origin, destination, depart_date: date }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? 'Search failed');
-      if (body.error) throw new Error(body.error);
-      setOffers(body.offers ?? []);
-    } catch (e) {
-      setError((e as Error).message);
-      setOffers(null);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function applyOffer(o: FlightOfferRow) {
-    const details = {
-      airline: o.carrier,
-      flight_number: o.flightNumbers.join(' / '),
-      origin: origin.toUpperCase(),
-      destination: destination.toUpperCase(),
-      depart_at: o.departAt,
-      arrive_at: o.arriveAt ?? '',
-      duration: o.durationMinutes ? `${Math.floor(o.durationMinutes / 60)}h ${o.durationMinutes % 60}m` : '',
-      layover: o.transfers ? `${o.transfers} stop(s)` : 'nonstop',
-    };
-    const item = newItem('flight', `${details.flight_number} ${origin.toUpperCase()} → ${destination.toUpperCase()}`, details);
-    update((d) => ({
-      ...d,
-      items: [
-        ...d.items,
-        { ...item, source: 'api' as const, provider: 'travelpayouts', provider_ref: o.providerRef, cost_amount: o.netCost },
-      ],
-    }));
-    setOpen(false);
-    setOffers(null);
-  }
-
-  if (!open) {
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Search className="h-4 w-4 mr-1" /> Search flights
-      </Button>
-    );
-  }
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
-      <div className="bg-background rounded-xl shadow-xl max-w-2xl w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-semibold">Search flights</h3>
-        <p className="text-sm text-muted-foreground">
-          Flight numbers &amp; timings are schedule data. The fare is an indicative cached price — verify with your
-          consolidator and update the cost.
-        </p>
-        <div className="flex gap-2">
-          <Input className="w-24 uppercase" maxLength={3} value={origin} onChange={(e) => setOrigin(e.target.value.toUpperCase())} placeholder="DEL" />
-          <span className="self-center text-muted-foreground">→</span>
-          <Input className="w-24 uppercase" maxLength={3} value={destination} onChange={(e) => setDestination(e.target.value.toUpperCase())} placeholder="DPS" />
-          <Input type="date" className="w-44" value={date} onChange={(e) => setDate(e.target.value)} />
-          <Button size="sm" className="self-center" onClick={() => void search()} disabled={busy || origin.length !== 3 || destination.length !== 3 || !date}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-          </Button>
-        </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {offers && (
-          <div className="border rounded-lg max-h-72 overflow-y-auto divide-y">
-            {offers.length === 0 && <p className="p-3 text-sm text-muted-foreground">No cached fares found for this route/date.</p>}
-            {offers.map((o) => (
-              <div key={o.providerRef} className="flex items-center gap-3 px-3 py-2 text-sm">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium">{o.flightNumbers.join(' / ')}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {[
-                      o.departAt?.replace('T', ' '),
-                      o.durationMinutes ? `${Math.floor(o.durationMinutes / 60)}h ${o.durationMinutes % 60}m` : null,
-                      o.transfers ? `${o.transfers} stop(s)` : 'nonstop',
-                    ].filter(Boolean).join(' · ')}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="font-semibold">{o.currency} {Math.round(o.netCost).toLocaleString('en-IN')}</p>
-                  <p className="text-[10px] text-muted-foreground">indicative</p>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => applyOffer(o)}>Use</Button>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Close</Button>
-        </div>
       </div>
     </div>
   );

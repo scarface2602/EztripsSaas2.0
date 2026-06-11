@@ -19,7 +19,7 @@ interface AsyncComboboxProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
-  /** Minimum characters before searching (default 2). Use 0 for local lists. */
+  /** Minimum characters before searching. Default 0: suggestions show on focus. */
   minChars?: number;
 }
 
@@ -33,7 +33,7 @@ export function AsyncCombobox({
   placeholder = 'Type to search…',
   className = '',
   disabled,
-  minChars = 2,
+  minChars = 0,
 }: AsyncComboboxProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value?.label ?? '');
@@ -60,11 +60,16 @@ export function AsyncCombobox({
   useEffect(() => {
     if (!open) return;
     positionDropdown();
-    const close = () => setOpen(false);
-    window.addEventListener('scroll', close, true);
+    // Scrolling inside the dropdown must not close it; scrolling the page
+    // repositions the (fixed) dropdown so it stays glued to the input.
+    const onScroll = (e: Event) => {
+      if (dropdownRef.current?.contains(e.target as Node)) return;
+      positionDropdown();
+    };
+    window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', positionDropdown);
     return () => {
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', positionDropdown);
     };
   }, [open, positionDropdown]);
@@ -96,7 +101,7 @@ export function AsyncCombobox({
         } finally {
           setLoading(false);
         }
-      }, minChars === 0 ? 0 : 300);
+      }, q.trim().length === 0 ? 0 : 300); // instant on focus, debounced while typing
     },
     [search, minChars],
   );

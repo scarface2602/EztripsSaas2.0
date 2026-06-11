@@ -198,11 +198,10 @@ function GroupRow({
             }}
             search={async (q) => {
               const supabase = createClient();
-              const { data: rows } = await supabase
-                .from('suppliers')
-                .select('id, name, type')
-                .ilike('name', `%${q}%`)
-                .limit(8);
+              let query = supabase.from('suppliers').select('id, name, type').limit(8);
+              // Empty query (focus): most recent suppliers first.
+              query = q.trim() ? query.ilike('name', `%${q}%`).order('name') : query.order('created_at', { ascending: false });
+              const { data: rows } = await query;
               return (rows ?? []).map((s) => ({ id: s.id, label: s.name, description: s.type ?? undefined }));
             }}
             onCreate={async (name) => {

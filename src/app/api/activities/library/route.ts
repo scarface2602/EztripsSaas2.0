@@ -12,14 +12,15 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const q = (params.get('q') ?? '').trim();
   const cityId = parseInt(params.get('city_id') ?? '', 10);
-  if (q.length < 2) return NextResponse.json({ activities: [] });
 
-  const { data, error } = await supabase
+  // Empty query (focus): recently used/refined entries.
+  let query = supabase
     .from('activity_library')
     .select('id, name, type, city_id, city_name, description, default_transfer_mode')
-    .ilike('name', `%${q}%`)
-    .order('name')
     .limit(15);
+  query = q.length > 0 ? query.ilike('name', `%${q}%`).order('name') : query.order('updated_at', { ascending: false });
+
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Name match is primary; the destination's own city floats to the top.
