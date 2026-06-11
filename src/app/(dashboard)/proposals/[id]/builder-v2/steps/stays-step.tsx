@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AsyncCombobox, type AsyncOption } from '@/components/ui/async-combobox';
-import { BedDouble, Star } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { BedDouble, Star, Plus, Minus, Trash2 } from 'lucide-react';
 import type { BuilderData, ItemRow } from '../types';
 
 interface StepProps {
@@ -37,23 +38,75 @@ export function StaysStep({ data, update }: StepProps) {
   return (
     <div className="space-y-4">
       {destinations.map((dest) => {
-        const stays = data.items.filter((i) => i.item_type === 'hotel' && i.destination_id === dest.id);
+        const stays = data.items
+          .filter((i) => i.item_type === 'hotel' && i.destination_id === dest.id)
+          .sort((a, b) => a.sort_order - b.sort_order);
+        const maxSort = stays.length ? Math.max(...stays.map((s) => s.sort_order)) : dest.sort_order * 100;
         return (
           <Card key={dest.id}>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="flex items-center gap-2 text-base">
                 <BedDouble className="h-4 w-4" />
                 {dest.city_name} — {dest.nights}N
-                {stays[0]?.check_in && (
+                {stays[0]?.check_in && stays.length > 0 && (
                   <span className="text-sm font-normal text-muted-foreground">
-                    {stays[0].check_in} → {stays[0].check_out}
+                    {stays[0].check_in} → {stays[stays.length - 1].check_out}
                   </span>
                 )}
               </CardTitle>
+              {dest.nights > 1 && (
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() =>
+                    update((d) => {
+                      // New stay takes 1 night; the rebalancer re-chains dates.
+                      const list = d.items
+                        .filter((i) => i.item_type === 'hotel' && i.destination_id === dest.id)
+                        .sort((a, b) => a.sort_order - b.sort_order);
+                      const last = list[list.length - 1];
+                      return {
+                        ...d,
+                        items: [
+                          ...d.items.map((i) =>
+                            last && i.id === last.id ? { ...i, nights: Math.max((i.nights ?? 1) - 1, 1) } : i,
+                          ),
+                          {
+                            id: crypto.randomUUID(),
+                            destination_id: dest.id,
+                            price_group_id: null,
+                            item_type: 'hotel' as const,
+                            title: `Hotel in ${dest.city_name}`,
+                            details: {},
+                            hotel_directory_id: null,
+                            check_in: null,
+                            check_out: null,
+                            nights: 1,
+                            source: 'manual' as const,
+                            provider: null,
+                            provider_ref: null,
+                            cost_amount: null,
+                            sell_amount: null,
+                            sort_order: maxSort + 1,
+                          },
+                        ],
+                      };
+                    })
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Split stay
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
-              {stays.map((stay) => (
-                <StayRow key={stay.id} stay={stay} dest={dest} update={update} />
+              {stays.map((stay, idx) => (
+                <StayRow
+                  key={stay.id}
+                  stay={stay}
+                  dest={dest}
+                  update={update}
+                  isLast={idx === stays.length - 1}
+                  canSplit={stays.length > 1}
+                />
               ))}
             </CardContent>
           </Card>
@@ -67,10 +120,14 @@ function StayRow({
   stay,
   dest,
   update,
+  isLast,
+  canSplit,
 }: {
   stay: ItemRow;
   dest: BuilderData['destinations'][number];
   update: StepProps['update'];
+  isLast: boolean;
+  canSplit: boolean;
 }) {
   const [hotel, setHotel] = useState<AsyncOption | null>(
     stay.hotel_directory_id || stay.source !== 'manual' || !stay.title.startsWith('Hotel in ')
@@ -85,7 +142,36 @@ function StayRow({
   const patchDetails = (p: Record<string, unknown>) => patchStay({ details: { ...stay.details, ...p } });
 
   return (
-    <div className="grid gap-3 sm:grid-cols-12 items-end">
+    <div className="space-y-2">
+      {canSplit && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">
+            {stay.check_in ?? '—'} → {stay.check_out ?? '—'}
+          </span>
+          {isLast ? (
+            <span className="px-2 py-0.5 rounded bg-muted text-xs">{stay.nights}N (balance)</span>
+          ) : (
+            <span className="flex items-center gap-1">
+              <Button
+                variant="outline" size="icon" className="h-6 w-6"
+                onClick={() => patchStay({ nights: Math.max((stay.nights ?? 1) - 1, 0) })}
+              ><Minus className="h-3 w-3" /></Button>
+              <span className="w-8 text-center text-xs">{stay.nights}N</span>
+              <Button
+                variant="outline" size="icon" className="h-6 w-6"
+                onClick={() => patchStay({ nights: (stay.nights ?? 0) + 1 })}
+              ><Plus className="h-3 w-3" /></Button>
+            </span>
+          )}
+          <Button
+            variant="ghost" size="icon" className="h-6 w-6 text-destructive ml-auto"
+            onClick={() =>
+              update((d) => ({ ...d, items: d.items.filter((i) => i.id !== stay.id) }))
+            }
+          ><Trash2 className="h-3 w-3" /></Button>
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-12 items-end">
       <div className="space-y-2 sm:col-span-5">
         <Label>Hotel</Label>
         <AsyncCombobox
@@ -164,6 +250,7 @@ function StayRow({
           <Star className="h-3 w-3" /> From directory — live rates will appear here once a hotel API is connected.
         </p>
       )}
+      </div>
     </div>
   );
 }

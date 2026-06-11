@@ -71,8 +71,10 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
     };
   }, [data, saveState, save, readOnly]);
 
-  // Cities-first invariant: every destination with nights > 0 gets a stay
-  // item; stay dates/nights follow the destination, never diverge.
+  // Cities-first invariant: every destination with nights > 0 has stay
+  // items whose nights always sum to the destination's nights (split
+  // stays allowed — the LAST stay absorbs the remainder) and whose dates
+  // chain inside the destination's range. Mismatch is impossible.
   useEffect(() => {
     setData((d) => {
       const dates = destinationDates(d.destinations, d.proposal.travel_start);
@@ -82,7 +84,9 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
       for (const dest of d.destinations) {
         if (dest.nights <= 0) continue;
         const range = dates.get(dest.id)!;
-        const existing = items.filter((i) => i.item_type === 'hotel' && i.destination_id === dest.id);
+        const existing = items
+          .filter((i) => i.item_type === 'hotel' && i.destination_id === dest.id)
+          .sort((a, b) => a.sort_order - b.sort_order);
         if (existing.length === 0) {
           changed = true;
           items.push({
@@ -101,16 +105,24 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
             provider_ref: null,
             cost_amount: null,
             sell_amount: null,
-            sort_order: dest.sort_order,
+            sort_order: dest.sort_order * 100,
           });
         } else {
-          for (const stay of existing) {
-            if (stay.nights !== dest.nights || stay.check_in !== range.checkIn || stay.check_out !== range.checkOut) {
+          let remaining = dest.nights;
+          let cursor = range.checkIn ? new Date(range.checkIn + 'T00:00:00Z') : null;
+          existing.forEach((stay, idx) => {
+            const isLast = idx === existing.length - 1;
+            const nights = isLast ? remaining : Math.min(Math.max(stay.nights ?? 1, 0), remaining);
+            remaining -= nights;
+            const checkIn = cursor ? cursor.toISOString().slice(0, 10) : null;
+            if (cursor) cursor = new Date(cursor.getTime() + nights * 86400000);
+            const checkOut = cursor ? cursor.toISOString().slice(0, 10) : null;
+            if (stay.nights !== nights || stay.check_in !== checkIn || stay.check_out !== checkOut) {
               changed = true;
-              const idx = items.indexOf(stay);
-              items[idx] = { ...stay, nights: dest.nights, check_in: range.checkIn, check_out: range.checkOut };
+              const i = items.indexOf(stay);
+              items[i] = { ...stay, nights, check_in: checkIn, check_out: checkOut };
             }
-          }
+          });
         }
       }
       // Drop auto stays whose destination was removed.

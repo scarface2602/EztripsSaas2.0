@@ -30,13 +30,20 @@ export async function POST(request: NextRequest) {
   if (parsed.data.enquiry_id) {
     const { data: enquiry } = await supabase
       .from('website_enquiries')
-      .select('trip_id, query_id, name')
+      .select('trip_id, query_id, name, status')
       .eq('id', parsed.data.enquiry_id)
       .single();
     if (enquiry) insert.enquiry_id = parsed.data.enquiry_id;
     if (enquiry?.trip_id || enquiry?.query_id) {
       insert.trip_id = enquiry.trip_id ?? enquiry.query_id;
       insert.query_id = enquiry.query_id ?? enquiry.trip_id;
+    }
+    // Working on a proposal means the lead is qualified — don't leave it "new".
+    if (enquiry && ['new', 'contacted'].includes(enquiry.status ?? '')) {
+      await supabase
+        .from('website_enquiries')
+        .update({ status: 'qualified', updated_at: new Date().toISOString() })
+        .eq('id', parsed.data.enquiry_id);
     }
   }
 

@@ -37,14 +37,18 @@ export async function POST(req: NextRequest) {
     last_contacted_at: new Date().toISOString(),
   };
 
-  // First touch on the lead stops the SLA clock.
+  // First touch on the lead stops the SLA clock and moves it off "new" —
+  // a lead with a logged call/WhatsApp is contacted by definition.
   const { data: enquiryRow } = await supabase
     .from('website_enquiries')
-    .select('first_responded_at')
+    .select('first_responded_at, status')
     .eq('id', enquiry_id)
     .single();
   if (enquiryRow && !enquiryRow.first_responded_at) {
     enquiryUpdates.first_responded_at = new Date().toISOString();
+  }
+  if (!body.status && enquiryRow?.status === 'new') {
+    enquiryUpdates.status = 'contacted';
   }
 
   // If follow-up date set, update on enquiry too

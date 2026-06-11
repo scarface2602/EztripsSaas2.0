@@ -68,6 +68,24 @@ const PIPELINE_LABELS: Record<string, string> = {
 };
 const PAGE_SIZE = 20;
 
+// The stage is DERIVED from status (single source of truth) so the tabs
+// can never disagree with the status chip. pipeline_stage only overrides
+// when the Razorpay webhook stamped a payment.
+function stageOf(e: { status?: string | null; pipeline_stage?: string | null }): string {
+  if (e.pipeline_stage === 'payment_received' || e.pipeline_stage === 'verbal_confirmed') return 'verbal_confirmed';
+  switch (e.status) {
+    case 'lost':
+    case 'spam':
+      return 'rejected';
+    case 'won':
+      return 'verbal_confirmed';
+    case 'proposal_sent':
+      return 'proposal_sent';
+    default:
+      return 'in_progress';
+  }
+}
+
 function queryAge(createdAt: string): string {
   const hours = differenceInHours(new Date(), new Date(createdAt));
   if (hours < 1) return 'Just now';
@@ -321,7 +339,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
     filtered = filtered.filter(e => (e.lead_temperature || 'warm') === tempFilter);
   }
   if (pipelineFilter !== 'all') {
-    filtered = filtered.filter(e => (e.pipeline_stage || 'in_progress') === pipelineFilter);
+    filtered = filtered.filter(e => stageOf(e) === pipelineFilter);
   }
   if (assignFilter === 'unassigned') {
     filtered = filtered.filter(e => !e.assigned_to);
@@ -401,7 +419,7 @@ function AdminView({ initialData, agents }: { initialData: Lead[]; agents: Agent
       {/* Pipeline stage tabs */}
       <div className="flex gap-1 border-b">
         {PIPELINE_STAGES.map(stage => {
-          const count = stage === 'all' ? enquiries.length : enquiries.filter(e => (e.pipeline_stage || 'in_progress') === stage).length;
+          const count = stage === 'all' ? enquiries.length : enquiries.filter(e => stageOf(e) === stage).length;
           return (
             <button
               key={stage}

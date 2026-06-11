@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   if (body.enquiry_id) {
     const { data: enquiry } = await supabase
       .from('website_enquiries')
-      .select('trip_id, requirement_type')
+      .select('trip_id, requirement_type, status')
       .eq('id', body.enquiry_id)
       .single();
     tripId = enquiry?.trip_id || null;
@@ -33,6 +33,13 @@ export async function POST(request: NextRequest) {
       tripId = await generateTripIdFromDb(supabase, requirementToServiceType(enquiry?.requirement_type || 'package'), tripIdConfig);
       // Backfill trip_id on the enquiry so subsequent proposals share the same ID
       await supabase.from('website_enquiries').update({ trip_id: tripId }).eq('id', body.enquiry_id);
+    }
+    // Working on a proposal means the lead is qualified — don't leave it "new".
+    if (enquiry && ['new', 'contacted'].includes(enquiry.status ?? '')) {
+      await supabase
+        .from('website_enquiries')
+        .update({ status: 'qualified', updated_at: new Date().toISOString() })
+        .eq('id', body.enquiry_id);
     }
   }
   if (!tripId) {
