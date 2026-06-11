@@ -77,6 +77,101 @@ export async function createBookingsFromProposal(
     trip = inserted;
   }
 
+  // ── Builder v2: price groups + items ──
+  // One booking for the trip. Each price group becomes a dmc_package
+  // booking item carrying the group's cost (the thing ops actually
+  // confirms/pays); covered items come along at zero cost for tracking
+  // (hotel check-ins etc.); self-priced items keep their own numbers.
+  if (proposal.builder_version === 2) {
+    const [{ data: v2Groups }, { data: v2Items }] = await Promise.all([
+      supabase.from('proposal_price_groups').select('*').eq('proposal_id', proposalId).order('sort_order'),
+      supabase.from('proposal_items').select('*').eq('proposal_id', proposalId).order('sort_order'),
+    ]);
+    const groups = v2Groups || [];
+    const items = v2Items || [];
+    const selfItems = items.filter(i => !i.price_group_id);
+
+    const totalCost = groups.reduce((s, g) => s + (Number(g.cost_amount) || 0), 0)
+      + selfItems.reduce((s, i) => s + (Number(i.cost_amount) || 0), 0);
+    const totalSell = groups.reduce((s, g) => s + (Number(g.sell_amount) || 0), 0)
+      + selfItems.reduce((s, i) => s + (Number(i.sell_amount) || 0), 0);
+
+    const { data: booking } = await supabase.from('bookings').insert({
+      ...common,
+      trip_id: tripId,
+      supplier_id: groups[0]?.supplier_id || null,
+      booking_type: 'package',
+      title: proposal.title || proposal.destination || 'Booking',
+      cost_price: Math.round(totalCost * 100) / 100,
+      sell_price: Math.round(totalSell * 100) / 100,
+    }).select().single();
+
+    if (booking) {
+      createdBookings.push(booking);
+      await logBookingCreated(supabase, booking.id, userId, proposalId, 'package');
+
+      const V2_TYPE_MAP: Record<string, string> = {
+        hotel: 'hotel_room', flight: 'flight_segment', transfer: 'transfer',
+        activity: 'activity', visa: 'activity', other: 'activity',
+      };
+      const rows: Record<string, unknown>[] = [];
+      let sortOrder = 0;
+      for (const g of groups) {
+        const covered = items.filter(i => i.price_group_id === g.id);
+        rows.push({
+          booking_id: booking.id,
+          item_type: 'dmc_package',
+          label: g.name,
+          cost_price: Math.round((Number(g.cost_amount) || 0) * 100) / 100,
+          sell_price: Math.round((Number(g.sell_amount) || 0) * 100) / 100,
+          vendor_name: g.supplier_name || null,
+          supplier_id: g.supplier_id || null,
+          supplier_status: 'pending',
+          details: { covers: covered.map(i => i.title), source: 'builder_v2' },
+          sort_order: sortOrder++,
+        });
+      }
+      for (const i of items) {
+        const inGroup = !!i.price_group_id;
+        const group = inGroup ? groups.find(g => g.id === i.price_group_id) : null;
+        rows.push({
+          booking_id: booking.id,
+          item_type: V2_TYPE_MAP[i.item_type] || 'activity',
+          label: i.title,
+          start_date: i.check_in,
+          end_date: i.check_out,
+          cost_price: inGroup ? 0 : Math.round((Number(i.cost_amount) || 0) * 100) / 100,
+          sell_price: inGroup ? 0 : Math.round((Number(i.sell_amount) || 0) * 100) / 100,
+          supplier_status: 'pending',
+          details: {
+            ...(i.details || {}),
+            kind: i.item_type,
+            source: 'builder_v2',
+            ...(group ? { covered_by: group.name } : {}),
+            ...(i.provider ? { provider: i.provider, provider_ref: i.provider_ref } : {}),
+          },
+          sort_order: sortOrder++,
+        });
+      }
+      const { data: inserted } = await supabase.from('booking_items').insert(rows).select('id');
+
+      const { data: pkg } = await supabase.from('booking_packages').insert({
+        booking_id: booking.id,
+        type: groups.length === 1 && selfItems.length === 0 ? 'full_dmc' : 'mixed',
+        supplier_id: groups[0]?.supplier_id || null,
+        booking_items_ids: (inserted || []).map(r => r.id),
+        total_cost: Math.round(totalCost * 100) / 100,
+        status: 'pending',
+      }).select().single();
+      if (pkg) createdPackages.push(pkg);
+
+      if (trip) {
+        await supabase.from('trips').update({ booking_id: booking.id }).eq('id', trip.id);
+      }
+    }
+    return { createdBookings, createdPackages };
+  }
+
   // Fetch all proposal components upfront
   const [
     { data: hotelsAll },
