@@ -36,6 +36,12 @@ const base = (): BuilderData => ({
     gst_rate: 5,
     tcs_enabled: false,
     tcs_rate: 5,
+    cover_image_url: null,
+    pricing_display_mode: 'per_person',
+    inclusions: [],
+    exclusions: [],
+    payment_terms_text: null,
+    terms_conditions: null,
     special_notes: null,
   },
   destinations: [
@@ -87,13 +93,35 @@ describe('buildWarnings', () => {
   it('flags selling below cost and zero-cost groups that cover items', () => {
     const d = base();
     d.groups = [
-      { id: 'g1', name: 'Land', supplier_id: null, supplier_name: null, cost_amount: 100, markup_type: 'percent', markup_value: 0, sell_amount: 90, sort_order: 0 },
-      { id: 'g2', name: 'Empty', supplier_id: null, supplier_name: null, cost_amount: 0, markup_type: 'percent', markup_value: 15, sell_amount: 0, sort_order: 1 },
+      { id: 'g1', name: 'Land', supplier_id: null, supplier_name: null, cost_amount: 100, markup_type: 'percent', markup_value: 0, sell_amount: 90, price_basis: 'total', sort_order: 0 },
+      { id: 'g2', name: 'Empty', supplier_id: null, supplier_name: null, cost_amount: 0, markup_type: 'percent', markup_value: 15, sell_amount: 0, price_basis: 'total', sort_order: 1 },
     ];
     d.items = [flight({ id: 'covered', price_group_id: 'g2', details: { origin: 'DEL', destination: 'DPS' } })];
     const w = buildWarnings(d);
     expect(w.some((x) => x.id === 'loss-g1')).toBe(true);
     expect(w.some((x) => x.id === 'nocost-g2')).toBe(true);
+  });
+
+  it('asks for an EB when a 3rd adult has no extra bed or room, and clears once handled', () => {
+    const d = base();
+    d.proposal.pax_adults = 3;
+    d.items = [flight({ id: 'h1', item_type: 'hotel', title: 'Windermere Hotel & Spa' })];
+    expect(buildWarnings(d).some((x) => x.id === 'eb-h1')).toBe(true);
+    d.items[0].details = { extra_beds: 1 };
+    expect(buildWarnings(d).some((x) => x.id === 'eb-h1')).toBe(false);
+    d.items[0].details = { rooms: 2 }; // two doubles also fit 3 adults
+    expect(buildWarnings(d).some((x) => x.id === 'eb-h1')).toBe(false);
+  });
+
+  it('asks for a child policy when children travel, satisfied by CWB, CNB or free child stay', () => {
+    const d = base();
+    d.proposal.pax_children = 2;
+    d.items = [flight({ id: 'h1', item_type: 'hotel', title: 'Cherrapunjee Holiday Resort' })];
+    expect(buildWarnings(d).some((x) => x.id === 'child-policy')).toBe(true);
+    for (const details of [{ cwb: 1 }, { cnb: 2 }, { children_free: 2 }, { child_policy: 'Below 6 stays free' }]) {
+      d.items[0].details = details;
+      expect(buildWarnings(d).some((x) => x.id === 'child-policy')).toBe(false);
+    }
   });
 
   it('flags past travel start and zero-night destinations', () => {

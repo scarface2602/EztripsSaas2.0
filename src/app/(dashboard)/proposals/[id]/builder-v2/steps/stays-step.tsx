@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AsyncCombobox, type AsyncOption } from '@/components/ui/async-combobox';
 import { Button } from '@/components/ui/button';
-import { BedDouble, Plus, Minus, Trash2 } from 'lucide-react';
-import type { BuilderData, ItemRow } from '../types';
+import { BedDouble, Plus, Minus, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
+import type { BuilderData, ItemRow, StayOccupancy } from '../types';
 
 interface StepProps {
   data: BuilderData;
@@ -246,6 +246,119 @@ function StayRow({
         />
       </div>
       </div>
+      <OccupancyPolicy occ={stay.details as StayOccupancy} patchDetails={patchDetails} />
+    </div>
+  );
+}
+
+// Collapsed by default — the 2-adults-double-CP happy path never opens it.
+// EB/CWB/CNB/child-free counts cover what DMC quotes price separately;
+// rates are per night and informational when the price sits in a group.
+function OccupancyPolicy({
+  occ,
+  patchDetails,
+}: {
+  occ: StayOccupancy;
+  patchDetails: (p: Record<string, unknown>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const summary = [
+    occ.rooms ? `${occ.rooms} room${occ.rooms > 1 ? 's' : ''}` : null,
+    occ.extra_beds ? `${occ.extra_beds} EB` : null,
+    occ.cwb ? `${occ.cwb} CWB` : null,
+    occ.cnb ? `${occ.cnb} CNB` : null,
+    occ.children_free ? `${occ.children_free} child free` : null,
+    occ.refundable === false ? 'Non-refundable' : null,
+    occ.refundable === true && occ.free_cancellation_until ? `Free cancel till ${occ.free_cancellation_until}` : null,
+  ].filter(Boolean);
+
+  const count = (label: string, key: keyof StayOccupancy, hint?: string) => (
+    <div className="space-y-1">
+      <Label className="text-xs" title={hint}>{label}</Label>
+      <Input
+        type="number" min={0} className="h-8"
+        value={(occ[key] as number | undefined) ?? ''}
+        onChange={(e) =>
+          patchDetails({ [key]: e.target.value === '' ? undefined : Math.max(parseInt(e.target.value, 10) || 0, 0) })
+        }
+      />
+    </div>
+  );
+  const rate = (label: string, key: keyof StayOccupancy) => (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <Input
+        type="number" min={0} className="h-8" placeholder="/night"
+        value={(occ[key] as number | undefined) ?? ''}
+        onChange={(e) => patchDetails({ [key]: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 })}
+      />
+    </div>
+  );
+
+  return (
+    <div className="rounded-md border border-dashed px-3 py-2">
+      <button type="button" className="flex items-center gap-1.5 text-xs text-muted-foreground w-full" onClick={() => setOpen(!open)}>
+        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        Occupancy &amp; policy
+        {!open && summary.length > 0 && <span className="text-foreground">· {summary.join(' · ')}</span>}
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
+            {count('Rooms', 'rooms')}
+            {count('Extra beds (EB)', 'extra_beds', '3rd adult in a double room')}
+            {count('Child with bed (CWB)', 'cwb')}
+            {count('Child no bed (CNB)', 'cnb')}
+            {count('Children free', 'children_free', 'Complimentary child stay, usually under an age limit')}
+          </div>
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
+            {rate('EB rate', 'eb_rate')}
+            {rate('CWB rate', 'cwb_rate')}
+            {rate('CNB rate', 'cnb_rate')}
+            <div className="space-y-1 col-span-2">
+              <Label className="text-xs">Child policy</Label>
+              <Input
+                className="h-8"
+                value={occ.child_policy ?? ''}
+                onChange={(e) => patchDetails({ child_policy: e.target.value || undefined })}
+                placeholder="e.g. 1 child below 6 stays free without bed"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Refundability</Label>
+              <Select
+                value={occ.refundable === true ? 'yes' : occ.refundable === false ? 'no' : 'unknown'}
+                onValueChange={(v) =>
+                  patchDetails({
+                    refundable: v === 'yes' ? true : v === 'no' ? false : undefined,
+                    ...(v !== 'yes' ? { free_cancellation_until: undefined } : {}),
+                  })
+                }
+              >
+                <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unknown">Not specified</SelectItem>
+                  <SelectItem value="yes">Refundable</SelectItem>
+                  <SelectItem value="no">Non-refundable</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {occ.refundable === true && (
+              <div className="space-y-1">
+                <Label className="text-xs">Free cancellation until</Label>
+                <Input
+                  type="date" className="h-8 w-40"
+                  value={occ.free_cancellation_until ?? ''}
+                  onChange={(e) => patchDetails({ free_cancellation_until: e.target.value || undefined })}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

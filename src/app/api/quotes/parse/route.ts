@@ -30,7 +30,11 @@ Return this exact shape:
     "meal_plan": "RO"|"BB"|"HB"|"FB"|"AI" | null,
     "cp_per_night": number | null,
     "description": string | null,
-    "cancellation_policy": string | null
+    "cancellation_policy": string | null,
+    "extra_bed_rate_per_night": number | null,
+    "cwb_rate_per_night": number | null,
+    "cnb_rate_per_night": number | null,
+    "child_policy": string | null
   }],
   "flights": [{
     "flight_number": string,
@@ -81,7 +85,8 @@ IMPORTANT extraction rules:
 - inclusions: Extract ALL items listed under "Inclusions" or "Included" as an array of strings.
 - exclusions: Extract ALL items listed under "Exclusions" or "Not included" as an array of strings.
 - trip_cities: Extract the city-by-city night allocation. Look for patterns like "03 N/S KATHMANDU", "2 Nights Pokhara", "02N/S CHITWAN", or hotel stay descriptions like "03 night's accommodation at hotel in Kathmandu". Each entry must have the city name and exact number of nights in that city. This is CRITICAL for correct trip structure — do NOT default every city to the total trip nights.
-- payment_terms: Extract the full payment terms text verbatim.`;
+- payment_terms: Extract the full payment terms text verbatim.
+- Hotel occupancy extras: extract per-night extra bed / EB rate (e.g. "EB 2,400/- per night"), child-with-bed (CWB) and child-no-bed (CNB) rates, and any child stay policy as text (e.g. "1 child below 6 years stays free without bed"). Quotes often state these once for all hotels — in that case repeat them on every hotel.`;
 
 export async function POST(request: NextRequest) {
   try {

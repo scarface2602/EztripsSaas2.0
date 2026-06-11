@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plane, StampIcon, Package, Trash2, Plus, Wand2, Loader2 } from 'lucide-react';
+import { Plane, StampIcon, Package, Trash2, Plus, Wand2, Loader2, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import type { BuilderData, ItemRow, ItemType } from '../types';
 
 interface StepProps {
@@ -155,11 +155,111 @@ export function ExtrasStep({ data, update }: StepProps) {
           </Card>
         );
       })}
+      <FinePrint data={data} update={update} />
+
       <p className="text-xs text-muted-foreground">
         Tours &amp; transfers are added per day on the Itinerary step. Prices come next — land items can be covered by a
-        package quote; flights are always priced on their own.
+        package quote; flights are priced on their own (a group can bundle them for fixed departures).
       </p>
     </div>
+  );
+}
+
+// Optional quote sections — AI fill seeds them from the supplier text;
+// empty sections never appear on the share page or PDF.
+const FINE_PRINT_FIELDS = [
+  { key: 'inclusions', label: 'Inclusions', list: true, placeholder: 'One inclusion per line — e.g.\nAccommodation on double sharing\nDaily breakfast\nAll transfers by private cab' },
+  { key: 'exclusions', label: 'Exclusions', list: true, placeholder: 'One exclusion per line — e.g.\nGST 5%\nAirfare / train fare\nAnything not in inclusions' },
+  { key: 'payment_terms_text', label: 'Payment terms', list: false, placeholder: 'e.g. 50% at booking, balance 15 days before travel' },
+  { key: 'terms_conditions', label: 'Terms & conditions', list: false, placeholder: 'Leave empty to use your agency’s default T&C on the published quote' },
+  { key: 'special_notes', label: 'Special comments / notes', list: false, placeholder: 'e.g. Rooms subject to availability at confirmation; honeymoon cake on arrival' },
+] as const;
+
+// Raw text lives locally so typing newlines isn't fought by the
+// split/trim normalisation; the parsed value flows up on every change.
+function FinePrintTextarea({
+  initial,
+  rows,
+  placeholder,
+  onChange,
+}: {
+  initial: string;
+  rows: number;
+  placeholder: string;
+  onChange: (raw: string) => void;
+}) {
+  const [raw, setRaw] = useState(initial);
+  return (
+    <Textarea
+      rows={rows}
+      className="mt-2"
+      value={raw}
+      placeholder={placeholder}
+      onChange={(e) => {
+        setRaw(e.target.value);
+        onChange(e.target.value);
+      }}
+    />
+  );
+}
+
+function FinePrint({ data, update }: StepProps) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const p = data.proposal;
+  const setProposal = (patch: Partial<BuilderData['proposal']>) =>
+    update((d) => ({ ...d, proposal: { ...d.proposal, ...patch } }));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FileText className="h-4 w-4" /> Fine print <span className="text-xs font-normal text-muted-foreground">(all optional)</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="divide-y">
+        {FINE_PRINT_FIELDS.map(({ key, label, list, placeholder }) => {
+          const value = p[key];
+          const text = list ? ((value as string[]) ?? []).join('\n') : ((value as string | null) ?? '');
+          const open = openKey === key;
+          const hint = list
+            ? (value as string[])?.length
+              ? `${(value as string[]).length} item(s)`
+              : 'empty'
+            : (value as string | null)?.trim()
+              ? 'filled'
+              : key === 'terms_conditions'
+                ? 'empty — agency default applies'
+                : 'empty';
+          return (
+            <div key={key} className="py-2 first:pt-0 last:pb-0">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-sm w-full"
+                onClick={() => setOpenKey(open ? null : key)}
+              >
+                {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                {label}
+                <span className={`text-xs ml-1 ${hint.startsWith('empty') ? 'text-muted-foreground' : 'text-green-600'}`}>{hint}</span>
+              </button>
+              {open && (
+                <FinePrintTextarea
+                  rows={list ? 6 : 4}
+                  initial={text}
+                  placeholder={placeholder}
+                  onChange={(raw) =>
+                    setProposal(
+                      list
+                        ? { [key]: raw.split('\n').map((s) => s.trim()).filter(Boolean) }
+                        : { [key]: raw || null },
+                    )
+                  }
+                />
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
   );
 }
 

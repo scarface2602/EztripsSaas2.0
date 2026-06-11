@@ -93,11 +93,22 @@ export function ReviewStep({ data, totals, proposalId, save, shareToken }: Revie
               <p key={i.id} className="text-muted-foreground">{i.title}: {cur} {fmt(i.sell_amount ?? 0)}</p>
             ))}
             <p className="text-muted-foreground mt-1">
-              Land {cur} {fmt(totals.landSell)} · Flights {cur} {fmt(totals.flightSell)}
+              {totals.flightsBundled
+                ? `Package incl. flights ${cur} ${fmt(totals.sell)}`
+                : `Land ${cur} ${fmt(totals.landSell)} · Flights ${cur} ${fmt(totals.flightSell)}`}
+              {totals.gst > 0 && ` · GST ${cur} ${fmt(totals.gst)}`}
+              {totals.tcs > 0 && ` · TCS ${cur} ${fmt(totals.tcs)}`}
             </p>
             <p className="font-semibold">
               Grand total {cur} {fmt(totals.grand)}
               {totals.perPerson != null && ` (${cur} ${fmt(totals.perPerson)}/pax)`}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Quote shows {data.proposal.pricing_display_mode === 'per_person' ? 'per-person pricing' : data.proposal.pricing_display_mode === 'total' ? 'total pricing' : 'per-person and total pricing'}
+              {(data.proposal.inclusions.length > 0 || data.proposal.exclusions.length > 0) &&
+                ` · ${data.proposal.inclusions.length} inclusion(s), ${data.proposal.exclusions.length} exclusion(s)`}
+              {data.proposal.payment_terms_text && ' · payment terms set'}
+              {data.proposal.terms_conditions ? ' · custom T&C' : ' · agency default T&C'}
             </p>
           </div>
         </CardContent>

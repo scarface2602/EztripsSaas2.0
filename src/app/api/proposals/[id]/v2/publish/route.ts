@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { sendShareLinkEmail } from '@/lib/email/mailer';
 import { blocksForDay } from '@/lib/proposals/v2-blocks';
 import { buildV2Snapshot } from '@/lib/proposals/v2-snapshot';
+import { effectiveGroupAmounts } from '@/lib/proposals/v2-pricing';
 
 // Publish a Builder v2 proposal: freeze quoted costs, snapshot
 // published_data in the share-page shape (sell side ONLY — cost/markup
@@ -64,11 +65,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     content_blocks: [],
     builder_v2: {
       destinations: dests.map((d) => ({ city_name: d.city_name, nights: d.nights, sort_order: d.sort_order })),
-      // Sell side only — never cost_amount/markup.
-      price_groups: allGroups.map((g) => ({ name: g.name, sell_amount: Number(g.sell_amount) || 0 })),
-      land_sell: totalSell - flightSell,
+      // Sell side only — never cost_amount/markup. Per-person groups
+      // publish their effective total.
+      price_groups: allGroups.map((g) => ({
+        name: g.name,
+        sell_amount: effectiveGroupAmounts(g, (Number(proposal.pax_adults) || 0) + (Number(proposal.pax_children) || 0)).sell,
+      })),
+      land_sell: snap.totals.landSell,
       flight_sell: flightSell,
       total_sell: totalSell,
+      // Derived taxes: flight GST is 18% of the flight markup (zero for
+      // reimbursements); published as one number, shown merged into the
+      // GST line so the markup itself is never disclosed.
+      gst_amount: snap.totals.gst,
+      flight_gst: snap.totals.flightGst,
+      flights_bundled: snap.totals.flightsBundled,
+      per_person: snap.totals.perPerson,
     },
   };
 

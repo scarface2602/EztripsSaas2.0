@@ -506,6 +506,11 @@ export interface ParsedHotel {
   meal_plan: 'RO' | 'BB' | 'HB' | 'FB' | 'AI' | null;
   cp_per_night: number | null;
   description: string | null;
+  cancellation_policy?: string | null;
+  extra_bed_rate_per_night?: number | null;
+  cwb_rate_per_night?: number | null;
+  cnb_rate_per_night?: number | null;
+  child_policy?: string | null;
 }
 
 export interface ParsedFlight {

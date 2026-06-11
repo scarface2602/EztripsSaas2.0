@@ -136,6 +136,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   let pdfFlights = flights;
   let pdfLineItems = lineItems;
   let v2LandSell: number | null = null; // total_sp includes flights in v2 — split it
+  let v2FlightGst = 0; // 18% on flight markup, precomputed server-side
+  let v2FlightsBundled = false;
   if (proposal.builder_version === 2) {
     const snap = await buildV2Snapshot(supabase, id);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -144,7 +146,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     pdfFlights = snap.flights as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     pdfLineItems = snap.lineItems as any;
-    v2LandSell = snap.totalSell - snap.flightSell;
+    v2LandSell = snap.totals.landSell;
+    v2FlightGst = snap.totals.flightGst;
+    v2FlightsBundled = snap.totals.flightsBundled;
   }
 
   const draftData = (proposal.draft_data || {}) as Record<string, unknown>;
@@ -162,7 +166,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     org = orgData;
   }
 
-  const orgTerms    = (org?.terms_and_conditions || agentUser?.tc_content || '') as string;
+  // Proposal-specific T&C (quote-parsed or hand-entered) wins; the
+  // org/agent default is the fallback.
+  const orgTerms    = (proposal.terms_conditions || org?.terms_and_conditions || agentUser?.tc_content || '') as string;
   const orgName     = (org?.name || agentUser?.agency_name || '') as string;
   const orgLogoUrl  = (org?.logo_url || agentUser?.logo_url || '') as string;
   const orgPhone    = (org?.phone || '') as string;
@@ -180,8 +186,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const orgLogoDataUri = fetchedLogoDataUri || await getBundledLogo();
 
   const optionalAddons = (activities || []).filter((a: Record<string, unknown>) => a.is_optional);
-  const inclusions     = (pdfLineItems || []).filter((li: Record<string, unknown>) => li.is_included && li.description);
-  const exclusions     = (pdfLineItems || []).filter((li: Record<string, unknown>) => !li.is_included && li.description);
+  // Explicit fine-print lists (builder v2 / quote-parsed) win over the
+  // line-item derivation.
+  const propInclusions = ((proposal.inclusions as string[] | null) || []).filter((s) => s?.trim());
+  const propExclusions = ((proposal.exclusions as string[] | null) || []).filter((s) => s?.trim());
+  const inclusions     = propInclusions.length
+    ? propInclusions.map((s) => ({ description: s }))
+    : (pdfLineItems || []).filter((li: Record<string, unknown>) => li.is_included && li.description);
+  const exclusions     = propExclusions.length
+    ? propExclusions.map((s) => ({ description: s }))
+    : (pdfLineItems || []).filter((li: Record<string, unknown>) => !li.is_included && li.description);
 
   const showHotels      = pdfType !== 'flight_only';
   const showFlights     = pdfType !== 'hotel_only';
@@ -230,7 +244,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const discount       = Number(proposal.discount_amount) || 0;
   const subtotal       = pricingLandSP + pricingFlightSP;
   const afterDiscount  = subtotal - discount;
-  const gstAmt         = proposal.gst_enabled ? afterDiscount * (Number(proposal.gst_rate) || 5) / 100 : 0;
+  // Builder v2: the land GST rate covers the land part only; separately
+  // shown flights carry the precomputed markup-GST (zero when sold at
+  // cost), merged into one GST line so the markup is never disclosed.
+  const gstRateNum     = Number(proposal.gst_rate) || 5;
+  const gstBase        = v2LandSell != null && !v2FlightsBundled
+    ? Math.max(afterDiscount - pricingFlightSP, 0)
+    : afterDiscount;
+  const gstFlightPart  = v2LandSell != null && pdfType !== 'hotel_only' ? v2FlightGst : 0;
+  const gstAmt         = proposal.gst_enabled ? gstBase * gstRateNum / 100 + gstFlightPart : 0;
   const tcsAmt         = proposal.tcs_enabled ? (afterDiscount + gstAmt) * (Number(proposal.tcs_rate) || 5) / 100 : 0;
   const grandTotal     = afterDiscount + gstAmt + tcsAmt;
 
@@ -240,10 +262,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const hasBreakdown = (pricingLandSP > 0 && pricingFlightSP > 0) || discount > 0
     || !!proposal.gst_enabled || !!proposal.tcs_enabled;
 
-  // Pricing display mode: per_person, total, or both
+  // Pricing display mode: per_person, total, or both. v1 stores an
+  // explicit per-person SP; v2 derives it from the grand total ÷ pax.
   const displayMode = (proposal.pricing_display_mode as string) || 'per_person';
-  const adultSP = Number(proposal.package_sp_per_person) || 0;
-  const paxAdults = Number(proposal.pax_adults) || 1;
+  const paxTotal = (Number(proposal.pax_adults) || 0) + (Number(proposal.pax_children) || 0);
+  const v1AdultSP = Number(proposal.package_sp_per_person) || 0;
+  const adultSP = v1AdultSP > 0 ? v1AdultSP : v2LandSell != null && paxTotal > 0 ? grandTotal / paxTotal : 0;
+  const paxAdults = v1AdultSP > 0 ? Number(proposal.pax_adults) || 1 : Math.max(paxTotal, 1);
 
   let pricingRows = '';
   if (hasBreakdown) {
@@ -258,14 +283,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (discount > 0)
       pricingRows += `<tr><td>Discount${proposal.discount_note ? ` (${cleanText(String(proposal.discount_note))})` : ''}</td><td style="text-align:right;color:#dc2626;">-${R(discount)}</td></tr>`;
     if (proposal.gst_enabled)
-      pricingRows += `<tr><td>GST (${proposal.gst_rate}%)</td><td style="text-align:right;">${R(gstAmt)}</td></tr>`;
+      pricingRows += `<tr><td>GST${gstFlightPart > 0 ? '' : ` (${proposal.gst_rate}%)`}</td><td style="text-align:right;">${R(gstAmt)}</td></tr>`;
     if (proposal.tcs_enabled)
       pricingRows += `<tr><td>TCS (${proposal.tcs_rate || 5}%)</td><td style="text-align:right;">${R(tcsAmt)}</td></tr>`;
   }
 
-  if (displayMode === 'per_person' && adultSP > 0) {
+  if (displayMode === 'per_person' && adultSP > 0 && v1AdultSP > 0) {
     pricingRows += `<tr class="grand-total-row"><td><strong>Per Person</strong></td><td style="text-align:right;"><strong>${R(adultSP)}</strong></td></tr>`;
-  } else if (displayMode === 'both' && adultSP > 0) {
+  } else if ((displayMode === 'both' || displayMode === 'per_person') && adultSP > 0) {
     pricingRows += `<tr class="grand-total-row"><td><strong>Per Person</strong></td><td style="text-align:right;"><strong>${R(adultSP)}</strong></td></tr>`;
     pricingRows += `<tr><td><strong>Grand Total (${paxAdults} pax)</strong></td><td style="text-align:right;"><strong>${R(grandTotal)}</strong></td></tr>`;
   } else if (grandTotal > 0) {
@@ -387,16 +412,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         <td>
           <strong>${toTitleCase(String(h.name || ''))}</strong><br/>
           <span style="font-size:0.8rem;color:#555;">${toTitleCase(String(h.city || ''))}${Number(h.star_rating) > 0 ? ` &middot; ${'&#9733;'.repeat(Number(h.star_rating))}` : ''}</span><br/>
-          <span class="badge ${h.is_non_refundable ? 'badge-nr' : 'badge-r'}" style="margin-top:3px;">${h.is_non_refundable ? 'Non-Refundable' : 'Refundable'}</span>
+          ${h.refundable_known === false ? '' : `<span class="badge ${h.is_non_refundable ? 'badge-nr' : 'badge-r'}" style="margin-top:3px;">${h.is_non_refundable ? 'Non-Refundable' : 'Refundable'}</span>`}
           ${h.early_checkin_requested ? '<span class="badge" style="background:#e0e7ff;color:#3730a3;margin-left:4px;">Early Check-in</span>' : ''}
           ${h.late_checkout_requested ? '<span class="badge" style="background:#e0e7ff;color:#3730a3;margin-left:4px;">Late Check-out</span>' : ''}
         </td>
-        <td>${toTitleCase(String(h.room_type || ''))}${h.room_view ? `<br/><span style="font-size:0.78rem;color:#666;">${toTitleCase(String(h.room_view))}</span>` : ''}</td>
+        <td>${toTitleCase(String(h.room_type || ''))}${h.room_view ? `<br/><span style="font-size:0.78rem;color:#666;">${toTitleCase(String(h.room_view))}</span>` : ''}${h.occupancy ? `<br/><span style="font-size:0.78rem;color:#666;">${cleanText(String(h.occupancy))}</span>` : ''}</td>
         <td>${formatMealPlan(h.meal_plan)}</td>
         <td>${h.check_in ? fmtDate(String(h.check_in)) : '&#8212;'}</td>
         <td>${h.check_out ? fmtDate(String(h.check_out)) : '&#8212;'}</td>
         <td style="text-align:center;font-weight:600;">${h.nights ?? '&#8212;'}</td>
       </tr>
+      ${h.policy_note ? `<tr><td colspan="6" style="padding:0 12px 8px;color:#92400e;font-size:0.8rem;">${cleanText(String(h.policy_note))}</td></tr>` : ''}
       ${h.description ? `<tr><td colspan="6" style="padding:4px 12px 12px;color:#555;font-size:0.84rem;">${cleanText(h.description as string)}</td></tr>` : ''}
     `).join('')}
     </tbody>
@@ -487,8 +513,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     <tr><td><strong>Travel Dates</strong></td><td>${proposal.travel_start ? fmtDate(String(proposal.travel_start)) : '&#8212;'} to ${proposal.travel_end ? fmtDate(String(proposal.travel_end)) : '&#8212;'}</td></tr>
     <tr><td><strong>Travellers</strong></td><td>${proposal.pax_adults} Adults${(proposal.pax_children as number) > 0 ? `, ${proposal.pax_children} Children${proposal.children_ages ? ` (Ages: ${(proposal.children_ages as number[]).join(', ')})` : ''}` : ''}</td></tr>
     ${(proposal.trip_cities as Array<{city: string; nights: number}> || []).length > 0 ? `<tr><td><strong>Cities</strong></td><td>${(proposal.trip_cities as Array<{city: string; nights: number}>).map(c => `${toTitleCase(c.city)} (${c.nights}N)`).join(' &#8594; ')}</td></tr>` : ''}
-    <tr><td><strong>Trip ID</strong></td><td>${(proposal.trip_id as string) || String(proposal.id).slice(0, 8).toUpperCase()}</td></tr>
-    ${proposal.special_notes ? `<tr><td><strong>Special Occasions</strong></td><td>${cleanText(String(proposal.special_notes))}</td></tr>` : ''}
+    ${proposal.trip_id ? `<tr><td><strong>Trip ID</strong></td><td>${proposal.trip_id as string}</td></tr>` : ''}
+    ${proposal.special_notes ? `<tr><td><strong>Notes</strong></td><td>${cleanText(String(proposal.special_notes))}</td></tr>` : ''}
     ${proposal.dietary_notes ? `<tr><td><strong>Dietary Notes</strong></td><td>${cleanText(String(proposal.dietary_notes))}</td></tr>` : ''}
     ${vehicleType ? `<tr><td><strong>Vehicle Type</strong></td><td>${toTitleCase(String(vehicleType).replace(/_/g, ' '))}</td></tr>` : ''}
     ${vehicleModel ? `<tr><td><strong>Vehicle Model</strong></td><td>${cleanText(String(vehicleModel))}</td></tr>` : ''}
@@ -604,9 +630,11 @@ ${showCancellation ? `
 <!-- Payment Terms -->
 <div class="section">
   <h2>Payment Terms</h2>
-  <p>${(proposal.payment_terms as Record<string, unknown>)?.deposit_pct || 25}% deposit upon booking confirmation</p>
+  ${proposal.payment_terms_text
+    ? `<div style="white-space:pre-wrap;">${escapeHtml(cleanText(String(proposal.payment_terms_text)))}</div>`
+    : `<p>${(proposal.payment_terms as Record<string, unknown>)?.deposit_pct || 25}% deposit upon booking confirmation</p>
   <p>Balance due ${(proposal.payment_terms as Record<string, unknown>)?.balance_days_before || 30} days before departure</p>
-  ${(proposal.payment_terms as Record<string, unknown>)?.notes ? `<p style="margin-top:6px;">${cleanText(String((proposal.payment_terms as Record<string, unknown>).notes))}</p>` : ''}
+  ${(proposal.payment_terms as Record<string, unknown>)?.notes ? `<p style="margin-top:6px;">${cleanText(String((proposal.payment_terms as Record<string, unknown>).notes))}</p>` : ''}`}
 </div>
 
 ${orgTerms ? `

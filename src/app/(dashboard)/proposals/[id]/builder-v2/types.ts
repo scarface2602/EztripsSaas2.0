@@ -1,5 +1,7 @@
 // Client-side shapes for Builder v2 — mirror the v2 API payload.
 
+import { computeV2Totals } from '@/lib/proposals/v2-pricing';
+
 export interface DestinationRow {
   id: string;
   city_id: number | null;
@@ -18,6 +20,8 @@ export interface PriceGroupRow {
   markup_type: 'percent' | 'flat';
   markup_value: number;
   sell_amount: number;
+  /** 'per_person' → cost/sell are per pax; totals multiply by pax. */
+  price_basis: 'total' | 'per_person';
   sort_order: number;
 }
 
@@ -55,7 +59,34 @@ export interface ProposalCore {
   gst_rate: number;
   tcs_enabled: boolean;
   tcs_rate: number;
+  cover_image_url: string | null;
+  pricing_display_mode: 'per_person' | 'total' | 'both';
+  inclusions: string[];
+  exclusions: string[];
+  payment_terms_text: string | null;
+  terms_conditions: string | null;
   special_notes: string | null;
+}
+
+/**
+ * Hotel occupancy & policy, stored inside the stay item's details JSONB.
+ * Counts cover the third-adult / child cases DMC quotes price separately:
+ * EB (extra bed), CWB (child with bed), CNB (child no bed), and
+ * children_free for hotels that let young kids stay complimentary.
+ * Rates are per night, informational when the price sits in a group.
+ */
+export interface StayOccupancy {
+  rooms?: number;
+  extra_beds?: number;
+  eb_rate?: number;
+  cwb?: number;
+  cwb_rate?: number;
+  cnb?: number;
+  cnb_rate?: number;
+  children_free?: number;
+  child_policy?: string;
+  refundable?: boolean;
+  free_cancellation_until?: string;
 }
 
 export type TransferMode = 'SIC' | 'PVT' | 'NONE';
@@ -158,35 +189,20 @@ export function computeSell(cost: number, type: 'percent' | 'flat', value: numbe
 }
 
 /**
- * Sells rolled up: groups + self-priced items. Flights are ALWAYS priced
- * separately (never inside a land/price group) and reported as their own
- * subtotal — the client must see land vs flights split.
+ * Sells rolled up via the shared v2 pricing module (also used by the save
+ * route and publish snapshot). Flights priced separately are their own
+ * subtotal with GST only on their markup; flights pulled into a group
+ * (fixed-departure override) are part of the package price.
  */
 export function rollupTotals(data: BuilderData) {
-  const groupSell = data.groups.reduce((s, g) => s + g.sell_amount, 0);
-  const groupCost = data.groups.reduce((s, g) => s + g.cost_amount, 0);
-  const selfItems = data.items.filter((i) => !i.price_group_id && i.sell_amount != null);
-  const flightItems = selfItems.filter((i) => i.item_type === 'flight');
-  const otherItems = selfItems.filter((i) => i.item_type !== 'flight');
-  const flightSell = flightItems.reduce((s, i) => s + (i.sell_amount ?? 0), 0);
-  const flightCost = flightItems.reduce((s, i) => s + (i.cost_amount ?? 0), 0);
-  const landSell = groupSell + otherItems.reduce((s, i) => s + (i.sell_amount ?? 0), 0);
-  const landCost = groupCost + otherItems.reduce((s, i) => s + (i.cost_amount ?? 0), 0);
-  const sell = landSell + flightSell;
-  const cost = landCost + flightCost;
   const p = data.proposal;
-  // GST on the package value; TCS (LRS) on the GST-inclusive amount —
-  // same rule as the PDF and share page.
-  const gst = p.gst_enabled ? (sell * p.gst_rate) / 100 : 0;
-  const tcs = p.tcs_enabled ? ((sell + gst) * p.tcs_rate) / 100 : 0;
-  const grand = sell + gst + tcs;
-  const pax = p.pax_adults + p.pax_children;
-  return {
-    cost, sell, gst, tcs, grand,
-    landSell, flightSell,
-    margin: sell - cost,
-    perPerson: pax > 0 ? grand / pax : null,
-  };
+  return computeV2Totals(data.groups, data.items, {
+    pax: p.pax_adults + p.pax_children,
+    gst_enabled: p.gst_enabled,
+    gst_rate: p.gst_rate,
+    tcs_enabled: p.tcs_enabled,
+    tcs_rate: p.tcs_rate,
+  });
 }
 
 /** Stay date ranges derived from travel_start + cumulative nights. */

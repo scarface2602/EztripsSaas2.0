@@ -81,7 +81,13 @@ export function ShareLinkClient({
   // show the same number.
   const baseTotal = Number(proposal.total_sp) || 0;
   const v2Pricing = ((proposal.published_data as Record<string, unknown> | null)?.builder_v2 ?? null) as
-    | { land_sell: number; flight_sell: number; total_sell: number }
+    | {
+        land_sell: number;
+        flight_sell: number;
+        total_sell: number;
+        flight_gst?: number;
+        flights_bundled?: boolean;
+      }
     | null;
   const addOnTotal = Array.from(selectedAddons).reduce((sum, id) => {
     const act = activities.find(a => a.id === id);
@@ -107,10 +113,15 @@ export function ShareLinkClient({
 
   // Taxes — only when explicitly enabled by the agent. GST applies on the
   // package value; TCS (LRS) applies on the GST-inclusive amount, same as
-  // the PDF and the builder.
+  // the PDF and the builder. Builder v2 splits GST: the land rate covers
+  // the land part only, and separately-shown flights carry a precomputed
+  // markup-GST amount (one merged line — the markup is never disclosed).
   const gstEnabled = proposal.gst_enabled === true;
   const gstRate = gstEnabled ? (Number(proposal.gst_rate) || 0) : 0;
-  const gstAmount = gstEnabled && gstRate > 0 ? Math.round(afterDiscount * gstRate / 100) : 0;
+  const v2FlightGst = gstEnabled ? Number(v2Pricing?.flight_gst) || 0 : 0;
+  const v2SeparateFlights = v2Pricing && !v2Pricing.flights_bundled ? Number(v2Pricing.flight_sell) || 0 : 0;
+  const gstBase = Math.max(afterDiscount - v2SeparateFlights, 0);
+  const gstAmount = gstEnabled ? Math.round(gstBase * gstRate / 100 + v2FlightGst) : 0;
   const tcsEnabled = proposal.tcs_enabled === true;
   const tcsRate = tcsEnabled ? (Number(proposal.tcs_rate) || 0) : 0;
   const tcsAmount = tcsEnabled && tcsRate > 0 ? Math.round((afterDiscount + gstAmount) * tcsRate / 100) : 0;
@@ -262,6 +273,8 @@ export function ShareLinkClient({
                     {h.city as string} · {fmt(h.check_in as string)} to {fmt(h.check_out as string)} ({h.nights as number} nights)
                   </p>
                   {Boolean(h.room_type) && <p className="text-xs text-muted-foreground">{h.room_type as string} · {(h.meal_plan as string) || 'RO'}</p>}
+                  {Boolean(h.occupancy) && <p className="text-xs text-muted-foreground">{h.occupancy as string}</p>}
+                  {Boolean(h.policy_note) && <p className="text-xs text-amber-700 mt-0.5">{h.policy_note as string}</p>}
                   {Boolean(h.description) && <p className="text-xs mt-1">{h.description as string}</p>}
                 </div>
               ))}
@@ -284,11 +297,18 @@ export function ShareLinkClient({
                         <span className="text-xs font-normal text-muted-foreground"> · operated by {String(f.operated_by)}</span>
                       )}
                     </p>
-                    {Number(f.sp_total) > 0 && (
-                      <span className="text-sm font-semibold whitespace-nowrap">
+                    {Number(f.sp_total) > 0 ? (
+                      <span className="text-sm font-semibold whitespace-nowrap text-right">
                         {cur}{Number(f.sp_total).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        {Number(f.sp_per_pax) > 0 && (
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {cur}{Number(f.sp_per_pax).toLocaleString('en-IN', { maximumFractionDigits: 0 })}/person
+                          </span>
+                        )}
                       </span>
-                    )}
+                    ) : f.in_package ? (
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">Included in package</span>
+                    ) : null}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {[f.origin_city, f.origin_iata].filter(Boolean).length > 0 &&
@@ -454,7 +474,7 @@ export function ShareLinkClient({
             {(gstAmount > 0 || tcsAmount > 0) && <Separator />}
             {gstAmount > 0 && (
               <div className="flex justify-between text-muted-foreground">
-                <span>GST @{gstRate}%</span>
+                <span>GST{v2FlightGst > 0 ? '' : ` @${gstRate}%`}</span>
                 <span>+{cur}{gstAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
               </div>
             )}
@@ -465,10 +485,27 @@ export function ShareLinkClient({
               </div>
             )}
             <Separator />
-            <div className="flex justify-between text-lg font-bold pt-1">
-              <span>Grand Total</span>
-              <span>{cur}{finalTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-            </div>
+            {(() => {
+              // Per-person quoting: how the guest asked to see the price.
+              const displayMode = (proposal.pricing_display_mode as string) || 'per_person';
+              const pax = (Number(proposal.pax_adults) || 0) + (Number(proposal.pax_children) || 0);
+              const perPerson = pax > 0 ? Math.round(finalTotal / pax) : 0;
+              const showPP = displayMode !== 'total' && perPerson > 0;
+              return (
+                <>
+                  <div className="flex justify-between text-lg font-bold pt-1">
+                    <span>Grand Total{pax > 0 ? ` (${pax} pax)` : ''}</span>
+                    <span>{cur}{finalTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                  </div>
+                  {showPP && (
+                    <div className="flex justify-between text-sm font-medium text-muted-foreground">
+                      <span>Per person</span>
+                      <span>{cur}{perPerson.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             {isDynamicPricing && (
               <p className="text-xs text-amber-700 mt-2">* Final price valid at the time of booking confirmation</p>
             )}
@@ -508,6 +545,50 @@ export function ShareLinkClient({
           </CardContent>
         </Card>
 
+        {/* Fine print — only sections the agent filled (or the quote carried) */}
+        {(() => {
+          const list = (v: unknown) => (Array.isArray(v) ? (v as string[]).filter((s) => s?.trim()) : []);
+          const inclusionList = list(proposal.inclusions);
+          const exclusionList = list(proposal.exclusions);
+          const paymentTerms = (proposal.payment_terms_text as string | null)?.trim();
+          const notes = (proposal.special_notes as string | null)?.trim();
+          if (!inclusionList.length && !exclusionList.length && !paymentTerms && !notes) return null;
+          return (
+            <Card>
+              <CardContent className="pt-6 space-y-4 text-sm">
+                {inclusionList.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold mb-1">Inclusions</h3>
+                    <ul className="list-disc ml-5 space-y-0.5 text-muted-foreground">
+                      {inclusionList.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {exclusionList.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold mb-1">Exclusions</h3>
+                    <ul className="list-disc ml-5 space-y-0.5 text-muted-foreground">
+                      {exclusionList.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {paymentTerms && (
+                  <div>
+                    <h3 className="font-semibold mb-1">Payment Terms</h3>
+                    <p className="text-muted-foreground whitespace-pre-line">{paymentTerms}</p>
+                  </div>
+                )}
+                {notes && (
+                  <div>
+                    <h3 className="font-semibold mb-1">Notes</h3>
+                    <p className="text-muted-foreground whitespace-pre-line">{notes}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
+
         {/* T&C + Accept */}
         <Card>
           <CardContent className="pt-6 space-y-4">
@@ -521,9 +602,10 @@ export function ShareLinkClient({
               <Checkbox checked={tcAccepted} onCheckedChange={(v) => setTcAccepted(!!v)} />
               <span className="text-sm">I agree to the Terms and Conditions</span>
             </label>
-            {!!agent?.tc_content && tcAccepted && (
-              <div className="max-h-40 overflow-y-auto p-3 bg-muted/50 rounded text-xs">
-                {String(agent.tc_content)}
+            {/* Proposal-specific T&C wins; agency default is the fallback. */}
+            {!!(proposal.terms_conditions || agent?.tc_content) && tcAccepted && (
+              <div className="max-h-40 overflow-y-auto p-3 bg-muted/50 rounded text-xs whitespace-pre-line">
+                {String(proposal.terms_conditions || agent?.tc_content)}
               </div>
             )}
             <Button className="w-full" size="lg" disabled={!canAccept} onClick={handleAccept}>

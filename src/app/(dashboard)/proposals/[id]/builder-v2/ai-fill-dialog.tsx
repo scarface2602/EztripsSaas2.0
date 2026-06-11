@@ -117,6 +117,12 @@ export function AiFillDialog({ data, update }: AiFillDialogProps) {
           details: {
             room_type: h.room_type ?? '',
             meal_plan: h.meal_plan ? (MEAL_MAP[h.meal_plan] ?? h.meal_plan) : 'CP',
+            // Occupancy & policy extras land in the stay drawer.
+            ...(h.extra_bed_rate_per_night ? { eb_rate: h.extra_bed_rate_per_night } : {}),
+            ...(h.cwb_rate_per_night ? { cwb_rate: h.cwb_rate_per_night } : {}),
+            ...(h.cnb_rate_per_night ? { cnb_rate: h.cnb_rate_per_night } : {}),
+            ...(h.child_policy ? { child_policy: h.child_policy } : {}),
+            ...(h.cancellation_policy ? { notes: h.cancellation_policy } : {}),
           },
         });
       }
@@ -139,6 +145,7 @@ export function AiFillDialog({ data, update }: AiFillDialogProps) {
             markup_type: 'percent' as const,
             markup_value: 15,
             sell_amount: 0,
+            price_basis: 'total' as const,
             sort_order: 0,
           }]
         : [];
@@ -179,6 +186,10 @@ export function AiFillDialog({ data, update }: AiFillDialogProps) {
           travel_start: parsed.travel_start ?? d.proposal.travel_start,
           pax_adults: parsed.pax_adults ?? d.proposal.pax_adults,
           pax_children: parsed.pax_children ?? d.proposal.pax_children,
+          // Fine print straight from the quote when present.
+          inclusions: parsed.inclusions?.length ? parsed.inclusions : d.proposal.inclusions,
+          exclusions: parsed.exclusions?.length ? parsed.exclusions : d.proposal.exclusions,
+          payment_terms_text: parsed.payment_terms || d.proposal.payment_terms_text,
         },
         destinations,
         items,

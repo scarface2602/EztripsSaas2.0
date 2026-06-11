@@ -2,7 +2,7 @@
 // as non-blocking warnings. Goal: catch human error (wrong-country
 // flight, out-of-window dates, unpriced work) before the client does.
 
-import type { BuilderData } from './types';
+import type { BuilderData, StayOccupancy } from './types';
 
 export interface ProposalWarning {
   id: string;
@@ -119,6 +119,35 @@ export function buildWarnings(data: BuilderData): ProposalWarning[] {
   // ── Stays ──
   for (const i of items.filter((x) => x.item_type === 'hotel' && x.title.startsWith('Hotel in '))) {
     warnings.push({ id: `nohotel-${i.id}`, step: 'stays', message: `No hotel picked yet for ${i.title.replace('Hotel in ', '')}.` });
+  }
+
+  // ── Occupancy: 3rd adult / child bedding must be decided per stay ──
+  const hotelStays = items.filter((x) => x.item_type === 'hotel');
+  if (proposal.pax_adults > 2) {
+    for (const s of hotelStays) {
+      const occ = s.details as StayOccupancy;
+      // Default assumption is one double room; enough rooms or an EB clears it.
+      if ((occ.rooms ?? 1) * 2 < proposal.pax_adults && !occ.extra_beds) {
+        warnings.push({
+          id: `eb-${s.id}`,
+          step: 'stays',
+          message: `${proposal.pax_adults} adults but "${s.title}" has no extra bed — a 3rd adult in a double room needs an EB (or add rooms in Occupancy & policy).`,
+        });
+      }
+    }
+  }
+  if (proposal.pax_children > 0 && hotelStays.length > 0) {
+    const childHandled = hotelStays.some((s) => {
+      const occ = s.details as StayOccupancy;
+      return (occ.cwb ?? 0) > 0 || (occ.cnb ?? 0) > 0 || (occ.children_free ?? 0) > 0 || !!occ.child_policy?.trim();
+    });
+    if (!childHandled) {
+      warnings.push({
+        id: 'child-policy',
+        step: 'stays',
+        message: `${proposal.pax_children} child(ren) on this trip but no stay records CWB / CNB / free child stay — hotels price these differently, set it in Occupancy & policy.`,
+      });
+    }
   }
 
   return warnings;

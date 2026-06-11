@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withAuth } from '@/lib/api/with-auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { blocksForDay, blockToRow } from '@/lib/proposals/v2-blocks';
+import { computeV2Totals } from '@/lib/proposals/v2-pricing';
 
 // GET/PUT the full Builder v2 payload (proposal core + destinations +
 // price groups + items). The client generates UUIDs for new rows, so a
@@ -27,6 +28,7 @@ const groupSchema = z.object({
   markup_type: z.enum(['percent', 'flat']),
   markup_value: z.number().min(0),
   sell_amount: z.number().min(0),
+  price_basis: z.enum(['total', 'per_person']).default('total'),
   sort_order: z.number().int(),
 });
 
@@ -86,6 +88,12 @@ const saveSchema = z.object({
     gst_rate: z.number().min(0).max(100),
     tcs_enabled: z.boolean(),
     tcs_rate: z.number().min(0).max(100),
+    cover_image_url: z.string().max(2000).nullable(),
+    pricing_display_mode: z.enum(['per_person', 'total', 'both']).default('per_person'),
+    inclusions: z.array(z.string().trim().max(500)).default([]),
+    exclusions: z.array(z.string().trim().max(500)).default([]),
+    payment_terms_text: z.string().max(8000).nullable(),
+    terms_conditions: z.string().max(16000).nullable(),
     special_notes: z.string().nullable(),
   }),
   destinations: z.array(destinationSchema),
@@ -146,9 +154,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: `Proposal is ${current.status} and read-only` }, { status: 409 });
   }
 
-  const totalSell =
-    groups.reduce((s, g) => s + g.sell_amount, 0) +
-    items.reduce((s, i) => s + (i.price_group_id ? 0 : (i.sell_amount ?? 0)), 0);
+  const totalSell = computeV2Totals(groups, items, {
+    pax: proposal.pax_adults + proposal.pax_children,
+    gst_enabled: false, // total_sp is the pre-tax sell, as in v1
+    gst_rate: 0,
+    tcs_enabled: false,
+    tcs_rate: 0,
+  }).sell;
 
   const { error: pErr } = await supabase
     .from('proposals')

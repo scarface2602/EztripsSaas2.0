@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AsyncCombobox, type AsyncOption } from '@/components/ui/async-combobox';
-import { Minus, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Minus, Plus, Trash2, ArrowUp, ArrowDown, ImageIcon, Upload, Loader2 } from 'lucide-react';
 import { CURRENCY_OPTIONS } from '@/lib/utils/pricing';
 import type { BuilderData, DestinationRow } from '../types';
 
@@ -260,8 +260,129 @@ export function TripStep({ data, update, proposalId }: StepProps) {
         </CardContent>
       </Card>
 
+      {proposalId && (
+        <CoverImageCard
+          proposalId={proposalId}
+          url={proposal.cover_image_url}
+          onChange={(cover_image_url) => setProposal({ cover_image_url })}
+        />
+      )}
+
       {proposalId && <PastItineraryPanel proposalId={proposalId} cities={destinations.map((d) => d.city_name)} />}
     </div>
+  );
+}
+
+// Cover photo for the share page + PDF cover. Upload a fresh one or
+// reuse any cover from past proposals (the library).
+function CoverImageCard({
+  proposalId,
+  url,
+  onChange,
+}: {
+  proposalId: string;
+  url: string | null;
+  onChange: (url: string | null) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [library, setLibrary] = useState<{ url: string; label: string }[] | null>(null);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function upload(file: File) {
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/proposals/${proposalId}/upload-cover`, { method: 'POST', body: form });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? 'Upload failed');
+      onChange(body.url);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function openLibrary() {
+    setShowLibrary((s) => !s);
+    if (library) return;
+    try {
+      const res = await fetch('/api/proposals/cover-library');
+      const d = res.ok ? await res.json() : { images: [] };
+      setLibrary(d.images ?? []);
+    } catch {
+      setLibrary([]);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ImageIcon className="h-4 w-4" /> Cover image
+          <span className="text-xs font-normal text-muted-foreground">(share page &amp; PDF cover)</span>
+        </CardTitle>
+        <div className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-sm font-medium hover:bg-muted cursor-pointer">
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            Upload
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={uploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void upload(f);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          <Button variant="outline" size="sm" onClick={() => void openLibrary()}>
+            {showLibrary ? 'Hide library' : 'Choose from library'}
+          </Button>
+          {url && (
+            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => onChange(null)}>
+              Remove
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="Cover" className="w-full max-h-56 object-cover rounded-lg border" />
+        ) : (
+          <p className="text-sm text-muted-foreground">No cover yet — the PDF falls back to a plain banner.</p>
+        )}
+        {showLibrary && (
+          library === null ? (
+            <p className="text-sm text-muted-foreground">Loading library…</p>
+          ) : library.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No past covers yet — upload one and it joins the library.</p>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {library.map((img) => (
+                <button
+                  key={img.url}
+                  type="button"
+                  title={img.label}
+                  className={`relative rounded-md overflow-hidden border hover:ring-2 hover:ring-primary ${img.url === url ? 'ring-2 ring-primary' : ''}`}
+                  onClick={() => onChange(img.url)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={img.url} alt={img.label || 'Cover option'} className="h-20 w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { generateTripIdFromDb, type ServiceType, type TripIdConfig } from '@/lib/utils/generateId';
 import { getTripIdConfig } from '@/lib/utils/getTripIdConfig';
+import { effectiveGroupAmounts, effectiveItemAmounts } from '@/lib/proposals/v2-pricing';
 
 export async function createBookingsFromProposal(
   supabase: ReturnType<typeof createServiceClient>,
@@ -91,10 +92,13 @@ export async function createBookingsFromProposal(
     const items = v2Items || [];
     const selfItems = items.filter(i => !i.price_group_id);
 
-    const totalCost = groups.reduce((s, g) => s + (Number(g.cost_amount) || 0), 0)
-      + selfItems.reduce((s, i) => s + (Number(i.cost_amount) || 0), 0);
-    const totalSell = groups.reduce((s, g) => s + (Number(g.sell_amount) || 0), 0)
-      + selfItems.reduce((s, i) => s + (Number(i.sell_amount) || 0), 0);
+    // Per-person groups and per-pax flights store unit amounts; the
+    // booking carries the effective totals.
+    const v2Pax = (Number(proposal.pax_adults) || 0) + (Number(proposal.pax_children) || 0);
+    const totalCost = groups.reduce((s, g) => s + effectiveGroupAmounts(g, v2Pax).cost, 0)
+      + selfItems.reduce((s, i) => s + (effectiveItemAmounts(i, v2Pax).cost ?? 0), 0);
+    const totalSell = groups.reduce((s, g) => s + effectiveGroupAmounts(g, v2Pax).sell, 0)
+      + selfItems.reduce((s, i) => s + (effectiveItemAmounts(i, v2Pax).sell ?? 0), 0);
 
     const { data: booking } = await supabase.from('bookings').insert({
       ...common,
@@ -122,8 +126,8 @@ export async function createBookingsFromProposal(
           booking_id: booking.id,
           item_type: 'dmc_package',
           label: g.name,
-          cost_price: Math.round((Number(g.cost_amount) || 0) * 100) / 100,
-          sell_price: Math.round((Number(g.sell_amount) || 0) * 100) / 100,
+          cost_price: effectiveGroupAmounts(g, v2Pax).cost,
+          sell_price: effectiveGroupAmounts(g, v2Pax).sell,
           vendor_name: g.supplier_name || null,
           supplier_id: g.supplier_id || null,
           supplier_status: 'pending',
@@ -140,8 +144,8 @@ export async function createBookingsFromProposal(
           label: i.title,
           start_date: i.check_in,
           end_date: i.check_out,
-          cost_price: inGroup ? 0 : Math.round((Number(i.cost_amount) || 0) * 100) / 100,
-          sell_price: inGroup ? 0 : Math.round((Number(i.sell_amount) || 0) * 100) / 100,
+          cost_price: inGroup ? 0 : effectiveItemAmounts(i, v2Pax).cost ?? 0,
+          sell_price: inGroup ? 0 : effectiveItemAmounts(i, v2Pax).sell ?? 0,
           supplier_status: 'pending',
           details: {
             ...(i.details || {}),

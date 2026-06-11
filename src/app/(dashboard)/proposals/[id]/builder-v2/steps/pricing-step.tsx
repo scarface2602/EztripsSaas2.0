@@ -8,9 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AsyncCombobox, type AsyncOption } from '@/components/ui/async-combobox';
 import { createClient } from '@/lib/supabase/client';
-import { Trash2, Plus, IndianRupee } from 'lucide-react';
+import { Trash2, Plus, IndianRupee, Plane } from 'lucide-react';
 import type { BuilderData, PriceGroupRow } from '../types';
 import { computeSell, rollupTotals } from '../types';
+import { effectiveGroupAmounts, effectiveItemAmounts, FLIGHT_MARKUP_GST_PCT } from '@/lib/proposals/v2-pricing';
+
+const paxOf = (d: BuilderData) => d.proposal.pax_adults + d.proposal.pax_children;
 
 interface StepProps {
   data: BuilderData;
@@ -49,6 +52,7 @@ export function PricingStep({ data, update }: StepProps) {
           markup_type: 'percent',
           markup_value: 15,
           sell_amount: 0,
+          price_basis: 'total',
           sort_order: d.groups.length,
         },
       ],
@@ -97,7 +101,7 @@ export function PricingStep({ data, update }: StepProps) {
       <Card>
         <CardHeader><CardTitle>Taxes &amp; total</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-8">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -105,7 +109,7 @@ export function PricingStep({ data, update }: StepProps) {
                 checked={data.proposal.gst_enabled}
                 onChange={(e) => setProposal({ gst_enabled: e.target.checked })}
               />
-              <Label className="cursor-pointer">GST</Label>
+              <Label className="cursor-pointer">GST (land/package)</Label>
               <Input
                 type="number" className="w-20 h-8" min={0} max={100} step="0.1"
                 value={data.proposal.gst_rate}
@@ -128,12 +132,50 @@ export function PricingStep({ data, update }: StepProps) {
               />
               <span className="text-sm text-muted-foreground">%</span>
             </label>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Show prices</Label>
+              <Select
+                value={data.proposal.pricing_display_mode}
+                onValueChange={(v) =>
+                  setProposal({ pricing_display_mode: (v ?? 'per_person') as 'per_person' | 'total' | 'both' })
+                }
+              >
+                <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="per_person">Per person</SelectItem>
+                  <SelectItem value="total">Total</SelectItem>
+                  <SelectItem value="both">Both</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          {data.proposal.gst_enabled && (
+            <p className="text-xs text-muted-foreground">
+              {totals.flightsBundled
+                ? `Flights are bundled in the package (fixed departure) — ${data.proposal.gst_rate}% GST applies to the whole package.`
+                : totals.flightSell > 0
+                  ? totals.flightMarkup > 0
+                    ? `Flights shown separately: ${data.proposal.gst_rate}% GST on land + ${FLIGHT_MARKUP_GST_PCT}% on the flight markup of ${cur} ${fmt(totals.flightMarkup)} only.`
+                    : 'Flights are passed on at cost (reimbursement) — no GST on flights; land GST only.'
+                  : null}
+            </p>
+          )}
           <div className="border-t pt-3 grid gap-1 text-sm max-w-sm ml-auto">
-            <Row label="Land total" value={`${cur} ${fmt(totals.landSell)}`} />
-            <Row label="Flights total" value={`${cur} ${fmt(totals.flightSell)}`} />
-            <Row label="Subtotal" value={`${cur} ${fmt(totals.sell)}`} />
-            {data.proposal.gst_enabled && <Row label={`GST ${data.proposal.gst_rate}%`} value={`${cur} ${fmt(totals.gst)}`} />}
+            {totals.flightsBundled ? (
+              <Row label="Package total (incl. flights)" value={`${cur} ${fmt(totals.sell)}`} />
+            ) : (
+              <>
+                <Row label="Land total" value={`${cur} ${fmt(totals.landSell)}`} />
+                <Row label="Flights total" value={`${cur} ${fmt(totals.flightSell)}`} />
+                <Row label="Subtotal" value={`${cur} ${fmt(totals.sell)}`} />
+              </>
+            )}
+            {data.proposal.gst_enabled && totals.landGst > 0 && (
+              <Row label={`GST ${data.proposal.gst_rate}% on ${totals.flightsBundled ? 'package' : 'land'}`} value={`${cur} ${fmt(totals.landGst)}`} />
+            )}
+            {data.proposal.gst_enabled && totals.flightGst > 0 && (
+              <Row label={`GST ${FLIGHT_MARKUP_GST_PCT}% on flight markup`} value={`${cur} ${fmt(totals.flightGst)}`} />
+            )}
             {data.proposal.tcs_enabled && <Row label={`TCS ${data.proposal.tcs_rate}%`} value={`${cur} ${fmt(totals.tcs)}`} />}
             <Row label="Grand total" value={`${cur} ${fmt(totals.grand)}`} bold />
             {totals.perPerson != null && <Row label="Per person" value={`${cur} ${fmt(totals.perPerson)}`} />}
@@ -219,11 +261,23 @@ function GroupRow({
         </div>
         <div className="space-y-1 sm:col-span-2">
           <Label className="text-xs">Cost ({cur})</Label>
-          <Input
-            type="number" min={0}
-            value={g.cost_amount || ''}
-            onChange={(e) => patchGroup(g.id, { cost_amount: parseFloat(e.target.value) || 0 })}
-          />
+          <div className="flex gap-1">
+            <Input
+              type="number" min={0} className="flex-1"
+              value={g.cost_amount || ''}
+              onChange={(e) => patchGroup(g.id, { cost_amount: parseFloat(e.target.value) || 0 })}
+            />
+            <Select
+              value={g.price_basis}
+              onValueChange={(v) => patchGroup(g.id, { price_basis: (v ?? 'total') as 'total' | 'per_person' })}
+            >
+              <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="total">total</SelectItem>
+                <SelectItem value="per_person">/pax</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <div className="space-y-1 sm:col-span-2">
           <Label className="text-xs">Markup</Label>
@@ -247,7 +301,10 @@ function GroupRow({
         <ItemCoverage group={g} data={data} update={update} covered={covered} />
         <div className="flex items-center gap-3">
           <span className="text-sm">
-            Sells at <span className="font-semibold">{cur} {fmt(g.sell_amount)}</span>
+            Sells at <span className="font-semibold">{cur} {fmt(effectiveGroupAmounts(g, paxOf(data)).sell)}</span>
+            {g.price_basis === 'per_person' && (
+              <span className="text-xs text-muted-foreground"> ({cur} {fmt(g.sell_amount)}/pax × {paxOf(data)})</span>
+            )}
           </span>
           <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeGroup(g.id)}>
             <Trash2 className="h-3.5 w-3.5" />
@@ -269,8 +326,14 @@ function ItemCoverage({
   update: StepProps['update'];
   covered: BuilderData['items'];
 }) {
-  // Flights never join a land group — their price is always shown separately.
-  const uncovered = data.items.filter((i) => !i.price_group_id && i.title.trim() && i.item_type !== 'flight');
+  // Flights stay out of land groups by default (their price is shown
+  // separately). Fixed-departure packages that bundle airfare flip the
+  // override; a flight already in the group keeps it on.
+  const [allowFlights, setAllowFlights] = useState(covered.some((i) => i.item_type === 'flight'));
+  const uncovered = data.items.filter(
+    (i) => !i.price_group_id && i.title.trim() && (allowFlights || i.item_type !== 'flight'),
+  );
+  const hasUngroupedFlights = data.items.some((i) => !i.price_group_id && i.item_type === 'flight' && i.title.trim());
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">Covers:</span>
@@ -290,6 +353,15 @@ function ItemCoverage({
           {i.title} ✕
         </button>
       ))}
+      {!allowFlights && hasUngroupedFlights && (
+        <button
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed text-muted-foreground hover:bg-muted"
+          title="Fixed-departure packages include airfare in one price. Bundled flights lose the land/flight split and the whole package is taxed at the land GST rate."
+          onClick={() => setAllowFlights(true)}
+        >
+          <Plane className="h-3 w-3" /> Include flights (fixed departure)
+        </button>
+      )}
       {uncovered.length > 0 && (
         <Select
           value=""
@@ -319,6 +391,9 @@ function SelfPricedItems({ data, update, cur }: StepProps & { cur: string }) {
   const selfItems = data.items.filter((i) => !i.price_group_id && i.title.trim());
   if (selfItems.length === 0) return null;
   const fmt = (n: number | null) => (n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  const pax = paxOf(data);
+  const patchItem = (id: string, patch: Partial<BuilderData['items'][number]>) =>
+    update((d) => ({ ...d, items: d.items.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
 
   return (
     <Card>
@@ -327,46 +402,62 @@ function SelfPricedItems({ data, update, cur }: StepProps & { cur: string }) {
           <IndianRupee className="h-4 w-4" /> Individually priced items
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Items not covered by a group. Leave cost &amp; sell empty for informational items (e.g. hotels inside a DMC package — better: add them to the group).
+          Items not covered by a group. Leave cost &amp; sell empty for informational items (e.g. hotels inside a
+          DMC package — better: add them to the group). Flights priced at cost (sell = cost) are reimbursements —
+          no GST applies to them.
         </p>
       </CardHeader>
       <CardContent className="space-y-2">
-        {selfItems.map((i) => (
-          <div key={i.id} className="flex items-center gap-2 text-sm">
-            <span className="flex-1 truncate">
-              {i.title} <span className="text-xs text-muted-foreground">({i.item_type})</span>
-            </span>
-            <Input
-              type="number" min={0} className="w-28 h-8" placeholder={`Cost ${cur}`}
-              value={i.cost_amount ?? ''}
-              onChange={(e) =>
-                update((d) => ({
-                  ...d,
-                  items: d.items.map((x) =>
-                    x.id === i.id ? { ...x, cost_amount: e.target.value === '' ? null : parseFloat(e.target.value) || 0 } : x,
-                  ),
-                }))
-              }
-            />
-            <Input
-              type="number" min={0} className="w-28 h-8" placeholder={`Sell ${cur}`}
-              value={i.sell_amount ?? ''}
-              onChange={(e) =>
-                update((d) => ({
-                  ...d,
-                  items: d.items.map((x) =>
-                    x.id === i.id ? { ...x, sell_amount: e.target.value === '' ? null : parseFloat(e.target.value) || 0 } : x,
-                  ),
-                }))
-              }
-            />
-            {i.cost_amount != null && i.sell_amount != null && (
-              <span className={`text-xs w-20 text-right ${i.sell_amount >= i.cost_amount ? 'text-green-600' : 'text-red-600'}`}>
-                +{fmt(i.sell_amount - i.cost_amount)}
+        {selfItems.map((i) => {
+          const isFlight = i.item_type === 'flight';
+          const basis = (i.details as { price_basis?: string }).price_basis === 'per_pax' ? 'per_pax' : 'total';
+          const eff = effectiveItemAmounts(i, pax);
+          return (
+            <div key={i.id} className="flex items-center gap-2 text-sm">
+              <span className="flex-1 truncate">
+                {i.title} <span className="text-xs text-muted-foreground">({i.item_type})</span>
               </span>
-            )}
-          </div>
-        ))}
+              {isFlight && (
+                <Select
+                  value={basis}
+                  onValueChange={(v) => patchItem(i.id, { details: { ...i.details, price_basis: v ?? 'total' } })}
+                >
+                  <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="total">total</SelectItem>
+                    <SelectItem value="per_pax">per pax</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <Input
+                type="number" min={0} className="w-28 h-8"
+                placeholder={basis === 'per_pax' ? `Cost ${cur}/pax` : `Cost ${cur}`}
+                value={i.cost_amount ?? ''}
+                onChange={(e) =>
+                  patchItem(i.id, { cost_amount: e.target.value === '' ? null : parseFloat(e.target.value) || 0 })
+                }
+              />
+              <Input
+                type="number" min={0} className="w-28 h-8"
+                placeholder={basis === 'per_pax' ? `Sell ${cur}/pax` : `Sell ${cur}`}
+                value={i.sell_amount ?? ''}
+                onChange={(e) =>
+                  patchItem(i.id, { sell_amount: e.target.value === '' ? null : parseFloat(e.target.value) || 0 })
+                }
+              />
+              <span className="text-xs w-32 text-right">
+                {basis === 'per_pax' && eff.sell != null && (
+                  <span className="text-muted-foreground">× {pax} = {fmt(eff.sell)} </span>
+                )}
+                {eff.cost != null && eff.sell != null && (
+                  <span className={eff.sell >= eff.cost ? 'text-green-600' : 'text-red-600'}>
+                    +{fmt(eff.sell - eff.cost)}
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })}
       </CardContent>
     </Card>
   );
