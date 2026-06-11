@@ -22,6 +22,7 @@ interface AiFillDialogProps {
 export function AiFillDialog({ data, update }: AiFillDialogProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,10 +30,23 @@ export function AiFillDialog({ data, update }: AiFillDialogProps) {
     setParsing(true);
     setError(null);
     try {
+      // Uploaded file (PDF/Excel/CSV) → extract its text first.
+      let sourceText = text;
+      if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('source_type', file.name.endsWith('.pdf') ? 'pdf' : 'excel');
+        const importRes = await fetch('/api/quotes/import', { method: 'POST', body: formData });
+        const importData = await importRes.json().catch(() => ({}));
+        if (!importRes.ok) throw new Error(importData.error ?? 'Could not read the file');
+        sourceText = importData.text ?? '';
+        if (!sourceText.trim()) throw new Error('No text could be extracted from the file');
+      }
+
       const res = await fetch('/api/quotes/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: sourceText }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? 'Parse failed');
@@ -173,6 +187,7 @@ export function AiFillDialog({ data, update }: AiFillDialogProps) {
       }));
       setOpen(false);
       setText('');
+      setFile(null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -190,18 +205,32 @@ export function AiFillDialog({ data, update }: AiFillDialogProps) {
           <DialogTitle>Fill builder from a supplier quote</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Paste the DMC/supplier quote text (email body, WhatsApp message, PDF text). Cities, nights, hotels and
-          extras get filled in — you review and price them.
+          Paste the DMC/supplier quote text, or upload the quote as PDF/Excel/CSV. Cities, nights, hotels,
+          itinerary and extras get filled in — you review and price them.
         </p>
         <Textarea
-          rows={12}
+          rows={10}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Paste quote text here…"
+          disabled={!!file}
         />
+        <div className="flex items-center gap-3">
+          <input
+            type="file"
+            accept=".pdf,.xlsx,.xls,.csv"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="text-sm file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:bg-background file:text-sm file:font-medium hover:file:bg-muted file:cursor-pointer"
+          />
+          {file && (
+            <button className="text-xs text-muted-foreground underline" onClick={() => setFile(null)}>
+              clear
+            </button>
+          )}
+        </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex justify-end">
-          <Button onClick={() => void parseAndFill()} disabled={parsing || text.trim().length < 20}>
+          <Button onClick={() => void parseAndFill()} disabled={parsing || (!file && text.trim().length < 20)}>
             {parsing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wand2 className="h-4 w-4 mr-2" />}
             Parse &amp; fill
           </Button>
