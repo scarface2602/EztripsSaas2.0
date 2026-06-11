@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarDays, Loader2, Sparkles, Wand2 } from 'lucide-react';
-import type { BuilderData, ItineraryDayRow, DayTypeDb, TransferMode } from '../types';
+import { AsyncCombobox, type AsyncOption } from '@/components/ui/async-combobox';
+import { CalendarDays, Loader2, Sparkles, Wand2, Plus, Trash2, BookmarkPlus, Check } from 'lucide-react';
+import type { BuilderData, ItineraryDayRow, DayBlockRow, DayTypeDb, BlockType } from '../types';
 
 interface StepProps {
   data: BuilderData;
@@ -22,14 +23,19 @@ const DAY_TYPES: { value: DayTypeDb; label: string }[] = [
   { value: 'departure', label: 'Departure' },
 ];
 
-const TRANSFER_MODES: { value: TransferMode; label: string }[] = [
-  { value: 'PVT', label: 'PVT (private)' },
-  { value: 'SIC', label: 'SIC (shared)' },
-  { value: 'NONE', label: 'No transfer' },
+const BLOCK_TYPES: { value: BlockType; label: string }[] = [
+  { value: 'sightseeing', label: 'Tour' },
+  { value: 'activity', label: 'Activity' },
+  { value: 'transfer', label: 'Transfer' },
+  { value: 'flight', label: 'Flight' },
+  { value: 'meal', label: 'Meal' },
+  { value: 'free_time', label: 'Free time' },
+  { value: 'other', label: 'Other' },
 ];
 
-// Day-wise itinerary. The day skeleton (count, dates, cities) is derived
-// from the route automatically — agents only write/AI the content.
+// Day-wise itinerary: the skeleton (count, dates, cities) derives from
+// the route. A day holds multiple blocks — internal flight + evening
+// tour, two tours, etc. Blocks come from / feed the activity library.
 export function ItineraryStep({ data, update }: StepProps) {
   const [busyDay, setBusyDay] = useState<string | null>(null);
   const [busyAll, setBusyAll] = useState(false);
@@ -50,14 +56,13 @@ export function ItineraryStep({ data, update }: StepProps) {
     return stay && !stay.title.startsWith('Hotel in ') ? stay.title : undefined;
   };
 
-  // AI writing. Mirrors the old editor: tour days use the heading as the
-  // source of truth; existing prose can be polished via raw_description.
   async function generateDay(day: ItineraryDayRow, mode: 'generate' | 'curate'): Promise<boolean> {
     const body: Record<string, unknown> = {
       day_number: day.day_number,
       destination: data.proposal.destination ?? undefined,
       city: day.city ?? undefined,
       hotel: hotelForDay(day),
+      activities: day.blocks.map((b) => b.title).filter(Boolean),
     };
     if (mode === 'curate') {
       if (!day.description) return false;
@@ -117,7 +122,7 @@ export function ItineraryStep({ data, update }: StepProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {days.length} days, generated from your route. Days update automatically when the route changes.
+          {days.length} days from your route. Add multiple blocks per day — a flight and an evening tour can share a day.
         </p>
         <Button variant="outline" size="sm" onClick={() => void aiAllEmpty()} disabled={busyAll}>
           {busyAll ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1.5" />}
@@ -135,49 +140,66 @@ export function ItineraryStep({ data, update }: StepProps) {
                 {day.date ?? 'date TBD'}{day.city ? ` · ${day.city}` : ''}
               </span>
             </CardTitle>
-            <div className="flex items-center gap-2">
-              <Select
-                value={day.day_type ?? 'tour'}
-                onValueChange={(v) => patchDay(day.id, { day_type: (v ?? 'tour') as DayTypeDb })}
-              >
-                <SelectTrigger className="w-40 h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {DAY_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select
-                value={day.transfer_mode ?? 'NONE'}
-                onValueChange={(v) => patchDay(day.id, { transfer_mode: (v ?? 'NONE') as TransferMode })}
-              >
-                <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TRANSFER_MODES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select
+              value={day.day_type ?? 'tour'}
+              onValueChange={(v) => patchDay(day.id, { day_type: (v ?? 'tour') as DayTypeDb })}
+            >
+              <SelectTrigger className="w-44 h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {DAY_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3">
             <Input
               value={day.heading ?? ''}
               onChange={(e) => patchDay(day.id, { heading: e.target.value || null })}
-              placeholder={
-                day.day_type === 'tour'
-                  ? 'Heading — places for the day, e.g. "Tanah Lot, Taman Ayun & Ulun Danu"'
-                  : 'Heading (optional — AI writes one)'
-              }
+              placeholder='Day heading, e.g. "Nusa Penida West Tour & Sunset at Uluwatu"'
             />
+
+            {/* ── Blocks ── */}
+            <div className="space-y-2">
+              {day.blocks
+                .slice()
+                .sort((a, b) => a.sort_order - b.sort_order)
+                .map((block) => (
+                  <BlockRow key={block.id} day={day} block={block} patchDay={patchDay} />
+                ))}
+              <Button
+                variant="outline" size="sm" className="border-dashed"
+                onClick={() =>
+                  patchDay(day.id, {
+                    blocks: [
+                      ...day.blocks,
+                      {
+                        id: crypto.randomUUID(),
+                        type: 'sightseeing',
+                        title: '',
+                        description: null,
+                        transfer_mode: null,
+                        start_time: null,
+                        library_id: null,
+                        sort_order: day.blocks.length,
+                      },
+                    ],
+                  })
+                }
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add to this day
+              </Button>
+            </div>
+
             <Textarea
               rows={3}
               value={day.description ?? ''}
               onChange={(e) => patchDay(day.id, { description: e.target.value || null })}
-              placeholder="Day description — write rough notes and hit Curate, or leave empty and hit AI write"
+              placeholder="Day summary the client reads — write rough notes and hit Curate, or AI write composes it from the blocks above"
             />
             <div className="flex gap-2">
               <Button
                 variant="outline" size="sm"
                 disabled={busyDay === day.id}
                 onClick={() => void aiDay(day, 'generate')}
-                title={day.day_type === 'tour' ? 'Writes from the heading — list the places first' : 'Writes from the day type'}
               >
                 {busyDay === day.id ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Wand2 className="h-3.5 w-3.5 mr-1" />}
                 AI write
@@ -186,7 +208,6 @@ export function ItineraryStep({ data, update }: StepProps) {
                 variant="ghost" size="sm"
                 disabled={busyDay === day.id || !day.description}
                 onClick={() => void aiDay(day, 'curate')}
-                title="Polish your rough notes into client-ready prose"
               >
                 <Sparkles className="h-3.5 w-3.5 mr-1" /> Curate my text
               </Button>
@@ -194,6 +215,140 @@ export function ItineraryStep({ data, update }: StepProps) {
           </CardContent>
         </Card>
       ))}
+    </div>
+  );
+}
+
+function BlockRow({
+  day,
+  block,
+  patchDay,
+}: {
+  day: ItineraryDayRow;
+  block: DayBlockRow;
+  patchDay: (id: string, patch: Partial<ItineraryDayRow>) => void;
+}) {
+  const [saved, setSaved] = useState(false);
+  const [expanded, setExpanded] = useState(!block.title);
+
+  const patchBlock = (patch: Partial<DayBlockRow>) =>
+    patchDay(day.id, {
+      blocks: day.blocks.map((b) => (b.id === block.id ? { ...b, ...patch } : b)),
+    });
+  const removeBlock = () =>
+    patchDay(day.id, { blocks: day.blocks.filter((b) => b.id !== block.id) });
+
+  async function saveToLibrary() {
+    const res = await fetch('/api/activities/library', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: block.library_id ?? undefined,
+        name: block.title,
+        type: block.type,
+        city_name: day.city,
+        description: block.description,
+        default_transfer_mode: block.transfer_mode,
+      }),
+    });
+    if (res.ok) {
+      const { activity } = await res.json();
+      patchBlock({ library_id: activity.id });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  }
+
+  return (
+    <div className="border rounded-lg p-2.5 space-y-2 bg-muted/30">
+      <div className="flex items-center gap-2">
+        <Select value={block.type} onValueChange={(v) => patchBlock({ type: (v ?? 'sightseeing') as BlockType })}>
+          <SelectTrigger className="w-28 h-8 shrink-0"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {BLOCK_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <AsyncCombobox
+          className="flex-1"
+          value={block.title ? { id: block.id, label: block.title } : null}
+          onSelect={(opt) => {
+            if (!opt) {
+              patchBlock({ title: '', library_id: null });
+              return;
+            }
+            const meta = opt as AsyncOption & {
+              library_id?: number;
+              lib_description?: string | null;
+              lib_type?: BlockType;
+              lib_mode?: 'SIC' | 'PVT' | null;
+            };
+            patchBlock({
+              title: opt.label,
+              library_id: meta.library_id ?? null,
+              // Library entries bring their full description and defaults.
+              ...(meta.lib_description ? { description: meta.lib_description } : {}),
+              ...(meta.lib_type ? { type: meta.lib_type } : {}),
+              ...(meta.lib_mode ? { transfer_mode: meta.lib_mode } : {}),
+            });
+            setExpanded(true);
+          }}
+          search={async (q) => {
+            const params = new URLSearchParams({ q });
+            const res = await fetch(`/api/activities/library?${params}`);
+            const d = res.ok ? await res.json() : { activities: [] };
+            return (d.activities as { id: number; name: string; type: BlockType; city_name: string | null; description: string | null; default_transfer_mode: 'SIC' | 'PVT' | null }[]).map((a) => ({
+              id: a.id,
+              label: a.name,
+              description: [a.type, a.city_name].filter(Boolean).join(' · '),
+              library_id: a.id,
+              lib_description: a.description,
+              lib_type: a.type,
+              lib_mode: a.default_transfer_mode,
+            }));
+          }}
+          onCreate={async (name) => ({ id: crypto.randomUUID(), label: name })}
+          placeholder="Search library or type a new tour/transfer…"
+        />
+        <Select
+          value={block.transfer_mode ?? 'none'}
+          onValueChange={(v) => patchBlock({ transfer_mode: !v || v === 'none' ? null : (v as 'SIC' | 'PVT') })}
+        >
+          <SelectTrigger className="w-24 h-8 shrink-0"><SelectValue placeholder="SIC/PVT" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">—</SelectItem>
+            <SelectItem value="PVT">PVT</SelectItem>
+            <SelectItem value="SIC">SIC</SelectItem>
+          </SelectContent>
+        </Select>
+        <Input
+          type="time"
+          className="w-28 h-8 shrink-0"
+          value={block.start_time ?? ''}
+          onChange={(e) => patchBlock({ start_time: e.target.value || null })}
+        />
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive shrink-0" onClick={removeBlock}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      {(expanded || block.description) && (
+        <div className="flex gap-2 items-start">
+          <Textarea
+            rows={2}
+            className="flex-1"
+            value={block.description ?? ''}
+            onChange={(e) => patchBlock({ description: e.target.value || null })}
+            placeholder="Detailed description — saved to the library so you never type it twice"
+          />
+          <Button
+            variant="outline" size="sm" className="shrink-0"
+            disabled={!block.title.trim()}
+            onClick={() => void saveToLibrary()}
+            title={block.library_id ? 'Update this library entry' : 'Save to library for reuse'}
+          >
+            {saved ? <Check className="h-3.5 w-3.5 text-green-600" /> : <BookmarkPlus className="h-3.5 w-3.5" />}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

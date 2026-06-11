@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plane, Car, Ticket, StampIcon, Package, Trash2, Plus, Wand2, Loader2 } from 'lucide-react';
+import { Plane, StampIcon, Package, Trash2, Plus, Wand2, Loader2 } from 'lucide-react';
 import type { BuilderData, ItemRow, ItemType } from '../types';
 
 interface StepProps {
@@ -15,11 +15,12 @@ interface StepProps {
   update: (patch: Partial<BuilderData> | ((d: BuilderData) => BuilderData)) => void;
 }
 
-const SIMPLE_SECTIONS: { type: ItemType; label: string; icon: typeof Car; placeholder: string }[] = [
-  { type: 'transfer', label: 'Transfers', icon: Car, placeholder: 'e.g. Airport pickup, private car' },
-  { type: 'activity', label: 'Activities & tours', icon: Ticket, placeholder: 'e.g. Nusa Penida day trip' },
+// Tours/transfers live in the day-wise Itinerary now; this step keeps
+// only things that aren't day content: flights, visas, and separately
+// priced add-ons.
+const SIMPLE_SECTIONS: { type: ItemType; label: string; icon: typeof StampIcon; placeholder: string }[] = [
   { type: 'visa', label: 'Visa & documents', icon: StampIcon, placeholder: 'e.g. Indonesia visa on arrival' },
-  { type: 'other', label: 'Other', icon: Package, placeholder: 'Anything else' },
+  { type: 'other', label: 'Other priced add-ons', icon: Package, placeholder: 'e.g. Travel insurance, optional candle-light dinner' },
 ];
 
 export interface FlightDetails {
@@ -156,7 +157,8 @@ export function ExtrasStep({ data, update }: StepProps) {
         );
       })}
       <p className="text-xs text-muted-foreground">
-        Prices come next — land items can be covered by a package quote; flights are always priced on their own.
+        Tours &amp; transfers are added per day on the Itinerary step. Prices come next — land items can be covered by a
+        package quote; flights are always priced on their own.
       </p>
     </div>
   );

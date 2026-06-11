@@ -195,7 +195,7 @@ export function BuilderV2({ proposalId, initialData, proposalStatus }: BuilderV2
         </div>
       )}
 
-      {step === 'trip' && <TripStep data={data} update={update} />}
+      {step === 'trip' && <TripStep data={data} update={update} proposalId={proposalId} />}
       {step === 'stays' && <StaysStep data={data} update={update} />}
       {step === 'itinerary' && <ItineraryStep data={data} update={update} />}
       {step === 'extras' && <ExtrasStep data={data} update={update} />}

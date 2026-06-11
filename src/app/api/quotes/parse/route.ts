@@ -65,7 +65,7 @@ Return this exact shape:
 }
 
 IMPORTANT extraction rules:
-- itinerary_days: Extract the COMPLETE day-wise itinerary from the DMC quote. You MUST extract every single day if itinerary text is present. Each day MUST have:
+- itinerary_days: Extract the COMPLETE day-wise itinerary from the DMC quote. You MUST extract every single day if itinerary text is present. CRITICAL: day descriptions and activity descriptions must preserve EVERY detail from the source text — timings, place names, vehicle types, driver notes, ticket inclusions, meal mentions, caveats — regardless of paragraph length. Do NOT summarise, shorten, or paraphrase away specifics; reproduce all factual content (cleaning up only formatting). Each day MUST have:
   * day_number (integer, starting from 1)
   * date (YYYY-MM-DD if a specific date is mentioned, otherwise null)
   * city (the city or location for that day — infer from hotel/location context if not explicit)

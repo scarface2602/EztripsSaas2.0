@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withAuth } from '@/lib/api/with-auth';
 import { createServiceClient } from '@/lib/supabase/server';
+import { blocksForDay, blockToRow } from '@/lib/proposals/v2-blocks';
 
 // GET/PUT the full Builder v2 payload (proposal core + destinations +
 // price groups + items). The client generates UUIDs for new rows, so a
@@ -48,6 +49,17 @@ const itemSchema = z.object({
   sort_order: z.number().int(),
 });
 
+const dayBlockSchema = z.object({
+  id: z.string().uuid(),
+  type: z.enum(['transfer', 'sightseeing', 'meal', 'activity', 'free_time', 'flight', 'other']),
+  title: z.string().trim().max(300),
+  description: z.string().max(8000).nullable(),
+  transfer_mode: z.enum(['SIC', 'PVT']).nullable(),
+  start_time: z.string().nullable(),
+  library_id: z.number().int().nullable(),
+  sort_order: z.number().int(),
+});
+
 const itineraryDaySchema = z.object({
   id: z.string().uuid(),
   day_number: z.number().int().min(1),
@@ -57,6 +69,7 @@ const itineraryDaySchema = z.object({
   description: z.string().nullable(),
   day_type: z.enum(['arrival', 'tour', 'transfer', 'departure', 'flight']).nullable(),
   transfer_mode: z.enum(['SIC', 'PVT', 'NONE']).nullable(),
+  blocks: z.array(dayBlockSchema).default([]),
 });
 
 const saveSchema = z.object({
@@ -100,12 +113,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   ]);
   if (proposalRes.error) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  const { data: blocks } = await supabase
+    .from('itinerary_activities')
+    .select('*')
+    .eq('proposal_id', id)
+    .order('sort_order');
+
   return NextResponse.json({
     proposal: proposalRes.data,
     destinations: destRes.data ?? [],
     groups: groupRes.data ?? [],
     items: itemRes.data ?? [],
-    itinerary: dayRes.data ?? [],
+    itinerary: (dayRes.data ?? []).map((d) => ({ ...d, blocks: blocksForDay(blocks ?? [], d.id) })),
   });
 }
 
@@ -154,18 +173,29 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (error) throw new Error(`${table}: ${error.message}`);
   };
 
+  const blockRows = itinerary.flatMap((day) =>
+    day.blocks.map((b) => blockToRow(b, id, day.id)),
+  );
+  const dayRows = itinerary.map((day) => {
+    const { blocks, ...rest } = day;
+    void blocks;
+    return rest;
+  });
+
   try {
+    await del('itinerary_activities', blockRows.map((b) => b.id));
     await del('proposal_items', keepIds(items));
     await del('proposal_price_groups', keepIds(groups));
     await del('proposal_destinations', keepIds(destinations));
-    await del('itinerary_days', keepIds(itinerary));
+    await del('itinerary_days', keepIds(dayRows));
     await upsert('proposal_destinations', tag(destinations));
     await upsert('proposal_price_groups', tag(groups));
     await upsert(
       'proposal_items',
       tag(items.map((i) => ({ ...i, updated_at: new Date().toISOString() }))),
     );
-    await upsert('itinerary_days', tag(itinerary));
+    await upsert('itinerary_days', tag(dayRows));
+    await upsert('itinerary_activities', blockRows);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { ProposalEditor } from './proposal-editor';
 import { BuilderV2 } from './builder-v2/builder';
+import { blocksForDay } from '@/lib/proposals/v2-blocks';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { EnquiryBanner } from '@/components/enquiry-banner';
 
@@ -21,12 +22,14 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
 
   // Builder v2 proposals render the new cities-first builder.
   if (proposal.builder_version === 2) {
-    const [{ data: destinations }, { data: groups }, { data: items }, { data: itineraryDays }] = await Promise.all([
-      supabase.from('proposal_destinations').select('*').eq('proposal_id', id).order('sort_order'),
-      supabase.from('proposal_price_groups').select('*').eq('proposal_id', id).order('sort_order'),
-      supabase.from('proposal_items').select('*').eq('proposal_id', id).order('sort_order'),
-      supabase.from('itinerary_days').select('*').eq('proposal_id', id).order('day_number'),
-    ]);
+    const [{ data: destinations }, { data: groups }, { data: items }, { data: itineraryDays }, { data: dayBlocks }] =
+      await Promise.all([
+        supabase.from('proposal_destinations').select('*').eq('proposal_id', id).order('sort_order'),
+        supabase.from('proposal_price_groups').select('*').eq('proposal_id', id).order('sort_order'),
+        supabase.from('proposal_items').select('*').eq('proposal_id', id).order('sort_order'),
+        supabase.from('itinerary_days').select('*').eq('proposal_id', id).order('day_number'),
+        supabase.from('itinerary_activities').select('*').eq('proposal_id', id).order('sort_order'),
+      ]);
     return (
       <div>
         <Breadcrumbs items={[
@@ -70,7 +73,10 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
               cost_amount: i.cost_amount == null ? null : Number(i.cost_amount),
               sell_amount: i.sell_amount == null ? null : Number(i.sell_amount),
             })),
-            itinerary: itineraryDays || [],
+            itinerary: (itineraryDays || []).map((d) => ({
+              ...d,
+              blocks: blocksForDay(dayBlocks || [], d.id),
+            })),
           }}
         />
       </div>

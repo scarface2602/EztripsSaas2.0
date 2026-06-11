@@ -140,8 +140,18 @@ export function AiFillDialog({ data, update }: AiFillDialogProps) {
           city: d.city ?? null,
           heading: d.heading ?? null,
           description: d.description || null,
-          day_type: null,
+          day_type: (['arrival', 'departure', 'tour'].includes(d.day_type ?? '') ? d.day_type : null) as ItineraryDayRow['day_type'],
           transfer_mode: null,
+          blocks: (d.activities ?? []).map((a, bi) => ({
+            id: crypto.randomUUID(),
+            type: (['transfer', 'sightseeing', 'activity'].includes(a.type) ? a.type : 'other') as ItineraryDayRow['blocks'][number]['type'],
+            title: a.description.length > 120 ? a.description.slice(0, 117) + '…' : a.description,
+            description: a.description,
+            transfer_mode: null,
+            start_time: null,
+            library_id: null,
+            sort_order: bi,
+          })),
         }));
 
       // Currency stays whatever the proposal uses (INR by default) — the

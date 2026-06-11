@@ -519,6 +519,7 @@ export interface ParsedItineraryDay {
   description: string;
   city?: string | null;
   date?: string | null;
+  day_type?: 'arrival' | 'departure' | 'tour' | null;
   activities: { type: string; description: string }[];
 }
 

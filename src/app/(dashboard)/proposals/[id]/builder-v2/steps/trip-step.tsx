@@ -14,9 +14,10 @@ import type { BuilderData, DestinationRow } from '../types';
 interface StepProps {
   data: BuilderData;
   update: (patch: Partial<BuilderData> | ((d: BuilderData) => BuilderData)) => void;
+  proposalId?: string;
 }
 
-export function TripStep({ data, update }: StepProps) {
+export function TripStep({ data, update, proposalId }: StepProps) {
   const { proposal, destinations } = data;
   const [countries, setCountries] = useState<{ code: string; name: string }[]>([]);
   // Scopes city search + inline create.
@@ -258,6 +259,97 @@ export function TripStep({ data, update }: StepProps) {
           )}
         </CardContent>
       </Card>
+
+      {proposalId && <PastItineraryPanel proposalId={proposalId} cities={destinations.map((d) => d.city_name)} />}
     </div>
+  );
+}
+
+// Reusable itineraries: clone a past proposal's route, stays, days and
+// blocks into this draft. Smart matches come from the suggestion engine
+// once cities are picked; the search box covers everything else.
+function PastItineraryPanel({ proposalId, cities }: { proposalId: string; cities: string[] }) {
+  type Match = { id: string; title: string | null; destination: string | null; route_signature?: string | null };
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Match[]>([]);
+  const [copying, setCopying] = useState<string | null>(null);
+  const citiesKey = cities.join(',');
+
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      try {
+        if (query.trim().length >= 2) {
+          const supabase = (await import('@/lib/supabase/client')).createClient();
+          const { data } = await supabase
+            .from('proposals')
+            .select('id, title, destination, route_signature')
+            .or(`title.ilike.%${query.trim()}%,destination.ilike.%${query.trim()}%`)
+            .neq('id', proposalId)
+            .order('created_at', { ascending: false })
+            .limit(6);
+          setResults((data as Match[]) ?? []);
+        } else if (citiesKey) {
+          const params = new URLSearchParams({ cities: citiesKey, destination: cities[0] ?? '' });
+          const res = await fetch(`/api/proposals/suggestions?${params}`);
+          const d = res.ok ? await res.json() : { suggestions: [] };
+          setResults(((d.suggestions ?? []) as Match[]).filter((m) => m.id !== proposalId).slice(0, 6));
+        } else {
+          setResults([]);
+        }
+      } catch {
+        setResults([]);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [query, citiesKey, proposalId]);
+
+  async function copyFrom(sourceId: string) {
+    if (!confirm('Copy this itinerary into the current proposal? Existing cities, stays and days here will be replaced.')) return;
+    setCopying(sourceId);
+    try {
+      const res = await fetch(`/api/proposals/${proposalId}/v2/copy-from`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_id: sourceId }),
+      });
+      if (res.ok) window.location.reload();
+      else setCopying(null);
+    } catch {
+      setCopying(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base">Start from a past itinerary</CardTitle>
+        <Input
+          className="w-64 h-8"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search past proposals…"
+        />
+      </CardHeader>
+      {results.length > 0 && (
+        <CardContent className="space-y-2">
+          {results.map((m) => (
+            <div key={m.id} className="flex items-center gap-3 text-sm border rounded-lg px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <span className="font-medium">{m.title || m.destination || 'Untitled'}</span>
+                {m.route_signature && (
+                  <span className="block text-xs text-muted-foreground truncate">{m.route_signature}</span>
+                )}
+              </div>
+              <Button variant="outline" size="sm" disabled={!!copying} onClick={() => void copyFrom(m.id)}>
+                {copying === m.id ? 'Copying…' : 'Use this'}
+              </Button>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            Copies the route, stays, day-wise itinerary and price-group structure. Prices reset — you quote fresh.
+          </p>
+        </CardContent>
+      )}
+    </Card>
   );
 }

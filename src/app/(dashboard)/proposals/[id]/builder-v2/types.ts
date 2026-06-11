@@ -60,6 +60,19 @@ export interface ProposalCore {
 
 export type TransferMode = 'SIC' | 'PVT' | 'NONE';
 export type DayTypeDb = 'arrival' | 'tour' | 'transfer' | 'departure' | 'flight';
+export type BlockType = 'transfer' | 'sightseeing' | 'meal' | 'activity' | 'free_time' | 'flight' | 'other';
+
+/** One thing happening on a day — a tour, an internal flight, a transfer… */
+export interface DayBlockRow {
+  id: string;
+  type: BlockType;
+  title: string;
+  description: string | null;
+  transfer_mode: 'SIC' | 'PVT' | null;
+  start_time: string | null; // HH:mm
+  library_id: number | null; // activity_library link when picked from it
+  sort_order: number;
+}
 
 export interface ItineraryDayRow {
   id: string;
@@ -70,6 +83,7 @@ export interface ItineraryDayRow {
   description: string | null;
   day_type: DayTypeDb | null;
   transfer_mode: TransferMode | null;
+  blocks: DayBlockRow[];
 }
 
 export interface BuilderData {
@@ -130,6 +144,7 @@ export function syncItinerarySkeleton(data: BuilderData): ItineraryDayRow[] | nu
           description: null,
           day_type: type,
           transfer_mode: null,
+          blocks: [],
         };
     if (!existing || existing.date !== date || existing.city !== city || existing.day_number !== n) changed = true;
     next.push(row);

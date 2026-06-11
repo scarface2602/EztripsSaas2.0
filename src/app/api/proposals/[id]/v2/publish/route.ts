@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { withAuth } from '@/lib/api/with-auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendShareLinkEmail } from '@/lib/email/mailer';
+import { blocksForDay } from '@/lib/proposals/v2-blocks';
 
 // Publish a Builder v2 proposal: freeze quoted costs, snapshot
 // published_data in the share-page shape (sell side ONLY — cost/markup
@@ -21,6 +22,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       supabase.from('proposal_items').select('*').eq('proposal_id', id).order('sort_order'),
       supabase.from('itinerary_days').select('*').eq('proposal_id', id).order('day_number'),
     ]);
+  const { data: dayBlocks } = await supabase
+    .from('itinerary_activities')
+    .select('*')
+    .eq('proposal_id', id)
+    .order('sort_order');
   if (!proposal) return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
   if (proposal.builder_version !== 2) {
     return NextResponse.json({ error: 'Not a builder v2 proposal' }, { status: 400 });
@@ -116,6 +122,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       description: d.description,
       day_type: d.day_type,
       transfer_mode: d.transfer_mode,
+      blocks: blocksForDay(dayBlocks ?? [], d.id),
     })),
     activities: [],
     line_items: lineItems,
