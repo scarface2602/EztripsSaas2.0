@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const body = await request.json();
-    const { account_name, account_number, account_type, bank_name, notes, is_active } = body;
+    const { account_name, account_number, account_type, bank_name, ifsc_code, branch_name, notes, is_active } = body;
 
     if (!account_name || !account_type) {
       return NextResponse.json(
@@ -70,6 +70,8 @@ export async function POST(request: NextRequest) {
           account_number,
           account_type,
           bank_name: bank_name || null,
+          ifsc_code: ifsc_code || null,
+          branch_name: branch_name || null,
           notes: notes || null,
           is_active: is_active !== false,
           sort_order: nextSort,

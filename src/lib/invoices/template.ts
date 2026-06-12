@@ -43,6 +43,15 @@ export interface InvoiceData {
   travelDates?: string;
   tripId?: string;
 
+  // GST (tax invoice) — when present, the tax row becomes a CGST/SGST
+  // or IGST breakup and the recipient's GST identity is printed.
+  recipientGstin?: string;
+  recipientLegalName?: string;
+  placeOfSupply?: string;       // e.g. "20 — Jharkhand"
+  sacCode?: string;
+  taxBreakup?: { rate: number; cgst: number; sgst: number; igst: number };
+  tcsAmount?: number;
+
   // Line items
   lineItems: InvoiceLineItem[];
   subtotal: number;
@@ -124,10 +133,14 @@ export function invoiceHTML(d: InvoiceData): string {
   <div style="display:flex;gap:40px;margin-bottom:24px;">
     <div style="flex:1;">
       <div style="font-size:0.75rem;color:${BRAND.grayText};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Bill To</div>
-      <div style="font-weight:600;">${d.clientName}</div>
+      <div style="font-weight:600;">${d.recipientLegalName || d.clientName}</div>
+      ${d.recipientLegalName && d.recipientLegalName !== d.clientName ? `<div style="font-size:0.8rem;color:${BRAND.grayText};">${d.clientName}</div>` : ''}
+      ${d.recipientGstin ? `<div style="font-size:0.85rem;font-weight:600;color:${BRAND.navy};">GSTIN: ${d.recipientGstin}</div>` : ''}
       ${d.clientEmail ? `<div style="font-size:0.85rem;color:${BRAND.grayText};">${d.clientEmail}</div>` : ''}
       ${d.clientPhone ? `<div style="font-size:0.85rem;color:${BRAND.grayText};">${d.clientPhone}</div>` : ''}
       ${d.clientAddress ? `<div style="font-size:0.85rem;color:${BRAND.grayText};">${d.clientAddress}</div>` : ''}
+      ${d.placeOfSupply ? `<div style="font-size:0.8rem;color:${BRAND.grayText};margin-top:2px;">Place of Supply: ${d.placeOfSupply}</div>` : ''}
+      ${d.sacCode ? `<div style="font-size:0.8rem;color:${BRAND.grayText};">SAC: ${d.sacCode}</div>` : ''}
     </div>
     ${d.bookingTitle || d.destination ? `
     <div style="flex:1;">
@@ -161,9 +174,25 @@ export function invoiceHTML(d: InvoiceData): string {
         <td style="padding:6px 12px;color:${BRAND.grayText};font-size:0.9rem;">Subtotal</td>
         <td style="padding:6px 12px;text-align:right;font-size:0.9rem;">${d.currency} ${d.subtotal.toLocaleString()}</td>
       </tr>
-      ${d.taxAmount > 0 ? `<tr>
+      ${d.taxBreakup && d.taxAmount > 0 ? `
+        ${d.taxBreakup.igst > 0 ? `<tr>
+          <td style="padding:6px 12px;color:${BRAND.grayText};font-size:0.9rem;">IGST @ ${d.taxBreakup.rate}%</td>
+          <td style="padding:6px 12px;text-align:right;font-size:0.9rem;">${d.currency} ${d.taxBreakup.igst.toLocaleString()}</td>
+        </tr>` : `<tr>
+          <td style="padding:6px 12px;color:${BRAND.grayText};font-size:0.9rem;">CGST @ ${d.taxBreakup.rate / 2}%</td>
+          <td style="padding:6px 12px;text-align:right;font-size:0.9rem;">${d.currency} ${d.taxBreakup.cgst.toLocaleString()}</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 12px;color:${BRAND.grayText};font-size:0.9rem;">SGST @ ${d.taxBreakup.rate / 2}%</td>
+          <td style="padding:6px 12px;text-align:right;font-size:0.9rem;">${d.currency} ${d.taxBreakup.sgst.toLocaleString()}</td>
+        </tr>`}
+      ` : d.taxAmount > 0 ? `<tr>
         <td style="padding:6px 12px;color:${BRAND.grayText};font-size:0.9rem;">${d.taxLabel || 'Tax'}</td>
         <td style="padding:6px 12px;text-align:right;font-size:0.9rem;">${d.currency} ${d.taxAmount.toLocaleString()}</td>
+      </tr>` : ''}
+      ${d.tcsAmount && d.tcsAmount > 0 ? `<tr>
+        <td style="padding:6px 12px;color:${BRAND.grayText};font-size:0.9rem;">TCS (overseas tour package)</td>
+        <td style="padding:6px 12px;text-align:right;font-size:0.9rem;">${d.currency} ${d.tcsAmount.toLocaleString()}</td>
       </tr>` : ''}
       ${d.discountAmount > 0 ? `<tr>
         <td style="padding:6px 12px;color:${BRAND.grayText};font-size:0.9rem;">Discount</td>

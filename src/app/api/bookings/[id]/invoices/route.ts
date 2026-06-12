@@ -6,6 +6,11 @@ import { createLogger } from '@/lib/logger';
 import { invoiceHTML } from '@/lib/invoices/template';
 import type { InvoiceLineItem } from '@/lib/invoices/template';
 import { htmlToPdf } from '@/lib/vouchers/pdf';
+import {
+  computeLineTax, splitTax, computeTcs, resolveTaxConfig,
+  TAX_CLASS_BY_ITEM_TYPE, SAC_BY_CLASS, type TaxClass,
+} from '@/lib/tax/engine';
+import { GST_STATE_CODES } from '@/lib/utils/gstin';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -50,7 +55,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 // POST /api/bookings/[id]/invoices — generate an invoice
-// Body: { invoice_type: 'proforma' | 'final' | 'credit_note', notes?, due_date?, tax_amount?, discount_amount?, custom_line_items? }
+// Body: { invoice_type: 'proforma' | 'final' | 'credit_note', notes?, due_date?,
+//         tax_amount?,              // manual override — wins over the engine
+//         tax_overrides?: { tax_class?, rate? },  // inline tweaks, engine still runs
+//         overseas_package?,        // triggers TCS
+//         reference_invoice_id?,    // credit notes must reference the original
+//         discount_amount?, custom_line_items? }
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getUser('accounts.manage');
@@ -72,10 +82,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Failed to generate invoice number' }, { status: 500 });
   }
 
-  // Fetch booking with client
+  // Fetch booking with client and bill-to (the payer drives the GST identity)
   const { data: booking, error: bErr } = await supabase
     .from('bookings')
-    .select('*, clients(id, full_name, email, phone)')
+    .select(`*, clients(id, full_name, email, phone),
+      bill_to:clients!bookings_bill_to_client_id_fkey(id, full_name, email, phone, client_kind, gstin, gst_legal_name, gst_state_code, billing_address)`)
     .eq('id', id)
     .single();
 
@@ -83,10 +94,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  // Fetch booking items for line items
+  // Fetch booking items for line items (cost_price used server-side only,
+  // for margin-method GST — never printed)
   const { data: items } = await supabase
     .from('booking_items')
-    .select('label, item_type, sell_price, start_date, end_date, supplier_status, cancellation_charge, refund_amount')
+    .select('label, item_type, sell_price, cost_price, start_date, end_date, supplier_status, cancellation_charge, refund_amount, details')
     .eq('booking_id', id)
     .order('sort_order')
     .order('start_date');
@@ -133,9 +145,108 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const subtotal = lineItems.reduce((sum, l) => sum + l.amount, 0);
-  const taxAmt = Number(tax_amount || 0);
   const discountAmt = Number(discount_amount || 0);
-  const total = subtotal + taxAmt - discountAmt;
+
+  // ── GST: org identity + master rules (organisations.tax_config), with
+  //    inline per-invoice overrides; an explicit tax_amount always wins. ──
+  const { data: orgRow } = await supabase
+    .from('users')
+    .select('org_id, organisations(gstin, gst_state_code, tax_config)')
+    .eq('id', booking.created_by)
+    .single();
+  const orgTax = orgRow?.organisations as { gstin?: string | null; gst_state_code?: string | null; tax_config?: Record<string, unknown> } | null;
+  const taxConfig = resolveTaxConfig((orgTax?.tax_config as never) || null);
+
+  const recipient = (booking.bill_to || booking.clients) as {
+    id?: string; full_name?: string; email?: string; phone?: string;
+    gstin?: string | null; gst_legal_name?: string | null; gst_state_code?: string | null; billing_address?: string | null;
+  } | null;
+  const recipientGstin = recipient?.gstin || null;
+  const orgState = orgTax?.gst_state_code || null;
+  // POS: registered recipient → their GST state; else org state (over-the-counter)
+  const posState = recipientGstin ? recipient?.gst_state_code || null : orgState;
+
+  const overrides = (body.tax_overrides || {}) as { tax_class?: TaxClass; rate?: number };
+  const taxWarnings: string[] = [];
+  let taxableValue = 0;
+  let taxAmt: number;
+  let uniformRate: number | null = null;
+  let sacCode: string | null = null;
+  let taxClassUsed: string | null = null;
+
+  if (tax_amount !== undefined && tax_amount !== null && tax_amount !== '') {
+    // Manual override — recorded as-is
+    taxAmt = Number(tax_amount) || 0;
+    taxClassUsed = 'MANUAL';
+    uniformRate = overrides.rate ?? null;
+  } else if (invoice_type === 'credit_note') {
+    taxAmt = 0; // credit-note tax follows the original invoice; enter manually if needed
+  } else {
+    // Engine: classify and compute per booking item
+    const taxableItems = (items || []).filter(i => i.supplier_status !== 'cancelled');
+    const rates = new Set<number>();
+    const classes = new Set<string>();
+    let tax = 0;
+    for (const i of taxableItems) {
+      const cls = overrides.tax_class || TAX_CLASS_BY_ITEM_TYPE[i.item_type] || 'SERVICE_FEE';
+      const det = (i.details || {}) as Record<string, unknown>;
+      const comp = computeLineTax({
+        taxClass: cls,
+        sellPrice: Number(i.sell_price) || 0,
+        costPrice: i.cost_price == null ? null : Number(i.cost_price),
+        basicFare: det.basic_fare ? Number(det.basic_fare) : null,
+        international: Boolean(det.international) || booking.booking_type === 'package' && Boolean(body.overseas_package),
+      }, taxConfig);
+      const rate = overrides.rate ?? comp.rate;
+      const lineTax = overrides.rate != null ? Math.round(comp.taxableValue * overrides.rate) / 100 : comp.taxAmount;
+      taxableValue += comp.taxableValue;
+      tax += lineTax;
+      if (comp.taxableValue > 0 || lineTax > 0) { rates.add(rate); classes.add(cls); }
+      taxWarnings.push(...comp.warnings.map(w => `${i.label}: ${w}`));
+    }
+    // Booking-level fallback when there are no items
+    if (taxableItems.length === 0 && subtotal > 0) {
+      const cls = overrides.tax_class || (booking.booking_type === 'package' ? 'TOUR_OPERATOR' : 'SERVICE_FEE');
+      const comp = computeLineTax({ taxClass: cls, sellPrice: subtotal, costPrice: Number(booking.cost_price) || null }, taxConfig);
+      taxableValue = comp.taxableValue;
+      tax = comp.taxAmount;
+      rates.add(overrides.rate ?? comp.rate);
+      classes.add(cls);
+      taxWarnings.push(...comp.warnings);
+    }
+    taxAmt = Math.round(tax * 100) / 100;
+    taxableValue = Math.round(taxableValue * 100) / 100;
+    const rateArr = Array.from(rates);
+    const classArr = Array.from(classes);
+    uniformRate = rateArr.length === 1 ? rateArr[0] : null;
+    taxClassUsed = classArr.length === 1 ? classArr[0] : classArr.length > 1 ? 'MIXED' : null;
+    sacCode = classArr.length === 1 ? SAC_BY_CLASS[classArr[0] as TaxClass] || null : null;
+  }
+
+  const split = splitTax(taxAmt, orgState, posState);
+
+  // TCS on overseas tour packages (flat 2% under current law; SLAB mode
+  // honours the payer's FY aggregate)
+  let tcsAmount = 0;
+  if (body.overseas_package && invoice_type !== 'credit_note') {
+    let fyAggregate = 0;
+    if (taxConfig.tcs.mode === 'SLAB' && recipient?.id) {
+      const fyStart = new Date();
+      const fy = fyStart.getMonth() >= 3 ? fyStart.getFullYear() : fyStart.getFullYear() - 1;
+      const { data: prior } = await supabase
+        .from('invoices')
+        .select('total')
+        .eq('client_id', recipient.id)
+        .eq('overseas_package', true)
+        .neq('status', 'void')
+        .gte('created_at', `${fy}-04-01`);
+      fyAggregate = (prior || []).reduce((s, r) => s + (Number(r.total) || 0), 0);
+    }
+    tcsAmount = computeTcs(subtotal + taxAmt - discountAmt, fyAggregate, taxConfig).tcsAmount;
+  }
+
+  const total = subtotal + taxAmt - discountAmt + tcsAmount;
+  const isTaxInvoice = invoice_type === 'final' && Boolean(recipientGstin);
 
   // Customer payments for amount_paid
   const { data: custPayments } = await supabase
@@ -172,7 +283,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const today = new Date().toISOString().split('T')[0];
   const invoiceDate = today;
 
-  // Generate PDF
+  // Generate PDF — billed to the payer (bill-to entity when present)
   const html = invoiceHTML({
     invoiceNumber,
     invoiceType: invoice_type,
@@ -182,11 +293,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     orgAddress: org?.address,
     orgPhone: org?.phone,
     orgEmail: org?.email,
-    orgGstin: org?.gstin,
+    orgGstin: org?.gstin || orgTax?.gstin || undefined,
     logoDataUri: logoDataUri || undefined,
-    clientName: client?.full_name || 'Guest',
-    clientEmail: client?.email,
-    clientPhone: client?.phone,
+    clientName: recipient?.full_name || client?.full_name || 'Guest',
+    clientEmail: recipient?.email || client?.email,
+    clientPhone: recipient?.phone || client?.phone,
+    clientAddress: recipient?.billing_address || undefined,
+    recipientGstin: recipientGstin || undefined,
+    recipientLegalName: recipient?.gst_legal_name || undefined,
+    placeOfSupply: posState ? `${posState} — ${GST_STATE_CODES[posState] || ''}` : undefined,
+    sacCode: sacCode || undefined,
+    taxBreakup: uniformRate != null && taxAmt > 0
+      ? { rate: uniformRate, cgst: split.cgst, sgst: split.sgst, igst: split.igst }
+      : undefined,
+    tcsAmount: tcsAmount || undefined,
     bookingTitle: booking.title,
     destination: booking.destination,
     tripId: booking.trip_id || undefined,
@@ -226,14 +346,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Non-fatal — invoice record still created
   }
 
-  // Save invoice record
+  // Save invoice record — client_id is the PAYER (bill-to entity when set)
   const { data: invoice, error: iErr } = await supabase
     .from('invoices')
     .insert({
       booking_id: id,
       invoice_number: invoiceNumber,
       invoice_type,
-      client_id: client?.id || null,
+      client_id: recipient?.id || client?.id || null,
       line_items: lineItems,
       subtotal,
       tax_amount: taxAmt,
@@ -246,6 +366,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       notes: notes || null,
       pdf_url: pdfUrl,
       created_by: user.id,
+      // GST detail
+      is_tax_invoice: isTaxInvoice,
+      recipient_gstin: recipientGstin,
+      recipient_legal_name: recipient?.gst_legal_name || null,
+      place_of_supply: posState,
+      taxable_value: taxableValue || null,
+      cgst_amount: split.cgst,
+      sgst_amount: split.sgst,
+      igst_amount: split.igst,
+      tax_rate: uniformRate,
+      sac_code: sacCode,
+      tax_class: taxClassUsed,
+      tcs_amount: tcsAmount,
+      overseas_package: Boolean(body.overseas_package),
+      reference_invoice_id: body.reference_invoice_id || null,
     })
     .select()
     .single();

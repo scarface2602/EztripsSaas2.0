@@ -23,6 +23,8 @@ export function PaymentAccountsSection() {
   const [accountNumber, setAccountNumber] = useState('');
   const [accountType, setAccountType] = useState<'bank' | 'payment_gateway' | 'wallet' | 'upi'>('bank');
   const [bankName, setBankName] = useState('');
+  const [ifscCode, setIfscCode] = useState('');
+  const [branchName, setBranchName] = useState('');
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
 
@@ -50,6 +52,8 @@ export function PaymentAccountsSection() {
     setAccountNumber('');
     setAccountType('bank');
     setBankName('');
+    setIfscCode('');
+    setBranchName('');
     setNotes('');
     setIsActive(true);
     setEditingId(null);
@@ -65,6 +69,8 @@ export function PaymentAccountsSection() {
     setAccountNumber(account.account_number || '');
     setAccountType(account.account_type as 'bank' | 'payment_gateway' | 'wallet' | 'upi');
     setBankName(account.bank_name || '');
+    setIfscCode((account as { ifsc_code?: string }).ifsc_code || '');
+    setBranchName((account as { branch_name?: string }).branch_name || '');
     setNotes(account.notes || '');
     setIsActive(account.is_active);
     setEditingId(account.id);
@@ -84,6 +90,8 @@ export function PaymentAccountsSection() {
         account_number: accountNumber || null,
         account_type: accountType,
         bank_name: bankName || null,
+        ifsc_code: ifscCode || null,
+        branch_name: branchName || null,
         notes: notes || null,
         is_active: isActive,
       };
@@ -179,25 +187,45 @@ export function PaymentAccountsSection() {
               </div>
 
               {accountType === 'bank' && (
-                <div className="space-y-2">
-                  <Label>Bank Name</Label>
-                  <Input
-                    placeholder="e.g., HDFC, ICICI, Kotak"
-                    value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                  />
-                </div>
+                <>
+                  <div className="space-y-2">
+                    <Label>Bank Name</Label>
+                    <Input
+                      placeholder="e.g., IDBI Bank, HDFC, Kotak"
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>IFSC</Label>
+                      <Input
+                        placeholder="IBKL0001917"
+                        value={ifscCode}
+                        onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                        className="font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Branch</Label>
+                      <Input
+                        placeholder="Bariatu Branch"
+                        value={branchName}
+                        onChange={(e) => setBranchName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </>
               )}
 
               <div className="space-y-2">
-                <Label>Account Number (Last 4 Digits)</Label>
+                <Label>Account Number</Label>
                 <Input
-                  placeholder="e.g., 1234"
+                  placeholder="Full number — printed on invoices for client payments"
                   value={accountNumber}
-                  onChange={(e) => setAccountNumber(e.target.value.slice(0, 4))}
-                  maxLength={4}
+                  onChange={(e) => setAccountNumber(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">Only last 4 digits will be stored for security</p>
+                <p className="text-xs text-muted-foreground">Printed in the &quot;Bank Details for Payment&quot; block on invoices.</p>
               </div>
 
               <div className="space-y-2">

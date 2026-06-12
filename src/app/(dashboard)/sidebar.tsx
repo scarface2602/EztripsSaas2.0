@@ -35,6 +35,8 @@ import {
   BarChart3,
   NotebookText,
   HandCoins,
+  Landmark,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -65,6 +67,8 @@ const OPS_ITEMS = [
 
 const FINANCE_ITEMS = [
   { href: '/accounts/receivables', label: 'Receivables', icon: HandCoins, roles: ['accounts', 'manager', 'super_admin'] },
+  { href: '/accounts/tax-rules', label: 'Tax Rules', icon: Landmark, roles: ['accounts', 'manager', 'super_admin'] },
+  { href: '/accounts/exports', label: 'Exports', icon: Download, roles: ['accounts', 'manager', 'super_admin'] },
   { href: '/accounts', label: 'Treasury', icon: Wallet, roles: ['accounts', 'manager', 'super_admin'] },
   { href: '/accounts/payments', label: 'Payments', icon: CreditCard, roles: ['accounts', 'manager', 'super_admin'] },
   { href: '/reports', label: 'Reports', icon: BarChart3, roles: ['accounts', 'manager', 'super_admin'] },
