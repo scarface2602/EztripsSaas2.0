@@ -9,10 +9,19 @@ export async function GET(request: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const supabase = createServiceClient();
+
+    // ?scope=org — accounts of everyone in the org (the receipts flow
+    // needs the org's bank/UPI/cash accounts, not just the caller's).
+    let userIds: string[] = [auth.user.id];
+    if (request.nextUrl.searchParams.get('scope') === 'org' && auth.user.org_id) {
+      const { data: orgUsers } = await supabase.from('users').select('id').eq('org_id', auth.user.org_id);
+      if (orgUsers && orgUsers.length > 0) userIds = orgUsers.map((u: { id: string }) => u.id);
+    }
+
     const { data, error } = await supabase
       .from('payment_accounts')
       .select('*')
-      .eq('user_id', auth.user.id)
+      .in('user_id', userIds)
       .order('sort_order', { ascending: true });
 
     if (error) throw error;

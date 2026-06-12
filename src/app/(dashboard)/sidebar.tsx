@@ -33,6 +33,8 @@ import {
   ChevronRight,
   CreditCard,
   BarChart3,
+  NotebookText,
+  HandCoins,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -48,19 +50,21 @@ import {
 
 const SALES_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/leads', label: 'Enquiries', icon: Inbox },
-  { href: '/proposals', label: 'Proposals', icon: FileText },
+  { href: '/leads', label: 'Enquiries', icon: Inbox, roles: ['agent', 'manager', 'super_admin'] },
+  { href: '/proposals', label: 'Proposals', icon: FileText, roles: ['agent', 'manager', 'super_admin'] },
   { href: '/bookings', label: 'Bookings', icon: ClipboardList },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Suppliers', icon: Truck },
 ];
 
 const OPS_ITEMS = [
+  { href: '/register', label: 'Register', icon: NotebookText, roles: ['operations', 'accounts', 'manager', 'super_admin'] },
   { href: '/operations', label: 'Operations', icon: Headset, roles: ['operations', 'manager', 'super_admin'] },
   { href: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['manager', 'super_admin'] },
 ];
 
 const FINANCE_ITEMS = [
+  { href: '/accounts/receivables', label: 'Receivables', icon: HandCoins, roles: ['accounts', 'manager', 'super_admin'] },
   { href: '/accounts', label: 'Treasury', icon: Wallet, roles: ['accounts', 'manager', 'super_admin'] },
   { href: '/accounts/payments', label: 'Payments', icon: CreditCard, roles: ['accounts', 'manager', 'super_admin'] },
   { href: '/reports', label: 'Reports', icon: BarChart3, roles: ['accounts', 'manager', 'super_admin'] },

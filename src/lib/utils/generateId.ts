@@ -4,7 +4,7 @@
  * Customizable per org via TripIdConfig.
  */
 
-export type ServiceType = 'PKG' | 'HTL' | 'FLT' | 'VSA' | 'TRF' | 'MISC';
+export type ServiceType = 'PKG' | 'HTL' | 'FLT' | 'VSA' | 'TRF' | 'TRN' | 'INS' | 'MISC';
 
 export interface TripIdConfig {
   prefix: string;
@@ -19,7 +19,7 @@ export const DEFAULT_TRIP_ID_CONFIG: TripIdConfig = {
   separator: '',
   date_format: 'YYMMDD',
   seq_digits: 3,
-  type_codes: { PKG: 'PKG', HTL: 'HTL', FLT: 'FLT', VSA: 'VSA', TRF: 'TRF', MISC: 'MISC' },
+  type_codes: { PKG: 'PKG', HTL: 'HTL', FLT: 'FLT', VSA: 'VSA', TRF: 'TRF', TRN: 'TRN', INS: 'INS', MISC: 'MISC' },
 };
 
 function buildDatePart(config: TripIdConfig): string {

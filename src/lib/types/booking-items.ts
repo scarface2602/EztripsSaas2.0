@@ -1,4 +1,4 @@
-export type ItemType = 'flight_segment' | 'hotel_room' | 'transfer' | 'activity' | 'meal_plan' | 'dmc_package' | 'vehicle';
+export type ItemType = 'flight_segment' | 'hotel_room' | 'transfer' | 'activity' | 'meal_plan' | 'dmc_package' | 'vehicle' | 'train' | 'insurance';
 
 export type SupplierStatus = 'pending' | 'confirmation_requested' | 'on_hold' | 'confirmed' | 'modified' | 'cancelled' | 'completed';
 
@@ -123,6 +123,8 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   meal_plan: 'Meal Plan',
   dmc_package: 'DMC Package',
   vehicle: 'Vehicle',
+  train: 'Train',
+  insurance: 'Insurance',
 };
 
 export const SUPPLIER_STATUS_LABELS: Record<SupplierStatus, string> = {
