@@ -41,11 +41,21 @@ export interface Booking {
   suppliers: { name: string } | null;
   proposals: { title: string; quote_type: string; enquiry_id: string | null; draft_data: Record<string, unknown> | null } | null;
   trip_id: string | null;
+  bill_to_client_id?: string | null;
+}
+
+export interface BillToClient {
+  id: string;
+  full_name: string;
+  client_kind: 'individual' | 'business';
+  gstin: string | null;
+  gst_legal_name: string | null;
 }
 
 interface BookingContextType {
   bookingId: string;
   booking: Booking | null;
+  billTo: BillToClient | null;
   items: BookingItem[];
   packages: PackageWithPayments[];
   paymentAccounts: PaymentAccount[];
@@ -57,11 +67,13 @@ interface BookingContextType {
   loading: boolean;
   saving: boolean;
   generatingVoucher: string | null;
+  generatingTripConfirmation: boolean;
   fetchAll: () => Promise<void>;
   updateBooking: (updates: Record<string, unknown>) => Promise<void>;
   updateItem: (itemId: string, updates: Record<string, unknown>) => Promise<void>;
   deleteItem: (itemId: string) => Promise<void>;
   generateVoucher: (item: BookingItem, sendEmail?: boolean) => Promise<void>;
+  generateTripConfirmation: (sendEmail?: boolean) => Promise<void>;
 }
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
@@ -70,6 +82,7 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
   const supabase = useMemo(() => createClient(), []);
 
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [billTo, setBillTo] = useState<BillToClient | null>(null);
   const [items, setItems] = useState<BookingItem[]>([]);
   const [packages, setPackages] = useState<PackageWithPayments[]>([]);
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
@@ -82,6 +95,7 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generatingVoucher, setGeneratingVoucher] = useState<string | null>(null);
+  const [generatingTripConfirmation, setGeneratingTripConfirmation] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -97,6 +111,19 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
     setLogs(lRes.data || []);
     setEmails(eRes.data || []);
     setItems((iRes.data || []) as BookingItem[]);
+
+    // Bill-to fetched separately and non-fatally: NULL means the
+    // travelling client pays (the default).
+    if (b?.bill_to_client_id) {
+      const { data: bt } = await supabase
+        .from('clients')
+        .select('id, full_name, client_kind, gstin, gst_legal_name')
+        .eq('id', b.bill_to_client_id)
+        .single();
+      setBillTo((bt as BillToClient) || null);
+    } else {
+      setBillTo(null);
+    }
 
     if (b && b.proposals?.enquiry_id) {
       const { data: enqData } = await supabase
@@ -282,6 +309,22 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
           confirmationNumber: confirmationRef,
         };
         break;
+      case 'dmc_package':
+        supplierType = 'dmc_package';
+        content = {
+          customerName: clientName,
+          packageName: item.label,
+          dmcName: item.vendor_name || booking.suppliers?.name || '',
+          destination: booking.destination || '',
+          travelStart: item.start_date || booking.travel_start || '',
+          travelEnd: item.end_date || booking.travel_end || '',
+          paxAdults: booking.pax_adults,
+          paxChildren: booking.pax_children,
+          coveredServices: (details.covers as string[]) || [],
+          confirmationNumber: confirmationRef,
+          notes: item.supplier_notes || '',
+        };
+        break;
       case 'activity':
       default:
         supplierType = 'activity';
@@ -301,6 +344,7 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
         body: JSON.stringify({
           supplier_type: supplierType,
           content,
+          item_id: item.id,
           voucher_status: voucherStatus,
           send_email: sendEmail,
           email_to: booking.clients?.email || undefined,
@@ -322,11 +366,43 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
     }
   };
 
+  // Consolidated trip confirmation — server re-derives readiness and 422s
+  // with the pending items if ops jumped the gun.
+  const generateTripConfirmation = async (sendEmail = false) => {
+    if (!booking) return;
+    setGeneratingTripConfirmation(true);
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/vouchers/package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          send_email: sendEmail,
+          email_to: booking.clients?.email || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        const pending = Array.isArray(err.pending) && err.pending.length > 0
+          ? `: ${err.pending.map((p: { label: string }) => p.label).join(', ')}`
+          : '';
+        throw new Error((err.error || 'Failed to generate trip confirmation') + pending);
+      }
+      toast.success(sendEmail ? 'Trip confirmation generated & emailed' : 'Trip confirmation generated');
+      await fetchAll();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to generate trip confirmation');
+      console.error(error);
+    } finally {
+      setGeneratingTripConfirmation(false);
+    }
+  };
+
   return (
     <BookingContext.Provider
       value={{
         bookingId,
         booking,
+        billTo,
         items,
         packages,
         paymentAccounts,
@@ -338,11 +414,13 @@ export function BookingProvider({ bookingId, children }: { bookingId: string; ch
         loading,
         saving,
         generatingVoucher,
+        generatingTripConfirmation,
         fetchAll,
         updateBooking,
         updateItem,
         deleteItem,
         generateVoucher,
+        generateTripConfirmation,
       }}
     >
       {children}

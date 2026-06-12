@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/api/with-auth';
+import type { Permission } from '@/lib/auth/permissions';
 import { createLogger } from '@/lib/logger';
 import {
   hotelVoucherHTML,
@@ -7,6 +9,7 @@ import {
   activityVoucherHTML,
   transferVoucherHTML,
   vehicleVoucherHTML,
+  dmcPackageVoucherHTML,
 } from '@/lib/vouchers/templates';
 import type { VoucherStatus } from '@/lib/vouchers/templates';
 import { htmlToPdf } from '@/lib/vouchers/pdf';
@@ -17,10 +20,8 @@ export const maxDuration = 60;
 
 const logger = createLogger('api:vouchers');
 
-async function getUser() {
-  const authClient = await createClient();
-  const { data } = await authClient.auth.getUser();
-  return data.user;
+async function getUser(permission?: Permission) {
+  return getAuthUser(permission);
 }
 
 async function urlToBase64DataUri(url: string): Promise<string> {
@@ -42,6 +43,7 @@ const VOUCHER_TYPE_MAP: Record<string, string> = {
   vehicle: 'vehicle',
   transfer: 'transfer',
   activity: 'activity',
+  dmc_package: 'dmc_package',
 };
 
 // GET /api/bookings/[id]/vouchers — list vouchers for a booking
@@ -69,7 +71,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // Body: { supplier_type, content, item_id, send_email?, email_to?, voucher_status?, triggered_by? }
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getUser();
+  const user = await getUser('ops.actions');
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();
@@ -119,7 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const orgLogoUrl = org?.logo_url || agentUser?.logo_url || '';
   const logoDataUri = orgLogoUrl ? await urlToBase64DataUri(orgLogoUrl) : '';
 
-  const supplierName = content.hotelName || content.airline || content.activityName || booking.suppliers?.name || '';
+  const supplierName = content.hotelName || content.airline || content.activityName || content.dmcName || content.packageName || booking.suppliers?.name || '';
 
   // Generate HTML based on supplier type
   const tripId = booking.trip_id || undefined;
@@ -139,6 +141,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       break;
     case 'vehicle':
       html = vehicleVoucherHTML(content, logoDataUri, orgName, displayStatus, tripId);
+      break;
+    case 'dmc_package':
+      html = dmcPackageVoucherHTML(content, logoDataUri, orgName, displayStatus, tripId);
       break;
     default:
       return NextResponse.json({ error: 'Invalid supplier_type' }, { status: 400 });

@@ -259,10 +259,58 @@ export function vehicleVoucherHTML(d: VehicleVoucherData, logoDataUri: string, o
   `, status, tripId);
 }
 
-// ─── Package Voucher (Combined) ─────────────────────────────────────────────
+// ─── DMC Package Voucher ─────────────────────────────────────────────────────
+
+export interface DmcPackageVoucherData {
+  customerName: string;
+  packageName: string;
+  dmcName?: string;
+  destination?: string;
+  travelStart?: string;
+  travelEnd?: string;
+  paxAdults?: number;
+  paxChildren?: number;
+  coveredServices?: string[];
+  confirmationNumber?: string;
+  contactPhone?: string;
+  notes?: string;
+}
+
+export function dmcPackageVoucherHTML(d: DmcPackageVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed', tripId?: string): string {
+  const paxStr = d.paxAdults
+    ? `${d.paxAdults} Adult${d.paxAdults !== 1 ? 's' : ''}${d.paxChildren ? `, ${d.paxChildren} Child${d.paxChildren !== 1 ? 'ren' : ''}` : ''}`
+    : '';
+  const covered = (d.coveredServices || []).filter(Boolean);
+  const coveredHtml = covered.length
+    ? `<div style="margin-top:16px;">
+        <div style="font-weight:600;color:${BRAND.navy};font-size:0.95rem;margin-bottom:8px;">Services Included</div>
+        <table>
+          <tbody>${covered.map((s, i) => `<tr><td class="label" style="width:40px;">${i + 1}</td><td>${s}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>`
+    : '';
+
+  return baseLayout('Package Voucher', logoDataUri, orgName, `
+    <table>
+      ${row('Guest Name', d.customerName)}
+      ${row('Package', d.packageName)}
+      ${row('Operated By', d.dmcName || '')}
+      ${row('Destination', d.destination || '')}
+      ${row('Travel Dates', d.travelStart ? `${d.travelStart}${d.travelEnd ? ` — ${d.travelEnd}` : ''}` : '')}
+      ${row('Guests', paxStr)}
+      ${status === 'confirmed' ? row('Confirmation No.', d.confirmationNumber || '') : ''}
+      ${row('Agent Contact', d.contactPhone || '')}
+    </table>
+    ${coveredHtml}
+    ${d.notes ? `<div class="note"><strong>Notes:</strong> ${d.notes}</div>` : ''}
+    <div class="note"><strong>Important:</strong> All included services are operated by the package provider. Please quote the confirmation number above for any on-ground assistance.</div>
+  `, status, tripId);
+}
+
+// ─── Trip Confirmation Voucher (Combined) ────────────────────────────────────
 
 export interface PackageVoucherItem {
-  itemType: string; // hotel_room, flight_segment, vehicle, transfer, activity
+  itemType: string; // dmc_package, hotel_room, flight_segment, vehicle, transfer, activity, meal_plan
   label: string;
   startDate: string;
   endDate?: string;
@@ -285,24 +333,55 @@ export interface PackageVoucherData {
 
 function sectionIcon(type: string): string {
   switch (type) {
+    case 'dmc_package': return '📦';
     case 'flight_segment': return '✈️';
     case 'hotel_room': return '🏨';
     case 'vehicle': return '🚗';
     case 'transfer': return '🚐';
     case 'activity': return '🎯';
+    case 'meal_plan': return '🍽️';
     default: return '📋';
   }
 }
 
 function sectionTitle(type: string): string {
   switch (type) {
+    case 'dmc_package': return 'Land Packages';
     case 'flight_segment': return 'Flights';
     case 'hotel_room': return 'Hotels';
     case 'vehicle': return 'Vehicle';
     case 'transfer': return 'Transfers';
     case 'activity': return 'Activities';
+    case 'meal_plan': return 'Meals';
     default: return 'Other';
   }
+}
+
+function dmcPackageItemRows(item: PackageVoucherItem): string {
+  const d = item.details;
+  const covers = Array.isArray(d.covers) ? (d.covers as string[]).filter(Boolean) : [];
+  let rows = `<tr>
+    <td>${item.label}</td>
+    <td>${(d.vendor_name as string) || ''}</td>
+    <td>${item.startDate ? `${item.startDate}${item.endDate ? ` → ${item.endDate}` : ''}` : 'Full trip'}</td>
+    <td>${covers.length ? `${covers.length} service${covers.length > 1 ? 's' : ''}` : ''}</td>
+    <td>${item.supplierReference || '—'}</td>
+  </tr>`;
+  if (covers.length) {
+    rows += `<tr><td colspan="5" style="font-size:0.85rem;color:${BRAND.grayText};">Includes: ${covers.join(' · ')}</td></tr>`;
+  }
+  return rows;
+}
+
+function mealPlanItemRows(item: PackageVoucherItem): string {
+  const d = item.details;
+  return `<tr>
+    <td>${item.label}</td>
+    <td>${(d.location as string) || ''}</td>
+    <td>${item.startDate || ''}</td>
+    <td>${(d.meals_included as string) || ''}</td>
+    <td>${item.supplierReference || '—'}</td>
+  </tr>`;
 }
 
 function flightItemRows(item: PackageVoucherItem): string {
@@ -371,19 +450,23 @@ function renderItemGroup(type: string, items: PackageVoucherItem[]): string {
   if (items.length === 0) return '';
 
   const headers: Record<string, string> = {
+    dmc_package: '<th>Package</th><th>Operated By</th><th>Dates</th><th>Covers</th><th>Conf #</th>',
     flight_segment: '<th>Route</th><th>Flight</th><th>Date</th><th>Time</th><th>PNR</th>',
     hotel_room: '<th>Hotel</th><th>Room</th><th>Dates</th><th>Details</th><th>Conf #</th>',
     vehicle: '<th colspan="2">Vehicle</th><th>Dates</th><th>Details</th><th>Conf #</th>',
     transfer: '<th>Route</th><th>Vehicle</th><th>Date</th><th>Details</th><th>Conf #</th>',
     activity: '<th>Activity</th><th>Location</th><th>Date</th><th>Time</th><th>Conf #</th>',
+    meal_plan: '<th>Meal Plan</th><th>Location</th><th>Date</th><th>Meals</th><th>Conf #</th>',
   };
 
   const rowRenderer: Record<string, (i: PackageVoucherItem) => string> = {
+    dmc_package: dmcPackageItemRows,
     flight_segment: flightItemRows,
     hotel_room: hotelItemRows,
     vehicle: vehicleItemRows,
     transfer: transferItemRows,
     activity: activityItemRows,
+    meal_plan: mealPlanItemRows,
   };
 
   const renderer = rowRenderer[type] || ((i: PackageVoucherItem) => `<tr><td colspan="5">${i.label}</td></tr>`);
@@ -403,16 +486,17 @@ function renderItemGroup(type: string, items: PackageVoucherItem[]): string {
 export function packageVoucherHTML(data: PackageVoucherData, logoDataUri: string, orgName: string, status: VoucherStatus = 'confirmed', tripId?: string): string {
   const paxStr = `${data.paxAdults} Adult${data.paxAdults !== 1 ? 's' : ''}${data.paxChildren > 0 ? `, ${data.paxChildren} Child${data.paxChildren !== 1 ? 'ren' : ''}` : ''}`;
 
-  // Group items by type, in display order
-  const typeOrder = ['flight_segment', 'hotel_room', 'vehicle', 'transfer', 'activity'];
+  // Group items by type, in display order — DMC packages lead since they
+  // anchor the trip; any unlisted type still renders via the fallback group.
+  const typeOrder = ['dmc_package', 'flight_segment', 'hotel_room', 'vehicle', 'transfer', 'activity', 'meal_plan'];
   const grouped: Record<string, PackageVoucherItem[]> = {};
   for (const item of data.items) {
-    const t = item.itemType;
+    const t = typeOrder.includes(item.itemType) ? item.itemType : 'other';
     if (!grouped[t]) grouped[t] = [];
     grouped[t].push(item);
   }
 
-  const sections = typeOrder
+  const sections = [...typeOrder, 'other']
     .filter(t => grouped[t]?.length)
     .map(t => renderItemGroup(t, grouped[t]))
     .join('');
@@ -457,5 +541,5 @@ export function packageVoucherHTML(data: PackageVoucherData, logoDataUri: string
     ${emergencyHtml}
   `;
 
-  return baseLayout('Booking Confirmed', logoDataUri, orgName, body, status, tripId);
+  return baseLayout('Trip Confirmation', logoDataUri, orgName, body, status, tripId);
 }

@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/api/with-auth';
+import type { Permission } from '@/lib/auth/permissions';
 import { createLogger } from '@/lib/logger';
 import { packageVoucherHTML } from '@/lib/vouchers/templates';
 import type { VoucherStatus, PackageVoucherItem } from '@/lib/vouchers/templates';
 import { htmlToPdf } from '@/lib/vouchers/pdf';
 import { sendVoucherEmail } from '@/lib/vouchers/send-email';
+import { deriveTripConfirmation, effectiveSupplierReference } from '@/lib/bookings/trip-confirmation';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const logger = createLogger('api:vouchers:package');
 
-async function getUser() {
-  const authClient = await createClient();
-  const { data } = await authClient.auth.getUser();
-  return data.user;
+async function getUser(permission?: Permission) {
+  return getAuthUser(permission);
 }
 
 async function urlToBase64DataUri(url: string): Promise<string> {
@@ -29,15 +30,17 @@ async function urlToBase64DataUri(url: string): Promise<string> {
   }
 }
 
-// POST /api/bookings/[id]/vouchers/package — generate combined package voucher
-// Body: { send_email?: boolean, email_to?: string, voucher_status?: 'confirmed' | 'blocked' }
+// POST /api/bookings/[id]/vouchers/package — generate the consolidated trip
+// confirmation voucher. Refuses (422) while any non-covered item is still
+// unconfirmed, unless force: true.
+// Body: { send_email?: boolean, email_to?: string, voucher_status?: 'confirmed' | 'blocked', force?: boolean }
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getUser();
+  const user = await getUser('ops.actions');
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();
-  const { send_email, email_to, voucher_status } = body;
+  const { send_email, email_to, voucher_status, force } = body;
 
   const supabase = createServiceClient();
 
@@ -59,12 +62,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  // Fetch all confirmed/completed items
-  const { data: items, error: iErr } = await supabase
+  // Fetch ALL items — readiness is derived, and covered items ride along
+  // on the DMC's confirmation even if never individually confirmed.
+  const { data: allItems, error: iErr } = await supabase
     .from('booking_items')
     .select('*')
     .eq('booking_id', id)
-    .in('supplier_status', ['confirmed', 'completed'])
     .order('sort_order', { ascending: true })
     .order('start_date', { ascending: true });
 
@@ -72,9 +75,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: iErr.message }, { status: 500 });
   }
 
-  if (!items || items.length === 0) {
-    return NextResponse.json({ error: 'No confirmed items to include in package voucher' }, { status: 400 });
+  const state = deriveTripConfirmation(allItems || []);
+  if (state.activeItems.length === 0) {
+    return NextResponse.json({ error: 'No active items to include in the trip confirmation' }, { status: 400 });
   }
+  if (!state.ready && !force) {
+    return NextResponse.json({
+      error: 'Not all components are supplier-confirmed yet',
+      pending: state.blockingItems.map((i) => ({ id: i.id, label: i.label, supplier_status: i.supplier_status })),
+    }, { status: 422 });
+  }
+  const items = state.activeItems;
 
   // Branding
   const { data: agentUser } = await supabase
@@ -91,15 +102,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const client = booking.clients as unknown as Record<string, string> | null;
   const displayStatus: VoucherStatus = voucher_status === 'blocked' ? 'blocked' : 'confirmed';
 
-  // Build package voucher data
+  // Build voucher data — covered items print the covering DMC's reference
+  // when they have none of their own.
   const packageItems: PackageVoucherItem[] = items.map((i) => ({
     itemType: i.item_type,
     label: i.label,
     startDate: i.start_date || '',
     endDate: i.end_date || '',
-    supplierReference: i.supplier_reference || '',
+    supplierReference: effectiveSupplierReference(i, items),
     supplierStatus: i.supplier_status,
-    details: i.details || {},
+    details: { ...(i.details || {}), ...(i.vendor_name ? { vendor_name: i.vendor_name } : {}) },
   }));
 
   const html = packageVoucherHTML({
@@ -112,7 +124,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     paxChildren: booking.pax_children || 0,
     items: packageItems,
     emergencyContact: org ? { name: orgName, phone: org.phone, email: org.email } : undefined,
-  }, logoDataUri, orgName, displayStatus);
+  }, logoDataUri, orgName, displayStatus, booking.trip_id || undefined);
 
   // Generate PDF
   let pdfBuffer: Buffer;

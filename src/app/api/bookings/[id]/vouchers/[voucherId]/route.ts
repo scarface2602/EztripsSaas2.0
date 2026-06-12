@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/api/with-auth';
+import type { Permission } from '@/lib/auth/permissions';
 import {
   hotelVoucherHTML,
   flightVoucherHTML,
@@ -15,10 +17,8 @@ import { sendVoucherEmail } from '@/lib/vouchers/send-email';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-async function getUser() {
-  const authClient = await createClient();
-  const { data } = await authClient.auth.getUser();
-  return data.user;
+async function getUser(permission?: Permission) {
+  return getAuthUser(permission);
 }
 
 async function urlToBase64DataUri(url: string): Promise<string> {
@@ -171,7 +171,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string; voucherId: string }> },
 ) {
   const { id, voucherId } = await params;
-  const user = await getUser();
+  const user = await getUser('ops.actions');
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();

@@ -34,17 +34,20 @@ export interface BookingEmailRecord {
   suppliers?: { name: string } | null;
 }
 
+// Mirrors booking_vouchers rows as served by /api/bookings/[id]/vouchers.
 export interface BookingVoucherRecord {
   id: string;
   booking_id?: string;
-  supplier_type: string | null;
-  supplier_name?: string | null;
-  booking_reference?: string | null;
+  item_id: string | null;
+  voucher_number: string;
+  voucher_type: string;
   status?: string;
   pdf_url: string | null;
-  email_sent_at?: string | null;
+  pdf_generated_at: string | null;
+  sent_to_email?: string | null;
+  sent_at?: string | null;
   created_at: string;
-  content?: Record<string, unknown> | null;
+  data_snapshot?: Record<string, unknown> | null;
 }
 
 export interface TeamMember {
