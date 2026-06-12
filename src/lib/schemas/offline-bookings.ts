@@ -83,6 +83,7 @@ const vehicleOfflinePassthrough = vehicleOfflineSchema.passthrough();
 export const createOfflineBookingSchema = z.object({
   item_type: z.enum(['hotel', 'flight', 'vehicle']),
   client_id: z.string().uuid(),
+  bill_to_client_id: z.string().uuid().optional(),
   item_details: z.record(z.string(), z.unknown()),
   cost_price: z.number().min(0),
   sell_price: z.number().min(0),

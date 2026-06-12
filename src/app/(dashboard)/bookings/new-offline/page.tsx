@@ -10,6 +10,7 @@ import { ArrowLeft, Hotel, Plane, Truck, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { ClientSelect } from '@/components/ui/inline-add-select';
+import { ClientCombobox } from '@/components/clients/client-combobox';
 import HotelForm from './steps/forms/hotel-form';
 import FlightForm from './steps/forms/flight-form';
 import VehicleForm from './steps/forms/vehicle-form';
@@ -31,6 +32,7 @@ export default function NewOfflineBookingPage() {
   // Step 1 state: Core Meta
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientName, setClientName] = useState('');
+  const [billTo, setBillTo] = useState<{ id: string; label: string } | null>(null);
   const [itemType, setItemType] = useState<ItemType | null>(null);
   const [clients, setClients] = useState<Array<{ id: string; full_name: string }>>([]);
   const [loadingClients, setLoadingClients] = useState(true);
@@ -139,6 +141,7 @@ export default function NewOfflineBookingPage() {
     const payload = {
       item_type: itemType,
       client_id: clientId,
+      bill_to_client_id: billTo?.id || undefined,
       item_details: itemData,
       cost_price: costPrice,
       sell_price: sellPrice,
@@ -253,6 +256,18 @@ export default function NewOfflineBookingPage() {
                   Selected: {clientName}
                 </p>
               )}
+              <div className="mt-4 space-y-1.5">
+                <Label>Billed to (optional)</Label>
+                <ClientCombobox
+                  value={billTo}
+                  onChange={(c) => setBillTo(c ? { id: c.id, label: c.full_name } : null)}
+                  promptDetailsOnCreate
+                  placeholder="Who pays — leave empty if the client pays themselves"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Pick a company or another person when this trip is billed to someone other than the traveller.
+                </p>
+              </div>
             </CardContent>
           </Card>
 

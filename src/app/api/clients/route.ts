@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { withAuth } from '@/lib/api/with-auth';
-import { createClientSchema } from '@/lib/schemas/clients';
+import { createClientSchema, normalizeClientPayload } from '@/lib/schemas/clients';
 
 export async function GET(request: NextRequest) {
   try {
@@ -57,12 +57,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient();
     const { data, error } = await supabase.from('clients').insert({
-      ...validated,
+      ...normalizeClientPayload(validated),
       created_by: auth.authUser.id,
     }).select().single();
 
     if (error) {
-      if (error.code === '23505' && error.message.includes('clients_phone_unique')) {
+      if (error.code === '23505') {
         return NextResponse.json({ error: 'A client with this phone number already exists' }, { status: 409 });
       }
       return NextResponse.json({ error: error.message }, { status: 500 });

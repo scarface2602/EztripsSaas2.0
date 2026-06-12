@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, Plus, X, Users } from 'lucide-react';
+import { Search, Plus, X, Users, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Pagination } from '@/components/pagination';
 import { SortableHead, useSort } from '@/components/sortable-head';
@@ -52,31 +52,40 @@ export default function ClientsPage() {
     setPage(1);
   }, [search]);
 
+  const [newKind, setNewKind] = useState<'individual' | 'business'>('individual');
+
   async function handleAddClient(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
     const form = new FormData(e.currentTarget);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
-    const { error } = await supabase.from('clients').insert({
-      full_name: form.get('full_name') as string,
-      phone: form.get('phone') as string,
-      email: (form.get('email') as string) || null,
-      nationality: (form.get('nationality') as string) || null,
-      notes: (form.get('notes') as string) || null,
-      created_by: user.id,
+    // Through the API so GSTIN/PAN validation and normalization apply.
+    const res = await fetch('/api/clients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: form.get('full_name') as string,
+        client_kind: newKind,
+        phone: (form.get('phone') as string) || '',
+        email: (form.get('email') as string) || '',
+        notes: (form.get('notes') as string) || undefined,
+        ...(newKind === 'business' ? {
+          gstin: (form.get('gstin') as string) || '',
+          gst_legal_name: (form.get('gst_legal_name') as string) || '',
+        } : {}),
+      }),
     });
 
-    if (error) {
-      if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
-        setFormError('A client with this phone number already exists');
-      } else {
-        setFormError(error.message);
-      }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const detail = Array.isArray(err.details) && err.details[0]?.message
+        ? `${err.details[0].path?.join('.')}: ${err.details[0].message}`
+        : err.error || 'Failed to create client';
+      setFormError(detail);
       return;
     }
     setShowAddForm(false);
+    setNewKind('individual');
     fetchClients(search);
   }
 
@@ -103,28 +112,44 @@ export default function ClientsPage() {
               {formError && (
                 <div className="col-span-full p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">{formError}</div>
               )}
+              <div className="col-span-full flex gap-2">
+                <Button type="button" size="sm" variant={newKind === 'individual' ? 'default' : 'outline'} onClick={() => setNewKind('individual')}>
+                  <Users className="h-3.5 w-3.5 mr-1" /> Individual
+                </Button>
+                <Button type="button" size="sm" variant={newKind === 'business' ? 'default' : 'outline'} onClick={() => setNewKind('business')}>
+                  <Building2 className="h-3.5 w-3.5 mr-1" /> Business
+                </Button>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="full_name">Full Name *</Label>
+                <Label htmlFor="full_name">{newKind === 'business' ? 'Business Name *' : 'Full Name *'}</Label>
                 <Input id="full_name" name="full_name" required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone *</Label>
-                <Input id="phone" name="phone" required />
+                <Label htmlFor="phone">Phone {newKind === 'individual' ? '*' : ''}</Label>
+                <Input id="phone" name="phone" required={newKind === 'individual'} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input id="email" name="email" type="email" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="nationality">Nationality</Label>
-                <Input id="nationality" name="nationality" />
-              </div>
+              {newKind === 'business' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="gstin">GSTIN</Label>
+                    <Input id="gstin" name="gstin" placeholder="27AAPFU0939F1ZV" className="uppercase" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gst_legal_name">Legal Name (as per GST)</Label>
+                    <Input id="gst_legal_name" name="gst_legal_name" />
+                  </div>
+                </>
+              )}
               <div className="col-span-full space-y-2">
                 <Label htmlFor="notes">Notes</Label>
                 <Input id="notes" name="notes" />
               </div>
               <div className="col-span-full">
-                <Button type="submit">Create Client</Button>
+                <Button type="submit">Create {newKind === 'business' ? 'Business' : 'Client'}</Button>
               </div>
             </form>
           </CardContent>
@@ -146,9 +171,9 @@ export default function ClientsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead label="Name" column="full_name" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
+              <SortableHead label="Type" column="client_kind" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
               <TableHead>Phone</TableHead>
               <TableHead>Email</TableHead>
-              <SortableHead label="Nationality" column="nationality" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
               <SortableHead label="Created" column="created_at" currentSort={sortCol} currentDir={sortDir} onSort={onSort} />
             </TableRow>
           </TableHeader>
@@ -173,9 +198,17 @@ export default function ClientsPage() {
                   onClick={() => router.push(`/clients/${client.id}`)}
                 >
                   <TableCell className="font-medium">{client.full_name}</TableCell>
-                  <TableCell>{client.phone}</TableCell>
+                  <TableCell>
+                    {(client.client_kind || 'individual') === 'business' ? (
+                      <Badge variant="outline" className="text-xs">
+                        <Building2 className="h-3 w-3 mr-1" /> Business{client.gstin ? ' · GST' : ''}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Individual</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{client.phone || <Badge variant="outline">N/A</Badge>}</TableCell>
                   <TableCell>{client.email || <Badge variant="outline">N/A</Badge>}</TableCell>
-                  <TableCell>{client.nationality || <Badge variant="outline">N/A</Badge>}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {format(new Date(client.created_at), 'dd/MM/yyyy')}
                   </TableCell>

@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await withAuth(request);
+    const auth = await withAuth(request, { permission: 'bookings.manage' });
     if (auth instanceof NextResponse) return auth;
 
     const body = await request.json();
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { item_type, client_id, item_details, cost_price, sell_price, notes, payment_schedule } = parsed.data;
+    const { item_type, client_id, bill_to_client_id, item_details, cost_price, sell_price, notes, payment_schedule } = parsed.data;
     const supabase = createServiceClient();
 
     // Verify client exists and user has access
@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
       .insert({
         created_by: auth.user.id,
         client_id,
+        bill_to_client_id: bill_to_client_id || null,
         title: `${item_type.charAt(0).toUpperCase() + item_type.slice(1)} Booking - ${client.full_name}`,
         booking_type: bookingTypeMap[item_type],
         destination: item_details.city || item_details.departure_city || item_details.pickup_location || '',

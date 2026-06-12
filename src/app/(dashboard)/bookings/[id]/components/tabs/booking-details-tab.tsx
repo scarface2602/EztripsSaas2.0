@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Save } from 'lucide-react';
+import { Save, Building2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { useBooking } from '../../booking-context';
+import { ClientCombobox } from '@/components/clients/client-combobox';
 
 export function BookingDetailsTab() {
-  const { booking, updateBooking, saving } = useBooking();
+  const { booking, billTo, updateBooking, saving } = useBooking();
 
   const [refNumber, setRefNumber] = useState('');
   const [blockingRef, setBlockingRef] = useState('');
@@ -50,6 +52,25 @@ export function BookingDetailsTab() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              Billed To
+              {billTo?.client_kind === 'business' && billTo.gstin && (
+                <Badge variant="outline" className="text-xs text-green-700 border-green-300">
+                  <Building2 className="h-3 w-3 mr-1" /> B2B · GST invoice
+                </Badge>
+              )}
+            </Label>
+            <ClientCombobox
+              value={billTo ? { id: billTo.id, label: billTo.full_name } : null}
+              onChange={(c) => updateBooking({ bill_to_client_id: c?.id || null })}
+              promptDetailsOnCreate
+              placeholder={`Defaults to ${booking.clients?.full_name || 'travelling client'}`}
+            />
+            <p className="text-xs text-muted-foreground">
+              Who pays for this booking. Leave empty when the travelling client pays themselves.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label>Reference / Confirmation Number</Label>
             <Input value={refNumber} onChange={(e) => setRefNumber(e.target.value)} placeholder="Supplier confirmation #" />

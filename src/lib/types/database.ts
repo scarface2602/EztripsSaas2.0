@@ -49,11 +49,19 @@ export interface Client {
   id: string;
   created_by: string | null;
   full_name: string;
-  phone: string;
+  phone: string | null;
   email: string | null;
   nationality: string | null;
   notes: string | null;
   created_at: string;
+  // Billing-entity fields (20260622100069)
+  client_kind?: 'individual' | 'business';
+  gstin?: string | null;
+  gst_legal_name?: string | null;
+  gst_state_code?: string | null;
+  billing_address?: string | null;
+  pan_number?: string | null;
+  contact_client_id?: string | null;
 }
 
 export interface Supplier {
