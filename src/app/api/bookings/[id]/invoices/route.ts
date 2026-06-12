@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/api/with-auth';
+import type { Permission } from '@/lib/auth/permissions';
 import { createLogger } from '@/lib/logger';
 import { invoiceHTML } from '@/lib/invoices/template';
 import type { InvoiceLineItem } from '@/lib/invoices/template';
@@ -10,10 +12,8 @@ export const maxDuration = 60;
 
 const logger = createLogger('api:invoices');
 
-async function getUser() {
-  const authClient = await createClient();
-  const { data } = await authClient.auth.getUser();
-  return data.user;
+async function getUser(permission?: Permission) {
+  return getAuthUser(permission);
 }
 
 async function urlToBase64DataUri(url: string): Promise<string> {
@@ -53,7 +53,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // Body: { invoice_type: 'proforma' | 'final' | 'credit_note', notes?, due_date?, tax_amount?, discount_amount?, custom_line_items? }
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getUser();
+  const user = await getUser('accounts.manage');
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();

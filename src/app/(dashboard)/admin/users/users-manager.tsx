@@ -105,6 +105,8 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="agent">Agent</SelectItem>
+                    <SelectItem value="operations">Operations</SelectItem>
+                    <SelectItem value="accounts">Accounts</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
                     <SelectItem value="super_admin">Super Admin</SelectItem>
                   </SelectContent>
@@ -187,6 +189,8 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="operations">Operations</SelectItem>
+                        <SelectItem value="accounts">Accounts</SelectItem>
                         <SelectItem value="manager">Manager</SelectItem>
                         <SelectItem value="super_admin">Super Admin</SelectItem>
                       </SelectContent>

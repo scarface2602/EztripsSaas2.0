@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
+import { hasPermission, pathPermission } from '@/lib/auth/permissions';
+import type { Role } from '@/lib/auth/permissions';
 
 const PUBLIC_PATHS = [
   '/p/',
@@ -35,16 +37,25 @@ export async function middleware(request: NextRequest) {
   }
 
   // Protected routes
-  const { user, supabaseResponse } = await updateSession(request);
+  const { user, supabase, supabaseResponse } = await updateSession(request);
 
   if (!user) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Admin routes — check role via user metadata or DB
-  if (pathname.startsWith('/admin')) {
-    // Role check happens at page level via requireSuperAdmin()
-    // Middleware just ensures authentication
+  // Role gating — only pages whose prefix is in PATH_PERMISSIONS cost a
+  // role lookup; everything else passes straight through. API routes
+  // enforce their own permissions via withAuth.
+  const required = pathname.startsWith('/api') ? null : pathPermission(pathname);
+  if (required) {
+    const { data: dbUser } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if (!hasPermission((dbUser?.role as Role) || 'agent', required)) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
   }
 
   return supabaseResponse;

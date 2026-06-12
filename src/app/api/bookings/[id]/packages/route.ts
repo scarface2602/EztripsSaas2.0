@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     const { id: bookingId } = await params;
-    const auth = await withAuth(request);
+    const auth = await withAuth(request, { permission: 'payments.manage' });
     if (auth instanceof NextResponse) return auth;
 
     const body = await request.json();

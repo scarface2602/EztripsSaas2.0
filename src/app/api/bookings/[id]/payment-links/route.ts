@@ -21,7 +21,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await withAuth();
+  const auth = await withAuth(undefined, { permission: 'payments.manage' });
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;

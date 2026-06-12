@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/api/with-auth';
+import type { Permission } from '@/lib/auth/permissions';
 import { receiptHTML } from '@/lib/receipts/template';
 import { htmlToPdf } from '@/lib/vouchers/pdf';
 import { sendEmail } from '@/lib/email/mailer';
@@ -11,10 +13,8 @@ export const maxDuration = 60;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-async function getUser() {
-  const authClient = await createClient();
-  const { data } = await authClient.auth.getUser();
-  return data.user;
+async function getUser(permission?: Permission) {
+  return getAuthUser(permission);
 }
 
 async function urlToBase64DataUri(url: string): Promise<string> {
@@ -50,7 +50,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // Body: { amount, payment_mode, payment_date, reference_number?, notes? }
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getUser();
+  const user = await getUser('accounts.manage');
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();

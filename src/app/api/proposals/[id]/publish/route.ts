@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/api/with-auth';
 import crypto from 'crypto';
 import { sendShareLinkEmail } from '@/lib/email/mailer';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const authClient = await createClient();
-  const { data: { user: authUser } } = await authClient.auth.getUser();
+  const authUser = await getAuthUser('proposals.manage');
   if (!authUser) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

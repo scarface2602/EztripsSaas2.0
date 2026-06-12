@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 // POST /api/bookings — auto-create bookings from a confirmed proposal
 export async function POST(request: NextRequest) {
   try {
-    const auth = await withAuth(request);
+    const auth = await withAuth(request, { permission: 'proposals.manage' });
     if (auth instanceof NextResponse) return auth;
 
     const body = await request.json();
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 // PATCH /api/bookings — update booking
 export async function PATCH(request: NextRequest) {
   try {
-    const auth = await withAuth(request);
+    const auth = await withAuth(request, { permission: 'bookings.manage' });
     if (auth instanceof NextResponse) return auth;
 
     const body = await request.json();

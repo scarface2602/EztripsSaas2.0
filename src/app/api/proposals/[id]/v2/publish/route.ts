@@ -12,7 +12,7 @@ import { effectiveGroupAmounts } from '@/lib/proposals/v2-pricing';
 // never leave the server), rotate the share token.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const auth = await withAuth(request, { checkOwnership: { table: 'proposals', id } });
+  const auth = await withAuth(request, { permission: 'proposals.manage', checkOwnership: { table: 'proposals', id } });
   if (auth instanceof NextResponse) return auth;
 
   const supabase = createServiceClient();

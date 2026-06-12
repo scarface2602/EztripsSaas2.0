@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import type { User } from '@/lib/types/database';
+import { hasPermission, type Permission } from '@/lib/auth/permissions';
 
 export interface AuthResult {
   user: User;
@@ -14,11 +15,23 @@ export interface AuthResult {
  *   if (auth instanceof NextResponse) return auth;
  *   const { user, authUser } = auth;
  */
+/**
+ * Drop-in for getUser()-style routes: resolves the auth user only when
+ * the caller's role grants the permission (always resolves when no
+ * permission is given). Returns null on any failure, like getUser did.
+ */
+export async function getAuthUser(permission?: Permission): Promise<{ id: string; email: string } | null> {
+  const auth = await withAuth(undefined, permission ? { permission } : undefined);
+  return auth instanceof NextResponse ? null : auth.authUser;
+}
+
 export async function withAuth(
   _request?: unknown,
   options?: {
     requiredRole?: 'agent' | 'super_admin';
     allowedRoles?: Array<User['role']>;
+    /** Capability check against ROLE_PERMISSIONS — preferred over role lists. */
+    permission?: Permission;
     checkOwnership?: {
       table: string;
       id: string;
@@ -55,6 +68,14 @@ export async function withAuth(
     tc_version: 1,
     created_at: new Date().toISOString(),
   } as User);
+
+  // Permission check — the role → capability map in lib/auth/permissions
+  if (options?.permission && !hasPermission(user.role, options.permission)) {
+    return NextResponse.json(
+      { error: `Forbidden — requires ${options.permission}` },
+      { status: 403 },
+    );
+  }
 
   // Role check — allowedRoles takes precedence over requiredRole
   if (options?.allowedRoles) {

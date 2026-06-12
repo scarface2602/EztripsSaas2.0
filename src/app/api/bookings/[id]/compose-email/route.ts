@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient, createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/api/with-auth';
 import { sendEmail } from '@/lib/email/mailer';
 import { supplierConfirmationRequestEmail, supplierFollowUpEmail } from '@/lib/email/supplier-confirmation-request';
 import { paymentReminderEmail, bookingConfirmedEmail } from '@/lib/email/payment-reminder';
@@ -9,8 +10,7 @@ import { format } from 'date-fns';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: bookingId } = await params;
-  const authClient = await createClient();
-  const { data: { user } } = await authClient.auth.getUser();
+  const user = await getAuthUser('ops.actions');
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const supabase = createServiceClient();

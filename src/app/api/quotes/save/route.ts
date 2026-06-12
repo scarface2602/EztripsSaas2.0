@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { getAuthUser } from '@/lib/api/with-auth';
 import { generateTripIdFromDb, requirementToServiceType } from '@/lib/utils/generateId';
 import { getTripIdConfig } from '@/lib/utils/getTripIdConfig';
 import { ensureTripFolder, appendProposalToTrip } from '@/lib/trips';
@@ -7,8 +8,7 @@ import type { ParsedQuote } from '@/lib/types/database';
 
 export async function POST(request: NextRequest) {
   try {
-    const authClient = await createClient();
-    const { data: { user } } = await authClient.auth.getUser();
+    const user = await getAuthUser('proposals.manage');
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const supabase = createServiceClient();
